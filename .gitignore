@@ -59,3 +59,12 @@ patches-*
 # quilt's files
 patches
 series
+
+# autotools
+autom4te.cache/
+config.log
+config.status
+Makefile
+
+# S-OS
+sos
