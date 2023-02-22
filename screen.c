@@ -14,6 +14,9 @@
 #include <errno.h>
 #ifdef	HAVE_TERMIOS_H
 # include <termios.h>
+#ifdef	HAVE_TERM_H
+# include <term.h>
+#endif
 #else
 # include <sgtty.h>
 # include <sys/file.h>
@@ -1523,7 +1526,7 @@ int scr_getl(char *buf){
 	for (x=0; x<scr_vw; x++,bx++){
 	    if ((buf[bx] = scr_vchr[y][x]) != ' '){
 		    mx = bx;
-	    } 
+	    }
 	}
 	if (!(scr_vlattr[y] & SCR_LA_CONT))
 	   break;
@@ -1803,7 +1806,7 @@ scr_mapadd(char code, char *funcname){
     return(SCR_MAPERR_FUNC);
 }
 /*
-   lookup current mapping 
+   lookup current mapping
 
    return a pointer to function name, or NULL if not bind
 */
@@ -1813,4 +1816,3 @@ scr_maplook(char code){
 	return(NULL);
     return(keyfuncs[keymap[code]].funcname);
 }
-	    
