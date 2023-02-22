@@ -1,0 +1,98 @@
+# Makefile for sos
+
+# CC must be an ANSI-C compiler
+CC	= gcc
+#CC	= cc
+#CC	= /usr/ccs/bin/cc
+#CC	= /opt/SUNWspro/bin/cc
+#CC	= /usr/bin/cc
+#CC	= mwcc
+
+#where you want the binaries and manual page
+BINDIR	      = /usr/local/bin
+MANDIR	      = /usr/local/man/man1
+
+DOSFILE	      = /usr/local/lib/sword.bin
+
+# full speed or debugging to taste
+#OPTIMIZE      = -O2
+OPTIMIZE       = -g
+
+## Compile options
+# NO_CFMAKERAW		not have cfmakeraw()
+# NO_STRERROR		not have strerror()
+# NO_MEMMOVE		not have memmove()
+# NO_POSIX_SIGNAL	not have POSIX signal funcs. (sigaction(),etc...)
+# NO_TIOCGWINSZ		not have TIOCGWINSZ ioctl()
+# NO_CURSES_H		not have curses.h (use termcap.h)
+# NO_TIOCSTI		not have TIOCSTI ioctl()
+# NO_TERMIOS		not have POSIX termios
+# TYPE_TPUTS		prototype of putchar function in tputs
+# TYPE_SIGNAL		prototype of signal handler
+#
+## optional
+# OPT_DELAY_FLUSH	delay flush
+# OPT_DELAY_FLUSH_TIME	micro-sec of flush interval
+#
+## FreeBSD 2.2
+#OPTIONS =  -DOPT_DELAY_FLUSH -DTYPE_TPUTS=int
+OPTIONS = -DTYPE_TPUTS=int -DNO_CFMAKERAW
+## BSD/OS 2.1 
+#OPTIONS = -DOPT_DELAY_FLUSH
+#OPTIONS = 
+## SunOS 4.1.3 (gcc)
+#OPTIONS = -DNO_CFMAKERAW -DNO_STRERROR -DNO_MEMMOVE
+## Solaris 2.5 (/usr/ccs/bin/cc or /opt/SUNWspro/bin/cc)
+#OPTIONS = -DNO_CFMAKERAW -DTYPE_TPUTS=int
+## NEWS-OS 6.1.2 (/bin/cc)
+#OPTIONS = -DNO_CFMAKERAW
+## IRIX 5.3
+#OPTIONS = -DNO_CFMAKERAW
+## Linux redhat
+#OPTIONS = 
+## NEWS-OS 4.2.1 (gcc)
+#OPTIONS = -DNO_POSIX_SIGNAL -DNO_CFMAKERAW -DNO_TERMIOS
+## BeOS
+#OPTIONS = -DNO_CURSES_H -DNO_TIOCSTI -DNO_CMAKERAW -DTYPE_TPUTS=int
+
+
+LIBS	      =  -ltermcap
+
+# a bsd-like install program
+INSTALL	      = /usr/ucb/install
+
+
+###### you should not need to change anything below this line ######
+#CWARN	      = -ansi -pedantic -Wall -Wshadow \
+CWARN	      = -Wshadow \
+		-Wpointer-arith -Wnested-externs -Winline
+CFLAGS        =	$(CWARN) $(OPTIMIZE) $(OPTIONS) -DDOSFILE=\"$(DOSFILE)\"
+
+SRCS	      = sos.c simz80.c trap.c dio.c screen.c util.c compat.c
+DOC	      = README COPYING
+
+all:		sos
+
+sos:		sos.o simz80.o trap.o dio.o screen.o util.o compat.o
+		$(CC) $(CFLAGS) sos.o simz80.o trap.o dio.o screen.o util.o \
+		compat.o $(LIBS) -o $@
+
+#simz80.c:	simz80.pl
+#		rm -f simz80.c
+#		perl -w simz80.pl >simz80.c
+#		chmod a-w simz80.c
+
+install:	all
+
+clean:;		rm -f *.o *~ core sos.core sos
+
+		
+
+# dependencies
+simz80.o:	simz80.c simz80.h
+sos.o:		sos.c sos.h dio.h screen.h util.h
+dio.o:		dio.c dio.h simz80.h sos.h
+screen.o:	screen.c screen.h sos.h
+trap.o:		trap.c trap.h sos.h dio.h screen.h util.h simz80.h
+util.o:		util.c util.h simz80.h
+compat.o:	compat.c compat.h

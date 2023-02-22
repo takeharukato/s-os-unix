@@ -1,0 +1,49 @@
+THIS FILE IS WRITTEN IN JAPANESE AND CODED IN MS-KANJI CODE
+
+これは SWORD for UNIX version 0.5 (beta) のパッケージです。
+配布条件は GPL に従います。無保証です。
+
+インストールガイド:
+
+現在動作を確認しているのは、FreeBSD-2.2.6R, BSD/OS 3.1, NetBSD-1.3,
+SunOS 4.1.3 (gcc), Solaris 2.5 (gcc), Solaris7 (gcc), NEWS-OS 4.2.1,
+NEWS-OS 6.1 です。
+さらに、これまでに一度でも動作を確認しているのは、
+Linux (redhat),  IRIX 5.3, BeOS for Mac (一部制限有り)
+ですが、他の UNIX にも容易に移植できると思います。
+ただし、ANSI-C が必要です。
+また、一部の OS ではいくつか問題が判明していますので、
+MACHINES ファイルを参照して、自分の用いる OS に関して確認してください。
+
+コンパイルは以下のように行なってください。
+% ./configure
+% make
+ (必要に応じて)
+% make install
+
+以下の定義は実験用のオプションです。自動では設定されません。
+必要に応じて configure の引数として指定することにより、設定されます。
+
+--with-forceansi
+  termcap エントリが見つからない場合に ANSI の制御コードで動作します。
+
+--with-delay
+  画面への遅延書き出しを行います。
+
+--with-delay=nn
+  nn に数字を記述することにより、遅延書き出しのマイクロ秒で間隔を定義します。
+
+--with-rcfile=xxx
+  xxx に初期化ファイルのファイル名を指定することで、$HOME/.sosrc 以外の
+  ファイルを初期化ファイルとして使用することができます
+
+動作確認がされていない OS での動作を確認しましたら、是非
+・使用 OS
+・コンパイラ
+・必要だった設定/変更
+等の情報を作者までお知らせください。宜しくお願いします。
+また、動作しなかった場合もお知らせくだされば、お手伝い出来るかも
+しれません。
+--
+1999年 4月 8日
+楯岡 孝道 (tate@spa.is.uec.ac.jp)

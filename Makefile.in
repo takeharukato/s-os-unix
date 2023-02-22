@@ -1,0 +1,72 @@
+# Makefile for sos
+
+# CC must be an ANSI-C compiler
+CC	= @CC@
+
+prefix	= @prefix@
+exec_prefix = @exec_prefix@
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@ -m 755
+INSTALL_DATA = @INSTALL_DATA@
+
+# where you want the binaries and manual page
+BINDIR	      = @bindir@
+DOSFILE	      = @libdir@/sword.bin
+
+## Compile options
+# HAVE_CFMAKERAW	have cfmakeraw()
+# HAVE_STRERROR		have strerror()
+# HAVE_MEMMOVE		have memmove()
+# HAVE_SIGPROCMASK	have sigprocmask() [check for POSIX signal funcs]
+# HAVE_CURSES_H		have curses.h (preferd than termcap.h)
+# HAVE_TERMCAP_H	have termcap.h
+# RETSIGTYPE		prototype of signal handler
+# TYPE_TPUTS		prototype of putchar function in tputs
+#
+## optional
+# OPT_DELAY_FLUSH	delay flush
+# OPT_DELAY_FLUSH_TIME	micro-sec of flush interval
+# OPT_DEFAULT_ANSI	assume as ansi termianl if tgetenv failed
+# OPT_KEYMAP_WM		set default control key Word Master like
+#
+## customize
+# RCFILE		name of initialization file
+#
+#ADDOPTS	= -g -DOPT_DEFAULT_ANSI -DRCFILE=\"sos.ini\"
+ADDOPTS	      = -g
+
+LIBS	      = @LIBS@ @LIBOBJS@
+CFLAGS        =	@DEFS@ -DDOSFILE=\"$(DOSFILE)\" $(ADDOPTS)
+
+SRCS	      = sos.c simz80.c trap.c dio.c screen.c util.c keymap.c compat.c
+DOC	      = README COPYING
+
+all:		sos
+
+sos:		sos.o simz80.o trap.o dio.o screen.o util.o keymap.o compat.o @LIBOBJS@
+		$(CC) $(LDFLAGS) $(CFLAGS) sos.o simz80.o trap.o dio.o screen.o util.o keymap.o \
+		compat.o $(LIBS) -o $@
+
+#simz80.c:	simz80.pl
+#		rm -f simz80.c
+#		perl -w simz80.pl >simz80.c
+#		chmod a-w simz80.c
+
+install:	all
+	$(INSTALL_PROGRAM) sos @bindir@/sos
+	$(INSTALL_DATA) sword.bin $(DOSFILE)
+
+clean:;		rm -f *.o *~ core sos.core sos
+
+.c.o:
+	$(CC) $(CFLAGS) -c -o $@ $<		
+
+# dependencies
+simz80.o:	simz80.c simz80.h
+sos.o:		sos.c sos.h dio.h screen.h util.h
+dio.o:		dio.c dio.h simz80.h sos.h
+screen.o:	screen.c screen.h sos.h
+trap.o:		trap.c trap.h sos.h dio.h screen.h util.h simz80.h
+util.o:		util.c util.h simz80.h
+keymap.o:	screen.h
+compat.o:	compat.c compat.h

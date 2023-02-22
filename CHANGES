@@ -1,0 +1,44 @@
+0.5:
+  カレントディレクトリの .sosrc も探索するようにした
+  OPT_DEFAULT_ANSI によって TERM が未定義の時に ansi と決め打ちできるようにした
+  fopen は binary mode で open するようにした
+  TERM 未定義時に core dump するのを避けるようにした
+  #GETL で WIDTH文字目までは \0 でクリアするようにした
+  ファイル名解釈の 12文字+拡張子の時のパースのバグを fix
+  ファイル名解釈でドライブ Q を認めるように fix
+  #DREAD, #DWRITE でエラーコードを A レジスタに返すように fix
+  #TDIR で正しく終了アドレスを表示するように fix
+  LD A,R で乱数を返すように変更
+  tputs の返り値のデフォルトを int に変更
+  Makefile.in に ADDOPTS を追加 (ヘッダにすベき?)
+  キーカスタマイズの導入
+  内部コマンドを先頭文字でなく文字列で判断するように変更
+  dos コマンドを dosfile コマンドに名前を変更
+  OPT_KEYMAP_WM によって Word Master 風キーマッピングに変更可能に
+  configure に --with-delay, --with-wmkeymap, --with-forceansi,
+  --with-rcfile=xxx を追加
+
+0.4:
+  configure 対応にした
+  memcpy.c の追加
+  エラーメッセージ表示の改善
+  ベータリリース
+
+0.3:
+  ~/.sosrc を読むようにした
+  スクリーンエディットが出来るようにした
+  画面描画関係の高速化
+  アスキーファイルでの行末、ファイル終了マークの変換
+  ディスクイメージファイルの指定を可能にした
+  多くの bug fix
+
+0.2:
+  curses を使わず termcap を利用するようにした
+  sword disk image を使えるようにした
+  Z80 で記述された sword の DOS 部分を利用するようにした
+  コマンドシェルは DOS 部分のものを利用するようにした
+   #MON では ccp() を起動するようにした
+  プリンタを除く全てのファンクションを実装した
+
+0.1:
+  initial version

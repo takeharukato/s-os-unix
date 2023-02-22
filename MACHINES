@@ -1,0 +1,12 @@
+Solaris7:
+  gcc でコンパイルした場合、curses.h で getwc() 等の warning が発生し、
+  configure が自動で curses.h を発見できません。
+  configure 終了後、手で CFLAGS に -DHAVE_CURSES_H を追加してください。
+
+
+NEWS-OS 6.1:
+  一部の gcc ではうまくコンパイルできないようです。その場合は configure に
+  明示的に /usr/bin/cc を使うように指示してください。具体的には、
+  % env CC=/usr/bin/cc ./configure
+  として configure を実行すれば OK です。configure をやりなおす際には、
+  config.cache を消去するのを忘れずに。
