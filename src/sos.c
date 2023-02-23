@@ -5,6 +5,8 @@
    tate@spa.is.uec.ac.jp
 */
 
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,13 +15,16 @@
 #include <errno.h>
 #include "compat.h"
 #include "simz80.h"
+#include "keymap.h"
 #include "sos.h"
 #include "dio.h"
 #include "util.h"
 #include "screen.h"
 #include "trap.h"
 
+#ifndef VERSION
 #define VERSION	"0.5 (beta)"		/* version */
+#endif
 
 #ifndef	DOSFILE
 # define DOSFILE	"dos.bin"
@@ -73,7 +78,7 @@ emu_quit(void){
 */
 int
 ccpline(char *p, int mode){
-    char lbuf[2000];
+    char lbuf[CCP_LINLIM];
     char *np,c;
     char *cp;
     int n;
@@ -93,7 +98,7 @@ ccpline(char *p, int mode){
 	       strcasecmp(np, "cd") == 0){
 	if ((np = strtok(NULL, " ")) != NULL){
 	    if (chdir(np)){
-		sprintf(lbuf,"%s: %s\r", np, strerror(errno));
+		    snprintf(lbuf, CCP_LINLIM, "%s: %s\r", np, strerror(errno));
 		scr_puts(lbuf);
 	    }
 	}
@@ -110,17 +115,17 @@ ccpline(char *p, int mode){
 		dosfile = strdup(np);
 	}
 	if (dosfile != NULL){
-	    sprintf(lbuf,"<%s> is current dos image file\r", dosfile);
+		snprintf(lbuf, CCP_LINLIM, "<%s> is current dos image file\r", dosfile);
 	    scr_puts(lbuf);
 	}
     } else if (strcasecmp(np, "mount") == 0){
 	if ((np = strtok(NULL, " ")) == NULL){
 	    for (n=0; n<SOS_MAXIMAGEDRIVES; n++){
 		if (dio_disk[n] != NULL){
-		    sprintf(lbuf,"disk#%d : %s\r", n, dio_disk[n]);
+			snprintf(lbuf, CCP_LINLIM,"disk#%d : %s\r", n, dio_disk[n]);
 		    scr_puts(lbuf);
 		} else {
-		    sprintf(lbuf,"disk#%d : not mounted.\r");
+			snprintf(lbuf, CCP_LINLIM, "disk#%d : not mounted.\r", n);
 		    scr_puts(lbuf);
 		}
 	    }
@@ -133,14 +138,15 @@ ccpline(char *p, int mode){
 	}
 	if ((np = strtok(NULL, " ")) == NULL){
 	    if (dio_disk[n] != NULL){
-		sprintf(lbuf,"unmount <%s> as disk#%d\r",dio_disk[n],n);
+		    snprintf(lbuf, CCP_LINLIM,
+			"unmount <%s> as disk#%d\r",dio_disk[n],n);
 		scr_puts(lbuf);
 		dio_diclose(n);
 		free(dio_disk[n]);
 		dio_disk[n] = NULL;
 	    } else {
-		sprintf(lbuf,"disk#%d : not mounted.\r");
-		scr_puts(lbuf);
+		    snprintf(lbuf, CCP_LINLIM, "disk#%d : not mounted.\r",n);
+		    scr_puts(lbuf);
 	    }
 	    return(0);
 	}
@@ -151,14 +157,14 @@ ccpline(char *p, int mode){
 	    scr_nl();
 	    return(0);
 	}
-	sprintf(lbuf, "<%s> mounted as disk#%d\r", dio_disk[n],n);
+	snprintf(lbuf, CCP_LINLIM, "<%s> mounted as disk#%d\r", dio_disk[n],n);
 	scr_puts(lbuf);
     } else if (strcasecmp(np, "keymap") == 0){
 	if ((np = strtok(NULL, " ")) == NULL){
 	    scr_puts("Current bindings:\r");
 	    for (n=0; n<(int)' '; n++){
 		if ((cp = scr_maplook(n)) != NULL){
-		    sprintf(lbuf, "C-%c: %s\r", n+'`', cp);
+			snprintf(lbuf, CCP_LINLIM, "C-%c: %s\r", n+'`', cp);
 		    scr_puts(lbuf);
 		}
 	    }
@@ -241,7 +247,7 @@ ccpline(char *p, int mode){
 */
 void
 ccp(void){
-    char	buf[2000];
+    char	buf[CCP_LINLIM];
 
     for(;;){
 	scr_puts("\r$ ");		/* prompt */
@@ -255,7 +261,7 @@ void
 readrc(void){
     FILE	*fp;
     char	*rcfilename;
-    char	buf[2000];
+    char	buf[SOS_UNIX_BUFSIZ];
     int		len;
 
     if ((fp = fopen(RCFILE, "r")) == NULL){
@@ -345,13 +351,47 @@ z80loop(void){
     return(TRAP_QUIT);		/* against warning */
 }
 
+/** Try to load the sword dos file from a user directory or the system data directory.
+    @retval 0 success
+    @retval -1 Can not load the sword dos module.
+ */
+static int
+setup_dos_file(void){
+	int rc;
+	char pathname[SOS_UNIX_PATH_MAX];
+
+	rc = fileload(dosfile, -1); /* load from current directory. */
+
+	if ( rc != 0 ) { /* File not found on current directory. */
+
+		/* load from data directory. */
+		snprintf(pathname, SOS_UNIX_PATH_MAX,
+		    "%s/%s", DATADIR, dosfile);
+		scr_puts(pathname);
+		rc = fileload(pathname, -1);
+		if ( rc != 0 )
+			goto err_out;
+
+	}
+
+	return 0; /* success */
+err_out:
+	scr_puts("load: failed to load dos module <");
+	scr_puts(dosfile);
+	scr_puts(">\r");
+	(void) scr_finish();
+
+	exit(1);
+}
+
 int
 main(int argc, char **argv)
 {
-    char	*loadfile = NULL;
-    int	loadaddr = -1;
-    int	c;
-    int jumpaddr = -1;
+    int	                c;
+    int                rc;
+    int	    loadaddr = -1;
+    int     jumpaddr = -1;
+    char *loadfile = NULL;
 
     /* default */
     dosfile = DOSFILE;
@@ -393,13 +433,7 @@ main(int argc, char **argv)
 
     readrc();
 
-    if (fileload(dosfile, -1)){
-	scr_puts("load: failed to load dos module <");
-	scr_puts(dosfile);
-	scr_puts(">\r");
-	(void) scr_finish();
-	return(1);
-    }
+    setup_dos_file();
 
     if (loadfile != NULL){
 	if (fileload(loadfile, loadaddr)){
@@ -410,6 +444,7 @@ main(int argc, char **argv)
 	    return(1);
 	}
     }
+
     coldboot();
 
     if (jumpaddr > 0){
@@ -425,4 +460,3 @@ main(int argc, char **argv)
 
     return(0);	/* against compiler's warning */
 }
-

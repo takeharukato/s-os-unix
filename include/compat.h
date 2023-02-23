@@ -8,6 +8,8 @@
 #ifndef	_COMPAT_H_
 #define	_COMPAT_H_
 
+#include "config.h"
+
 /* return value of putchar routine called from tputs */
 #ifndef TYPE_TPUTS
 # define TYPE_TPUTS	int

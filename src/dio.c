@@ -4,6 +4,9 @@
 
    tate@spa.is.uec.ac.jp
 */
+
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -132,7 +135,7 @@ dio_wopen(char *sosname, int attr, int dtadr, int size, int exadr){
     }
 
     /* store SWORD header */
-    sprintf(buf, DIO_HEADERPAT ,attr, dtadr, exadr);
+    snprintf(buf, DIO_HEADERLEN+1, DIO_HEADERPAT ,attr, dtadr, exadr);
 
     if (fwrite(buf, sizeof(char), DIO_HEADERLEN, openfp) < DIO_HEADERLEN){
 	fclose(openfp);
@@ -160,6 +163,7 @@ dio_ropen(char *sosname, int *attr, int *dtadr, int *size,
     char	buf[DIO_HEADERLEN + 1];
     int		fattr, fdtadr, fexadr, fsize;
     char	*name;
+    size_t      rc;
 
     if (openfp != NULL)
 	fclose(openfp);
@@ -175,7 +179,7 @@ dio_ropen(char *sosname, int *attr, int *dtadr, int *size,
 
     /* check SWORD header */
     *buf = '\0';	/* paranoia */
-    fread(buf, sizeof(char), DIO_HEADERLEN, openfp);
+    rc = fread(buf, sizeof(char), DIO_HEADERLEN, openfp);
     buf[DIO_HEADERLEN] = '\0';	/* paranoia */
     if (sscanf(buf, DIO_HEADERPAT, &fattr, &fdtadr, &fexadr) == 3){
 	/* this is single fork file with magic */
@@ -359,17 +363,24 @@ FILE *
 dio_diopen(int diskno){
     char	name[sizeof(DIO_IMAGEPAT)+1];
 
-    if (imagefp[diskno] == NULL){
-	/* not opended this drive */
-	if (dio_disk[diskno] == NULL){
-	    /* image file name is not defined, use default */
-	    sprintf(name, DIO_IMAGEPAT, diskno);
-	    if ((dio_disk[diskno] = strdup(name)) == NULL)
-		return(NULL);
-	}
-	return (imagefp[diskno] = fopen(dio_disk[diskno], "rb+"));
+    if (imagefp[diskno] == NULL) {
+
+	    /* not opended this drive */
+	    if (dio_disk[diskno] == NULL) {
+
+		    /* image file name is not defined, use default */
+		    snprintf(name, sizeof(DIO_IMAGEPAT)+1, DIO_IMAGEPAT, diskno);
+
+		    dio_disk[diskno] = strdup(name);
+		    if ( dio_disk[diskno] == NULL )
+			    return NULL;
+	    }
+
+	    imagefp[diskno] = fopen(dio_disk[diskno], "rb+");
+	    return imagefp[diskno];
     }
-    return(imagefp[diskno]);
+
+    return imagefp[diskno];
 }
 
 /*
@@ -388,7 +399,7 @@ dio_diclose(int diskno){
 
    start from "recno" record, "numrec" records
    1 record = 256 byte
-*/   
+*/
 int dio_dread(unsigned char *buf, int diskno, int recno, int numrec){
     FILE *fp;
     size_t	len;
@@ -418,4 +429,3 @@ int dio_dwrite(unsigned char *buf, int diskno, int recno, int numrec){
     }
     return(0);
 }
-

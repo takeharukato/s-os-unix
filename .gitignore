@@ -65,6 +65,16 @@ autom4te.cache/
 config.log
 config.status
 Makefile
-
+config.h.in
+stamp-*
+include/config.h
+Makefile.in
+configure.in
+configure
+compile
+depcomp
+aclocal.m4
+missing
+install-sh
 # S-OS
 sos

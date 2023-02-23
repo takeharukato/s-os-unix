@@ -5,6 +5,8 @@
    tate@spa.is.uec.ac.jp
 */
 
+#include "config.h"
+
 #include <stdio.h>
 /*
 #include <unistd.h>
@@ -263,7 +265,7 @@ trap_init(void){
     PutWORD(0x1f5e, EM_FATPOS);	/* #FATPOS */
     PutBYTE(0x1f5d, EM_DFDV);	/* #DSK */
     PutBYTE(0x1f5c, EM_WIDTH);	/* #WIDTH */
-    PutBYTE(0x1f5b, EM_MAXLN);	/* #MAXLIN */	
+    PutBYTE(0x1f5b, EM_MAXLN);	/* #MAXLIN */
 
     PutBYTE(SOS_DFDV, EM_DFDV);	/* %DFDV */
 
@@ -279,16 +281,17 @@ trap_init(void){
 int
 trap(int func){
     int	r;
-    char buf[80];
+    char buf[TRAP_BUFSIZ];
 
     if (func < 0 || trap_nfunc <= func || sos_funcs[func].func == NULL){
-	sprintf(buf,"\nSOS Emulator: Invalid trap: %d\r",func);
-	scr_puts(buf);
-	return(TRAP_COLD);
-    } else {
+
+	    snprintf(buf, TRAP_BUFSIZ, "\nSOS Emulator: Invalid trap: %d\r",func);
+	    scr_puts(buf);
+	    return TRAP_COLD;
+    } else
 	r = (*sos_funcs[func].func)();
-    }
-    return(r);
+
+    return r;
 }
 
 int sos_cold(void){
@@ -437,7 +440,7 @@ int sos_bell(void){
 int sos_prthx(void){
     char	buf[3];
 
-    sprintf(buf, "%02X", (int) Z80_A);
+    snprintf(buf, 3, "%02X", (int) Z80_A);
     scr_puts(buf);
     return(TRAP_NEXT);
 }
@@ -445,7 +448,7 @@ int sos_prthx(void){
 int sos_prthl(void){
     char	buf[5];
 
-    sprintf(buf, "%04X", (int) Z80_HL);
+    snprintf(buf, 5, "%04X", (int) Z80_HL);
     scr_puts(buf);
     return(TRAP_NEXT);
 }
@@ -727,7 +730,7 @@ int sos_peeka(void){
 	len = EM_WKSIZ - offset;		/* overflow check */
     }
     memcpy(ram + target, wkram + offset, len);
-    
+
     SETFLAG(C, 0);
     return(TRAP_NEXT);
 }
@@ -838,7 +841,7 @@ int sos_tropn(void){
 	SETFLAG(C, 1);
 	return(TRAP_NEXT);
     }
-    
+
     PutBYTE(EM_IBFAD, attr);
     PutWORD(SOS_DTADR, addr);
     PutWORD(SOS_EXADR, exaddr);
@@ -927,8 +930,8 @@ int sos_tdir(void){
     int	dirno;
     char	name[SOS_FNAMELEN + 1];
     char	ext[SOS_FNAMEEXTLEN + 1];
-    int	len, attr, addr, exaddr;
-    char	buf[SOS_FNAMELEN + 18];
+    int	        len, attr, addr, exaddr;
+    char	buf[SOS_DIRFMTLEN + 1];
     char	*type;
 
     dirno = 0;
@@ -940,8 +943,8 @@ int sos_tdir(void){
 	    type = trap_attr[attr];
 	else
 	    type = "???";
-	sprintf(buf, "%s  Q:%s.%s:%04X:%04X:%04X\r",
-		type, name, ext, addr, (addr+len-1) & 0xffff, exaddr);
+	snprintf(buf, SOS_DIRFMTLEN + 1, "%s  Q:%s.%s:%04X:%04X:%04X\r",
+		type, name, ext, addr & 0xffff, (addr+len-1) & 0xffff, exaddr& 0xffff);
 	scr_puts(buf);
 	dirno++;
     }

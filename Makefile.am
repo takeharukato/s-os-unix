@@ -1,0 +1,4 @@
+ACLOCAL_AMFLAGS=-I m4
+SUBDIRS = include src share
+EXTRA_DIST = autogen.sh COPYING COPYING.JP README README.md share/sword.bin share/REDA
+DISTCLEANFILES =

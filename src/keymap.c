@@ -1,3 +1,6 @@
+
+#include "config.h"
+
 #include <stdlib.h>
 #include "screen.h"
 #include "keymap.h"

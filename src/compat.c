@@ -7,6 +7,8 @@
    tate@spa.is.uec.ac.jp
    $Id: compat.c,v 1.5 1999/02/19 16:47:50 tate Exp tate $
 */
+
+#include "config.h"
 #include "compat.h"
 
 #ifndef	HAVE_STRERROR
@@ -22,7 +24,7 @@ strerror(int num){
     if (num < sys_nerr)
 	return(sys_errlist[num]);
 
-    sprintf(buf, "%d", num);
+    snprintf(buf, 32, "%d", num);
     return(buf);
 }
 #endif	/* !HAVE_STRERROR */
