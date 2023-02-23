@@ -279,8 +279,13 @@ readrc(void){
     while(!feof(fp)){
 	if (fgets(buf, sizeof(buf), fp) == NULL)
 	    break;
-	if ((len = strlen(buf)) > 1)
-	    buf[len-1] = 0;
+	len = strlen(buf);
+	while( ( len > 1 ) &&
+	    ( ( buf[len - 1] == '\r' ) || ( buf[ len - 1 ] == '\n' ) ) ) {
+
+		buf[len - 1] = '\0';
+		--len;
+	}
 	ccpline(buf, CCP_MODE_INIT);
     }
 }
