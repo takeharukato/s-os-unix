@@ -1306,6 +1306,7 @@ sub reslabs {
 
 
 sub preamble {
+    print "#include <stdlib.h>\n\n";
     print "#include \"simz80.h\"\n\n";
 
     print "static const unsigned char partab[256] = {\n";

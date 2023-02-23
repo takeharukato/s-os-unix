@@ -4,6 +4,9 @@
 
    tate@spa.is.uec.ac.jp
 */
+
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef	HAVE_UNISTD_H
@@ -14,18 +17,24 @@
 #include <errno.h>
 #ifdef	HAVE_TERMIOS_H
 # include <termios.h>
-#ifdef	HAVE_TERM_H
-# include <term.h>
-#endif
 #else
 # include <sgtty.h>
 # include <sys/file.h>
 #endif
+
+#if GWINSZ_IN_SYS_IOCTL
+# include <sys/ioctl.h>
+#endif
+
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <signal.h>
+
 #ifdef HAVE_CURSES_H
 # include <curses.h>		/* need only termcap facility, however major */
+#ifdef	HAVE_TERM_H
+# include <term.h>
+#endif
 #else
 # ifdef HAVE_TERMCAP_H
 #  include <termcap.h>
@@ -36,6 +45,12 @@
 #ifdef	OPT_DELAY_FLUSH
 # include <sys/time.h>
 #endif
+
+#ifndef RETSIGTYPE
+ /* we may safely assume C89 semantics that RETSIGTYPE is void. */
+#define RETSIGTYPE void
+#endif  /* RETSIGTYPE */
+
 #include "compat.h"
 #include "sos.h"
 #include "screen.h"
@@ -159,6 +174,10 @@ static keyfunc_t keyfuncs[] = {
     {NULL, NULL}
 };
 static int	keymap[(int)' '];
+
+static void scr_vkill(int _flag);
+static void scr_delete(int _flag);
+
 
 /* META functions for terminal mode control */
 /* make raw+signal mode */
@@ -763,6 +782,7 @@ scr_vputc(unsigned char c, int flag){
    NOTE:
      This function can optimize with "ce" termcap entry
 */
+static void
 scr_vkill(int flag){
     int	x,y;
     unsigned char *ap, *cp;
@@ -796,8 +816,8 @@ scr_vkill(int flag){
   scr_delete:
   delete a char of current cursor position and shift a line group to left
 */
-void
-scr_delete(flag){
+static void
+scr_delete(int flag){
     int	x,y;
     register unsigned char *src,*dst;
     unsigned char *ap;

@@ -5,6 +5,10 @@
 #ifndef	_SOS_H_
 #define	_SOS_H_
 
+#if defined(__STDC__)
+#include <limits.h>
+#endif  /*  __STDC__  */
+
 /*
    S-OS IOCS call in Z80 memory
    (only a part)
@@ -45,12 +49,20 @@
 
 #define	SOS_UNITNO	(0x2b06)
 
-#define	SOS_FNAMELEN	(16)
 #define SOS_FNAMENAMELEN	(13)
 #define	SOS_FNAMEEXTLEN		(3)
-
+#define	SOS_FNAMELEN	        (SOS_FNAMENAMELEN + SOS_FNAMEEXTLEN)
+#define SOS_DIRFMTLEN           (SOS_FNAMELEN + 24)
 #define	SOS_MAXIMAGEDRIVES	(4)
 
+#define CCP_LINLIM              (2000)
+#define SOS_UNIX_BUFSIZ         (2000)
+#define TRAP_BUFSIZ             (80)
+#if defined(PATH_MAX)
+#define SOS_UNIX_PATH_MAX       (PATH_MAX)
+#else
+#define SOS_UNIX_PATH_MAX       (1024)
+#endif /* PATH_MAX */
 /*
    Emulator setting
 */

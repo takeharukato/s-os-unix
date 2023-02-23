@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
     1999/2/28	Takamichi Tateoka <tate@spa.is.uec.ac.jp>
 */
 
-/* This file was generated from simz80.pl
+/* This file was generated from ./simz80.pl
    with the following choice of options */
 char *perl_params =
     "combine=0,"
@@ -30,6 +30,8 @@ char *perl_params =
     "cb_inline=0,"
     "dfd_inline=0,"
     "ed_inline=1";
+
+#include <stdlib.h>
 
 #include "simz80.h"
 
