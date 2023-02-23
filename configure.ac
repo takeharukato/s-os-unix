@@ -4,7 +4,7 @@ dnl
 dnl
 
 AC_PREREQ([2.71])
-AC_INIT([S-OS],[0.5beta],[tkato1219@gmail.com])
+AC_INIT([S-OS],[0.5beta],[takeharu1219@ybb.ne.jp])
 AM_INIT_AUTOMAKE([foreign 1.11])
 
 AC_CONFIG_HEADERS(include/config.h)
