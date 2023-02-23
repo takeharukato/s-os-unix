@@ -12,13 +12,13 @@ UNIX版S-OSの詳細は, 同ディレクトリの`README`ファイルを参照�
 本ディレクトリに配置されている`autogen.sh`を以下のように実行することで, `configure`スクリプトが生成されます。
 
 ```shell
-$ ./autogen.sh
+./autogen.sh
 ```
 
 上記実施後, 以下のコマンドにより`configure`を実行してください。
 
-```
-$ ./configure
+```shell
+./configure
 ```
 
 `configure`には以下のオプションを指定することができます。
@@ -30,6 +30,21 @@ $ ./configure
 |--with-forceansi|Termcapの`tgetenv`関数による端末種別獲得に失敗した場合, ANSI互換端末と見なして動作を継続するオプションです。|
 |--with-wmkeymap|`Word Master`ライクなキー操作を行うように設定します。未指定時は, Emacsライクな操作になります。|
 
+`configure`の実行が終わると, `Makefile`が作成されます。
+
+`configure`の実行後, 以下のコマンドを実行することで, UNIX版S-OSが構築されます。
+
+```shell
+make
+```
+
+管理者権限で, 以下のコマンドを実行することで, UNIX版S-OSをインストールします。
+
+```shell
+make install
+```
+
+一般ユーザ権でインストールする場合は, インストール先のプレフィクスを`configure`の`--prefix`オプションで指定してください。
 
 ## S-OSとは
 
