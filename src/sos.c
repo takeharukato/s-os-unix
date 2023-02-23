@@ -21,6 +21,7 @@
 #include "util.h"
 #include "screen.h"
 #include "trap.h"
+#include "misc.h"
 
 #ifndef VERSION
 #define VERSION	"0.5 (beta)"		/* version */
@@ -81,7 +82,9 @@ ccpline(char *p, int mode){
     char lbuf[CCP_LINLIM];
     char *np,c;
     char *cp;
+    char *ref;
     int n;
+    int rc;
 
     /* prompt & space skip */
     while((c = *p) == '$' || c == ' ')
@@ -150,15 +153,28 @@ ccpline(char *p, int mode){
 	    }
 	    return(0);
 	}
-	dio_diclose(n);
-	free(dio_disk[n]);
-	if ((dio_disk[n] = strdup(np)) == NULL){
-	    scr_puts(strerror(errno));
-	    scr_nl();
-	    return(0);
+
+	rc = check_file_exists(np, O_RDWR);
+	if ( rc == 0 ) {
+
+		ref = strdup(np);
+		if ( ref == NULL ){
+
+			scr_puts(strerror(errno));
+			scr_nl();
+			return 0;
+		}
+
+		dio_diclose(n);
+		free(dio_disk[n]);
+		dio_disk[n] = ref;
+		snprintf(lbuf, CCP_LINLIM, "<%s> mounted as disk#%d\r", dio_disk[n],n);
+		scr_puts(lbuf);
+	} else {
+
+		snprintf(lbuf, CCP_LINLIM, "Can not open image file:%s \r", np);
+		scr_puts(lbuf);
 	}
-	snprintf(lbuf, CCP_LINLIM, "<%s> mounted as disk#%d\r", dio_disk[n],n);
-	scr_puts(lbuf);
     } else if (strcasecmp(np, "keymap") == 0){
 	if ((np = strtok(NULL, " ")) == NULL){
 	    scr_puts("Current bindings:\r");
@@ -259,30 +275,62 @@ ccp(void){
 
 void
 readrc(void){
-    FILE	*fp;
-    char	*rcfilename;
-    char	buf[SOS_UNIX_BUFSIZ];
-    int		len;
+	FILE	*fp;
+	char	*rcfilename=NULL;
+	char	*homedir=NULL;
+	char    *ref;
+	char	buf[SOS_UNIX_BUFSIZ];
+	int	len;
+	int	pathlen;
 
-    if ((fp = fopen(RCFILE, "r")) == NULL){
-	if (getenv("HOME") == NULL ||
-	    (rcfilename = strdup(getenv("HOME"))) == NULL)
-	    return;
-	if ((rcfilename = realloc(rcfilename, strlen(rcfilename) + sizeof(RCFILE) + 1)) == NULL)
-	    return;
+	fp = fopen(RCFILE, "r");
+	if ( fp == NULL ) {
 
-	strcat(rcfilename, "/" RCFILE);
-	if ((fp = fopen(rcfilename, "r")) == NULL)
-	    return;
-    }
+		/*
+		 * Search rcfile in home directory
+		 */
+		homedir = strdup(getenv("HOME"));
+		if ( homedir == NULL )
+			return;
 
-    while(!feof(fp)){
-	if (fgets(buf, sizeof(buf), fp) == NULL)
-	    break;
-	if ((len = strlen(buf)) > 1)
-	    buf[len-1] = 0;
-	ccpline(buf, CCP_MODE_INIT);
-    }
+		pathlen = strlen(homedir) + strlen(RCFILE) + 1;
+		rcfilename = malloc(pathlen);
+		if ( rcfilename == NULL )
+			goto free_homedir_out;
+
+		snprintf(rcfilename, pathlen, "%s/%s", homedir, RCFILE);
+		fp = fopen(rcfilename, "r");
+		if ( fp == NULL )
+			goto free_rcfile_out;
+	}
+
+	while( feof(fp) == 0 ){
+
+		ref = fgets(buf, sizeof(buf), fp);
+		if ( ref == NULL )
+			break;
+
+		len = strlen(buf);
+		while( ( len > 1 ) &&
+		    ( ( buf[len - 1] == '\r' ) || ( buf[ len - 1 ] == '\n' ) ) ) {
+
+			buf[len - 1] = '\0';
+			--len;
+		}
+
+		ccpline(buf, CCP_MODE_INIT);
+	}
+
+	fclose(fp);
+
+free_rcfile_out:
+	free(rcfilename);
+
+free_homedir_out:
+	free(homedir);
+
+	return;
+
 }
 
 /*
