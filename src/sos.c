@@ -357,7 +357,7 @@ z80loop(void){
  */
 static int
 setup_dos_file(void){
-	int rc;
+	int                           rc;
 	char pathname[SOS_UNIX_PATH_MAX];
 
 	rc = fileload(dosfile, -1); /* load from current directory. */
@@ -367,7 +367,6 @@ setup_dos_file(void){
 		/* load from data directory. */
 		snprintf(pathname, SOS_UNIX_PATH_MAX,
 		    "%s/%s", DATADIR, dosfile);
-		scr_puts(pathname);
 		rc = fileload(pathname, -1);
 		if ( rc != 0 )
 			goto err_out;
