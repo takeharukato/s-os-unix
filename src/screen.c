@@ -444,6 +444,10 @@ scr_visible(void){
 	return;
 
     scr_cur_visible = 1;
+
+    if (scr_vx != scr_px || scr_vy != scr_py)  /* sync cursor */
+	scr_pmove(scr_vy, scr_vx);
+
     if (scr_tc_ve_str == NULL)
 	return;
 
