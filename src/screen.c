@@ -445,15 +445,18 @@ scr_visible(void){
 
     scr_cur_visible = 1;
 
+    ON_CRITICAL;
+
     if (scr_vx != scr_px || scr_vy != scr_py)  /* sync cursor */
 	scr_pmove(scr_vy, scr_vx);
 
     if (scr_tc_ve_str == NULL)
-	return;
+	    goto end;
 
-    ON_CRITICAL;
     tputs(scr_tc_ve_str, 1, scr_pputchar);
     scr_term_fflush();
+
+end:
     OFF_CRITICAL;
 }
 
