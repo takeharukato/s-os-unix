@@ -457,10 +457,10 @@ int sos_asc(void){
     int	c;
 
     c = (int)Z80_A & 0x0f;
-    if (c < 10){
-	Sethreg(Z80_AF, c);
+    if ( 10 > c ){
+	Sethreg(Z80_AF, c + '0');
     } else {
-	Sethreg(Z80_AF, c + 'A');
+	Sethreg(Z80_AF, (c - 10) + 'A');
     }
     return(TRAP_NEXT);
 }
