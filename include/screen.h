@@ -11,6 +11,7 @@ void	scr_caps(int s);
 int	scr_initx(void);
 int	scr_finish(void);
 void	scr_redraw(void);
+void    scr_locate_cursor(int _y, int _x);
 
 void scr_putchar(char c);
 void scr_asyncputchar(char c);

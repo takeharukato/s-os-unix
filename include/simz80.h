@@ -25,35 +25,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
 #ifndef	_SIMZ80_H_
 #define	_SIMZ80_H_
 
-#include <limits.h>
-
-#if UCHAR_MAX == 255
-typedef unsigned char	BYTE;
-#else
-#error Need to find an 8-bit type for BYTE
-#endif
-
-#if USHRT_MAX == 65535
-typedef unsigned short	WORD;
-#else
-#error Need to find an 16-bit type for WORD
-#endif
-
-/* FASTREG needs to be at least 16 bits wide and efficient for the
-   host architecture */
-#if UINT_MAX >= 65535
-typedef unsigned int	FASTREG;
-#else
-typedef unsigned long	FASTREG;
-#endif
-
-/* FASTWORK needs to be wider than 16 bits and efficient for the host
-   architecture */
-#if UINT_MAX > 65535
-typedef unsigned int	FASTWORK;
-#else
-typedef unsigned long	FASTWORK;
-#endif
+#include "sim-type.h"
+#include "trap.h"
 
 /* two sets of accumulator / flags */
 extern WORD af[2];
@@ -100,15 +73,21 @@ extern FASTWORK simz80(FASTREG PC);
 #define Setlreg(x, v)	x = (((x)&0xff00) | ((v)&0xff))
 #define Sethreg(x, v)	x = (((x)&0xff) | (((v)&0xff) << 8))
 
-#define RAM(a)		ram[(a)&0xffff]
-#define GetBYTE(a)	RAM(a)
-#define PutBYTE(a, v)	RAM(a) = v
-#define GetWORD(a)	(RAM(a) | (RAM((a)+1) << 8))
-#define PutWORD(a, v)							\
-    do { RAM(a) = (BYTE)(v);						\
-	 RAM((a)+1) = (v) >> 8;						\
-     } while (0)
+#define RAM(a)		ram[ (a) & 0xffff ]
+#define GetBYTE_INTERNAL(a)	( RAM( (a) ) )
+#define GetWORD_INTERNAL(a)	( RAM( (a) ) | (RAM( (a) + 1 ) << 8) )
+#define PutBYTE_INTERNAL(a, v)	do{		\
+		RAM((a)) = (v);			\
+	}while(0)
+#define PutWORD_INTERNAL(a, v)	do {				       \
+		RAM( (a) ) = (BYTE)(v);				       \
+		RAM( (a) + 1 ) = (v) >> 8;			       \
+	} while (0)
 
+#define GetBYTE(a)     trap_get_byte(a)
+#define PutBYTE(a, v)  trap_put_byte(a,v)
+#define GetWORD(a)     trap_get_word(a)
+#define PutWORD(a, v)  trap_put_word(a,v)
 /* Define these as macros or functions if you really want to simulate I/O */
 #define Input(port)	0
 #define Output(port, value)
