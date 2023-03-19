@@ -294,6 +294,47 @@ trap(int func){
     return r;
 }
 
+/** Get a byte data from an address in RAM
+    @param[in] addr an address to be written
+    @value     byte data
+ */
+BYTE
+trap_get_byte(WORD addr){
+
+	return GetBYTE_INTERNAL(addr);
+}
+/** Get a byte data from an address in RAM
+    @param[in] addr an address to be written
+    @value     byte data
+ */
+WORD
+trap_get_word(WORD addr){
+
+	return GetWORD_INTERNAL(addr);
+}
+
+
+/** Put a byte data to RAM
+    @param[in] addr an address to write to
+    @param[in] val  a byte data to be written
+    @value     byte data
+ */
+void
+trap_put_byte(WORD addr, BYTE val){
+
+	PutBYTE_INTERNAL(addr, val);
+}
+
+/** Put a word data to RAM
+    @param[in] addr an address to write to
+    @param[in] v    a word data to be written
+ */
+void
+trap_put_word(WORD addr, WORD val){
+
+	PutWORD_INTERNAL(addr, val);
+}
+
 int sos_cold(void){
     Z80_PC = GetWORD(SOS_USR);
     return(TRAP_COLD);

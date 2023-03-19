@@ -5,11 +5,18 @@
 #ifndef	_TRAP_H_
 #define	_TRAP_H_
 
+#include "sim-type.h"
+
 /*
    entry points
 */
 int trap(int func);
 int trap_init(void);
+
+BYTE trap_get_byte(WORD _addr);
+WORD trap_get_word(WORD _addr);
+void trap_put_byte(WORD _addr, BYTE _val);
+void trap_put_word(WORD _addr, WORD _val);
 
 /*
    return values from TRAP routine
