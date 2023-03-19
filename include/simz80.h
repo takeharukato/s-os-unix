@@ -77,7 +77,7 @@ extern FASTWORK simz80(FASTREG PC);
 #define GetBYTE_INTERNAL(a)	( RAM( (a) ) )
 #define GetWORD_INTERNAL(a)	( RAM( (a) ) | (RAM( (a) + 1 ) << 8) )
 #define PutBYTE_INTERNAL(a, v)	do{		\
-		RAM((a)) = (v);			\
+		RAM((a)) = (BYTE)(v);		\
 	}while(0)
 #define PutWORD_INTERNAL(a, v)	do {				       \
 		RAM( (a) ) = (BYTE)(v);				       \
