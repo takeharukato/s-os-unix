@@ -54,6 +54,8 @@
 #include "compat.h"
 #include "sos.h"
 #include "screen.h"
+#include "trap.h"
+#include "simz80.h"
 
 #ifndef SCR_MAXLINES
 # define SCR_MAXLINES	(25)	/* maximam lines of virtual screen */
@@ -178,6 +180,37 @@ static int	keymap[(int)' '];
 static void scr_vkill(int _flag);
 static void scr_delete(int _flag);
 
+/** Sync virtual cursor position to XYADR work space.
+    @param[in] y Cursor Y position
+    @param[in] x Cursor X position
+ */
+static void
+sync_xyadr(int y, int x){
+
+	write_work_space_without_sync(EM_XYADR, x);
+	write_work_space_without_sync(EM_XYADR + 1, y);
+}
+
+/*
+   fix x and y value to fit virtual screen.
+*/
+static void
+scr_fixxy(int *y, int *x){
+    if (x != NULL){
+	if (*x >= scr_vw){
+	    *x = scr_vw;
+	} else if (*x < 0){
+	    *x = 0;
+	}
+    }
+    if (y != NULL){
+	if (*y >= scr_vh){
+	    *y = scr_vh;
+	} else if (*y < 0){
+	    *y = 0;
+	}
+    }
+}
 
 /* META functions for terminal mode control */
 /* make raw+signal mode */
@@ -378,6 +411,8 @@ scr_clear(void){
     scr_term_fflush();
     scr_px = scr_py = 0;
     OFF_CRITICAL;
+
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -393,6 +428,7 @@ scr_home(void){
     tputs(scr_tc_ho_str, 1, scr_pputchar);
     scr_term_fflush();
     OFF_CRITICAL;
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -597,6 +633,28 @@ scr_redraw(void){
 	OFF_CRITICAL;
 }
 
+/** update cursor common operation
+    @param[in] y Y position
+    @param[in] x X position
+ */
+void
+scr_locate_cursor(int y, int x){
+
+	scr_fixxy(&y, &x);
+
+	scr_vy = y;
+	scr_vx = x;
+
+#ifndef	OPT_DELAY_FLUSH
+	if (scr_cur_visible){	/* move cursor only if cursor is visible */
+
+		ON_CRITICAL;
+		scr_pmove(y, x);
+		OFF_CRITICAL;
+	}
+#endif
+}
+
 /*
    scr_vright:
    move virtual cursor to right
@@ -615,6 +673,7 @@ scr_vright(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -636,6 +695,7 @@ scr_vleft(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -652,6 +712,7 @@ scr_vup(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -669,6 +730,7 @@ scr_vdown(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -724,6 +786,7 @@ scr_vcrlf(int flag){
     while((scr_vy < scr_vh-1) && (scr_vlattr[scr_vy] & SCR_LA_CONT))
 	scr_vdown(flag);
     scr_vdown(flag);
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -779,6 +842,7 @@ scr_vputc(unsigned char c, int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -974,6 +1038,7 @@ scr_top(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -1044,6 +1109,7 @@ scr_end(int flag){
 	scr_pmove(scr_vy, scr_vx);
 	OFF_CRITICAL;
     }
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 /*
@@ -1064,27 +1130,6 @@ scr_yank(int flag){
     }
     if (flag & SCR_F_IMM)
 	scr_flush();
-}
-
-/*
-   fix x and y value to fit virtual screen.
-*/
-void
-scr_fixxy(int *y, int *x){
-    if (x != NULL){
-	if (*x >= scr_vw){
-	    *x = scr_vw;
-	} else if (*x < 0){
-	    *x = 0;
-	}
-    }
-    if (y != NULL){
-	if (*y >= scr_vh){
-	    *y = scr_vh;
-	} else if (*y < 0){
-	    *y = 0;
-	}
-    }
 }
 
 /*
@@ -1491,6 +1536,7 @@ scr_key_tab(void){
     scr_insert(x, SCR_F_NONE);
     scr_vx += x;
     scr_flush();
+    sync_xyadr(scr_vy, scr_vx);
 }
 void
 scr_key_yank(void){
@@ -1656,17 +1702,9 @@ int scr_scrn(int y, int x){
 }
 
 void scr_loc(int y, int x){
-    scr_fixxy(&y, &x);
 
-    scr_vy = y;
-    scr_vx = x;
-#ifndef	OPT_DELAY_FLUSH
-    if (scr_cur_visible){	/* move cursor only if cursor is visible */
-	ON_CRITICAL;
-	scr_pmove(y, x);
-	OFF_CRITICAL;
-    }
-#endif
+    scr_locate_cursor(y, x);
+    sync_xyadr(scr_vy, scr_vx);
 }
 
 int scr_flget(void){

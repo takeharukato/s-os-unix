@@ -335,6 +335,30 @@ trap_put_word(WORD addr, WORD val){
 	PutWORD_INTERNAL(addr, val);
 }
 
+/** Write to an address in work space for screen.c and trap.c.
+    @param[in] addr an address to be written
+    @param[in] val  a value to write
+    @retval  0  success
+    @retval -1  the addr is not corresponding to any work space.
+*/
+int
+write_work_space_without_sync(WORD addr, BYTE val){
+	int x, y;
+
+	switch( addr ) {
+
+	case EM_XYADR:        /* Cursor X position */
+	case (EM_XYADR + 1):  /* Cursor Y position */
+		PutBYTE_INTERNAL(addr, val);
+		return 0;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+
 int sos_cold(void){
     Z80_PC = GetWORD(SOS_USR);
     return(TRAP_COLD);
