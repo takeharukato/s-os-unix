@@ -217,6 +217,37 @@ char *trap_attr[] = {
 */
 BYTE	wkram[EM_WKSIZ+1];	/* S-OS special work */
 
+/** Detect writing to a workspace and sync behaviors according to a value in a workspace.
+    @param[in] addr an address to be written
+*/
+static void
+sync_work_space(WORD addr){
+	int x, y;
+	BYTE   v;
+
+	v = GetBYTE_INTERNAL(addr);  /* get current data */
+	scr_csr(&y, &x);  /* Get cursor for modifications of XYADR */
+	switch( addr ) {
+
+	case EM_XYADR:  /* Cursor X position */
+
+		/* locate cursor without writing to workspace. */
+		scr_locate_cursor(y, v);  /* update cursor */
+		break;
+
+	case (EM_XYADR + 1):  /* Cursor Y position */
+
+		/* locate cursor without writing to workspace. */
+		scr_locate_cursor(v, x);
+		break;
+
+	default:
+		break;
+	}
+
+	return ;
+}
+
 /*
    initialize trap handler & SWORD memory
 */
@@ -323,6 +354,7 @@ void
 trap_put_byte(WORD addr, BYTE val){
 
 	PutBYTE_INTERNAL(addr, val);
+	sync_work_space(addr);
 }
 
 /** Put a word data to RAM
@@ -333,6 +365,8 @@ void
 trap_put_word(WORD addr, WORD val){
 
 	PutWORD_INTERNAL(addr, val);
+	sync_work_space(addr);
+	sync_work_space(addr + 1);
 }
 
 /** Write to an address in work space for screen.c and trap.c.
