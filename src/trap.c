@@ -821,8 +821,8 @@ int sos_peeka(void){
     WORD	target;
     int		len;
 
-    offset = (int) Z80_HL;
-    target = Z80_DE;
+    target = Z80_HL;
+    offset = (int) Z80_DE;
     len = (int) Z80_BC;
 
     if (offset + len > EM_WKSIZ){
