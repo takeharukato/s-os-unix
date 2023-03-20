@@ -117,8 +117,6 @@ static int	out_flags;
 static int	out_blocking = 1;	/* now, terminal is blocking mode */
 static int	out_blocking_orig;
 
-/* break key hack */
-#define	SCR_BREAK	(0x1b)	/* break key code on S-OS */
 static int	breaked = 0;
 
 /* declaration of signal handler */
@@ -175,6 +173,65 @@ static keyfunc_t keyfuncs[] = {
     {"clear", scr_key_clear},
     {NULL, NULL}
 };
+/*
+ * convert table to convert from a keyfunc index to a ctrl code in SWORD.
+ * SCR_SOS_NUL(0x00) means that SWORD does not have such ctrl codes.
+ */
+static char scr_keyfunc_idx2sword[]={
+	SCR_SOS_NUL,    /* backspace */
+	SCR_SOS_NUL,    /* delete */
+	SCR_SOS_NUL,    /* begin */
+	SCR_SOS_NUL,    /* end */
+	SCR_SOS_UP,     /* up */
+	SCR_SOS_DOWN,   /* down */
+	SCR_SOS_RIGHT,  /* forward */
+	SCR_SOS_LEFT,   /* back */
+	SCR_SOS_NUL,    /* redraw */
+	SCR_SOS_NUL,    /* kill */
+	SCR_SOS_NUL,    /* tab */
+	SCR_SOS_NUL,    /* yank */
+	SCR_SOS_CLS     /* clear */
+};
+
+/*
+ * convert table to convert from a ctrl code in SWORD to a keyfunc index.
+ * SCR_KEYMAP_IDX_NULL(0xff) means no entry exits in keyfunc index.
+ */
+static char sword2keyfunc_idx[]={
+	SCR_KEYMAP_IDX_NULL,  /* 0x00 (NUL)  */
+	SCR_KEYMAP_IDX_NULL,  /* 0x01        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x02        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x03        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x04        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x05        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x06        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x07        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x08        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x09        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0A        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0B        */
+	SCR_KEYMAP_IDX_CLEAR, /* 0x0C (CLS)  */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0D (CR)   */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0E        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0F        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x10        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x11        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x12        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x13        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x14        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x15        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x16        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x17        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x18        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x19        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x1A        */
+	SCR_KEYMAP_IDX_NULL,  /* 0x1B (BRK)  */
+	SCR_KEYMAP_IDX_FWD,   /* 0x1C (FWD)  */
+	SCR_KEYMAP_IDX_BWD,   /* 0x1D (BWD)  */
+	SCR_KEYMAP_IDX_UP,    /* 0x1E (UP)   */
+	SCR_KEYMAP_IDX_DOWN,  /* 0x1F (DOWN) */
+};
+
 static int	keymap[(int)' '];
 
 static void scr_vkill(int _flag);
@@ -1189,26 +1246,37 @@ scr_putch(unsigned char c, int flag){
 */
 int
 scr_conv(char oc){
-    int	c;
+	int	 c;
 
-    /* some system thinks char as signed char */
-    c = ((unsigned char) oc) & 0xff;
+	/* some system thinks char as signed char */
+	c = ((unsigned char) oc) & 0xff;
 
-    switch(c){
-	/* C-c maps to SOS Break code */
-	case 'C'-'@':
-	   c = SCR_BREAK;
-	   break;
-    }
+	if ( ( 0 > c ) || ( c >= ' ' ) )
+		goto skip_conv;
 
-    if (scr_capson){
-	if (islower(c)){
-	    c = toupper(c);
-	} else if (isupper(c)){
-	    c = tolower(c);
+	/*
+	 * Ctrl code
+	 */
+	if ( c == ( 'C'-'@' ) )
+		c = SCR_SOS_BREAK; /* C-c maps to SOS Break code */
+	else if ( ( keymap[c] >= SCR_KEYMAP_IDX_UP )
+	    && ( SCR_KEYMAP_IDX_BWD >= keymap[c] ) ) {
+
+		/*
+		 * Convert cursor keys
+		 */
+		c = scr_keyfunc_idx2sword[keymap[c]];
 	}
-    }
-    return(c);
+skip_conv:
+	if (scr_capson){
+
+		if ( islower(c) )
+			c = toupper(c);
+		else if ( isupper(c) )
+			c = tolower(c);
+	}
+
+	return c;
 }
 
 /*
@@ -1225,7 +1293,7 @@ int scr_winkey(void){
     while (read(0, &c, 1) <= 0)
 	;		/* wait until read something */
     c = scr_conv(c);
-    if (c == SCR_BREAK)
+    if (c == SCR_SOS_BREAK)
 	breaked = 0;
     return(c);
 }
@@ -1563,16 +1631,22 @@ scr_key_clear(void){
 int scr_getl(char *buf){
     int	c;
     int	x,bx,mx,y;
+    int idx;
 
     scr_visible();
     /* screen move */
-    while((c = scr_flget()) != '\r' && c != '\n' && c != SCR_BREAK){
+    while((c = scr_flget()) != '\r' && c != '\n' && c != SCR_SOS_BREAK){
 	if (c < 0)
 	    break;	/* XX: EOF??? */
 	if (c < ' '){
-	    /* control code */
-	    if (keymap[c] >= 0)
-		(keyfuncs[keymap[c]].func)();
+
+		/* get index according to ctrl codes in Sword */
+		idx = sword2keyfunc_idx[c];
+		if ( idx == SCR_KEYMAP_IDX_NULL )
+			if (keymap[c] >= 0)  /* get index from keymap */
+				idx = keymap[c];
+		if ( keyfuncs[idx].func != NULL )
+			(keyfuncs[idx].func)();
 	} else {
 	    if (scr_mode_insert)
 		scr_insch(scr_sostoascii(c), SCR_F_IMM);
@@ -1580,8 +1654,8 @@ int scr_getl(char *buf){
 		scr_vputc(scr_sostoascii(c), SCR_F_IMM);
 	}
     }
-    if (c == SCR_BREAK){	/* break */
-	buf[0] = SCR_BREAK;
+    if (c == SCR_SOS_BREAK){	/* break */
+	buf[0] = SCR_SOS_BREAK;
 	buf[1] = '\0';
 	return(1);
     }
@@ -1623,7 +1697,7 @@ int scr_getky(void){
     scr_term_nowait();			/* make input as nowait */
     if (read(0, &c, 1) > 0){
 	c = scr_conv(c);
-	if (c == SCR_BREAK){
+	if (c == SCR_SOS_BREAK){
 	    if (breaked)		/* code inserted by scr_intr() */
 		breaked = 0;
 	    else			/* ESC key, so tell scr_brkey */
@@ -1645,7 +1719,7 @@ int scr_brkey(void){
 	return(0);
 
     /* already pressed break key, so eat up till break code */
-    while((c = scr_getky()) != SCR_BREAK && c != '\0')
+    while((c = scr_getky()) != SCR_SOS_BREAK && c != '\0')
 	; /* eat up */
     breaked = 0;
     return(1);
@@ -1666,7 +1740,7 @@ int scr_pause(void){
     /* eat up input queue */
     while((c = scr_getky()) != 0 &&
 	  c != ' ' &&
-	  c != SCR_BREAK)
+	  c != SCR_SOS_BREAK)
 	/* nothing to do */
 	;
 
@@ -1675,10 +1749,10 @@ int scr_pause(void){
 	return(0);
       case ' ':		/* space */
 	scr_visible();
-	if (scr_inkey() == SCR_BREAK)	/* wait a key press & check break */
+	if (scr_inkey() == SCR_SOS_BREAK)	/* wait a key press & check break */
 	    return(1);
 	return(0);
-      case SCR_BREAK:	/* break key */
+      case SCR_SOS_BREAK:	/* break key */
 	return(1);
     }
 
@@ -1749,7 +1823,7 @@ scr_intr(int sig){
 
 #ifdef TIOCSTI
     /* push break key symbol */
-    c = SCR_BREAK;
+    c = SCR_SOS_BREAK;
     ioctl(0, TIOCSTI, &c);		/* XXX: not portable */
 #endif
 
