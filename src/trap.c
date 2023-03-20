@@ -221,26 +221,27 @@ BYTE	wkram[EM_WKSIZ+1];	/* S-OS special work */
     @param[in] addr an address to be written
 */
 static void
-sync_work_space(WORD addr){
-	int x, y;
-	BYTE   v;
+sync_workarea(WORD addr){
+	int   x, y;
+	BYTE nx,ny;
+	BYTE     v;
 
-	v = GetBYTE_INTERNAL(addr);  /* get current data */
-	scr_csr(&y, &x);  /* Get cursor for modifications of XYADR */
+	v = GetBYTE_INTERNAL(addr);  /* read specified address */
+	scr_csr(&y, &x);  /* Get current cursor for modifications of XYADR */
 	switch( addr ) {
 
 	case EM_XYADR:  /* Cursor X position */
-
-		/* locate cursor without writing to workspace. */
-		scr_locate_cursor(y, v);  /* update cursor */
-		break;
-
 	case (EM_XYADR + 1):  /* Cursor Y position */
 
-		/* locate cursor without writing to workspace. */
-		scr_locate_cursor(v, x);
-		break;
+		nx = ( addr == EM_XYADR ) ? (v) : ( x & 0xff );
+		ny = ( addr == ( EM_XYADR + 1 ) ) ? (v) : ( y & 0xff );
 
+		/*
+		 *  locate cursor without writing to the S-OS workarea.
+		 *  Note: scr_locate_cursor() will modify arguments properly.
+		 */
+		scr_locate_cursor(ny, nx);  /* update cursor */
+		break;
 	default:
 		break;
 	}
@@ -354,7 +355,7 @@ void
 trap_put_byte(WORD addr, BYTE val){
 
 	PutBYTE_INTERNAL(addr, val);
-	sync_work_space(addr);
+	sync_workarea(addr);
 }
 
 /** Put a word data to RAM
@@ -365,18 +366,18 @@ void
 trap_put_word(WORD addr, WORD val){
 
 	PutWORD_INTERNAL(addr, val);
-	sync_work_space(addr);
-	sync_work_space(addr + 1);
+	sync_workarea(addr);
+	sync_workarea(addr + 1);
 }
 
-/** Write to an address in work space for screen.c and trap.c.
+/** Write to an address in workarea for screen.c and trap.c.
     @param[in] addr an address to be written
     @param[in] val  a value to write
     @retval  0  success
-    @retval -1  the addr is not corresponding to any work space.
+    @retval -1  the addr is not corresponding to any workarea.
 */
 int
-write_work_space_without_sync(WORD addr, BYTE val){
+write_workarea_without_sync(WORD addr, BYTE val){
 	int x, y;
 
 	switch( addr ) {
