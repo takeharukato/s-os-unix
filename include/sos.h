@@ -10,6 +10,18 @@
 #endif  /*  __STDC__  */
 
 /*
+ * Sword control codes
+ */
+#define SCR_SOS_NUL     (0x0)   /* NUL code on S-OS */
+#define SCR_SOS_CLS     (0x0c)  /* CLS code on S-OS */
+#define SCR_SOS_CR      (0x0d)  /* CR code on S-OS */
+#define SCR_SOS_BREAK   (0x1b)  /* break key code on S-OS */
+#define SCR_SOS_RIGHT   (0x1c)  /* right cursor code on S-OS */
+#define SCR_SOS_LEFT    (0x1d)  /* left cursor code on S-OS */
+#define SCR_SOS_UP      (0x1e)  /* up cursor code on S-OS */
+#define SCR_SOS_DOWN    (0x1f)  /* down cursor code on S-OS */
+
+/*
    S-OS IOCS call in Z80 memory
    (only a part)
 */
