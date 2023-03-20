@@ -13,7 +13,7 @@
 int trap(int func);
 int trap_init(void);
 
-int write_work_space_without_sync(WORD _addr, BYTE _val);
+int write_workarea_without_sync(WORD _addr, BYTE _val);
 
 BYTE trap_get_byte(WORD _addr);
 WORD trap_get_word(WORD _addr);
