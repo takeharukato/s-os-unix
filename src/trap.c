@@ -866,14 +866,31 @@ int sos_scrn(void){
 }
 
 int sos_loc(void){
-    scr_loc((int) Z80_H, (int) Z80_L);
+	int x,y;
 
-    /* #LOC shuld check validation of arguments and return
-       Carry Flag for error. (S-OS ref. man. p.118)
-       Currently not supported and only return with no carry */
-    SETFLAG(C, 0);
+	x = (int) Z80_L;
+	y = (int) Z80_H;
 
-    return(TRAP_NEXT);
+	if ( ( 0 > x ) ||
+	    ( x >= GetBYTE(SOS_WIDTH) ) ||
+	    ( 0 > y ) ||
+	    ( y >= GetBYTE(SOS_MAXLIN) ) ) {
+
+		/* #LOC shuld check validation of arguments and return
+		 * Carry Flag for error. (S-OS ref. man. p.118)
+		 */
+		SETFLAG(C, 1);  /* Invalid parameter */
+		goto out;
+	}
+
+	/*
+	 * locate cursor
+	 */
+	scr_loc(y, x);
+	SETFLAG(C, 0);  /* Success */
+
+out:
+	return(TRAP_NEXT);
 }
 
 int sos_flget(void){
