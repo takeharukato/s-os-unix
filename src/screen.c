@@ -210,7 +210,14 @@ static int sword2keyfunc_idx[]={
 	SCR_KEYMAP_IDX_NULL,  /* 0x09        */
 	SCR_KEYMAP_IDX_NULL,  /* 0x0A        */
 	SCR_KEYMAP_IDX_NULL,  /* 0x0B        */
-	SCR_KEYMAP_IDX_CLEAR, /* 0x0C (CLS)  */
+
+	/* Note: 0x0C might be used for the key for redraw (Ctrl-l) in
+	 * scr_flget, so the code must not be defined as
+	 * SCR_KEYMAP_IDX_CLEAR or SCR_KEYMAP_IDX_REDRAW.
+	 * It is the keymap function's responsibility to decide what key
+	 * code is assigned for redraw or clear.
+	 */
+	SCR_KEYMAP_IDX_NULL,  /* 0x0C (CLS)  */
 	SCR_KEYMAP_IDX_NULL,  /* 0x0D (CR)   */
 	SCR_KEYMAP_IDX_NULL,  /* 0x0E        */
 	SCR_KEYMAP_IDX_NULL,  /* 0x0F        */
@@ -230,6 +237,45 @@ static int sword2keyfunc_idx[]={
 	SCR_KEYMAP_IDX_BWD,   /* 0x1D (BWD)  */
 	SCR_KEYMAP_IDX_UP,    /* 0x1E (UP)   */
 	SCR_KEYMAP_IDX_DOWN,  /* 0x1F (DOWN) */
+};
+
+/*
+ * convert table from UNIX keycodes to Sword inkey relevants.
+ * Note: This should be used after a cursor key conversion with keyfunc table.
+ */
+static int unix2sword_tbl[]={
+	/* 0x00 - 0x0f (0x3(Ctrl-C) is mapped to BREAK(0x1b ESC in ASCII) )  */
+	0x00,0x00,0x00,0x1b,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xc,0xd,0x00,0x00,
+	/* 0x10 - 0x1f (From 0x1C to 0x1F are cursor key in Sword) */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1b,0x1c,0x1d,0x1e,0x1f,
+	/* 0x20 - 0x2f */
+	0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+	/* 0x30 - 0x3f */
+	0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
+	/* 0x40 - 0x4f */
+	0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+	/* 0x50 - 0x5f */
+	0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
+	/* 0x60 - 0x6f */
+	0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6a,0x6b,0x6c,0x6d,0x6e,0x6f,
+	/* 0x70 - 0x7f */
+	0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
+	/* 0x80 - 0x8f */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0x80 - 0x9f */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xa0 - 0xaf */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xb0 - 0xbf */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xc0 - 0xcf */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xd0 - 0xdf */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xe0 - 0xef */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	/* 0xf0 - 0xff */
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
 
 static int	keymap[(int)' '];
@@ -1298,6 +1344,54 @@ int scr_winkey(void){
     return(c);
 }
 
+/*
+ * flget for scr_getl() and scr_flget()
+ */
+static int
+flget_internal(void){
+
+	scr_visible();
+	return(scr_winkey());
+}
+
+/*
+  wait a key for scr_inkey() and scr_pause()
+ */
+static int
+inkey_internal(void){
+
+	scr_invisible();
+	return scr_winkey();
+}
+
+/*
+   get a key datum, not wait even if no datum for scr_brkey() and scr_pause()
+    NON PORTABLE FUNCTION
+*/
+static int
+getky_internal(void){
+    char	c;
+
+    /* XXX: this is simple, but brain-damaged algorithm in multitask system */
+    /* we need some tricks such as constat() in yaze:bios.c */
+
+    scr_invisible();
+    scr_term_nowait();			/* make input as nowait */
+    if (read(0, &c, 1) > 0){
+	c = scr_conv(c);
+	if (c == SCR_SOS_BREAK){
+	    if (breaked)		/* code inserted by scr_intr() */
+		breaked = 0;
+	    else			/* ESC key, so tell scr_brkey */
+		breaked = 1;
+	}
+	scr_term_wait();
+	return(c);
+    } else {
+	scr_term_wait();
+	return(0);
+    }
+}
 
 
 /****************************************
@@ -1633,27 +1727,34 @@ int scr_getl(char *buf){
     int	x,bx,mx,y;
     int idx;
 
-    scr_visible();
     /* screen move */
-    while((c = scr_flget()) != '\r' && c != '\n' && c != SCR_SOS_BREAK){
-	if (c < 0)
-	    break;	/* XX: EOF??? */
-	if (c < ' '){
+    c = flget_internal();
+    while( ( c != '\r' ) && ( c != '\n' ) && ( c != SCR_SOS_BREAK ) ){
 
-		/* get index according to ctrl codes in Sword */
-		idx = sword2keyfunc_idx[c];
-		if ( idx == SCR_KEYMAP_IDX_NULL )
-			if (keymap[c] >= 0)  /* get index from keymap */
-				idx = keymap[c];
-		if ( keyfuncs[idx].func != NULL )
-			(keyfuncs[idx].func)();
-	} else {
-	    if (scr_mode_insert)
-		scr_insch(scr_sostoascii(c), SCR_F_IMM);
-	    else
-		scr_vputc(scr_sostoascii(c), SCR_F_IMM);
-	}
+	    if (c < 0)
+		    break;	/* XX: EOF??? */
+
+	    if (c < ' ') {
+
+		    /* get index according to ctrl codes in Sword */
+		    idx = sword2keyfunc_idx[c];
+		    if ( idx == SCR_KEYMAP_IDX_NULL )
+			    if (keymap[c] >= 0)  /* get index from keymap */
+				    idx = keymap[c];
+
+		    if ( keyfuncs[idx].func != NULL )
+			    (keyfuncs[idx].func)();
+	    } else {
+
+		    if (scr_mode_insert)
+			    scr_insch(scr_sostoascii(c), SCR_F_IMM);
+		    else
+			    scr_vputc(scr_sostoascii(c), SCR_F_IMM);
+	    }
+
+	    c = flget_internal();
     }
+
     if (c == SCR_SOS_BREAK){	/* break */
 	buf[0] = SCR_SOS_BREAK;
 	buf[1] = '\0';
@@ -1688,27 +1789,9 @@ int scr_getl(char *buf){
     NON PORTABLE FUNCTION
 */
 int scr_getky(void){
-    char	c;
 
-    /* XXX: this is simple, but brain-damaged algorithm in multitask system */
-    /* we need some tricks such as constat() in yaze:bios.c */
-
-    scr_invisible();
-    scr_term_nowait();			/* make input as nowait */
-    if (read(0, &c, 1) > 0){
-	c = scr_conv(c);
-	if (c == SCR_SOS_BREAK){
-	    if (breaked)		/* code inserted by scr_intr() */
-		breaked = 0;
-	    else			/* ESC key, so tell scr_brkey */
-		breaked = 1;
-	}
-	scr_term_wait();
-	return(c);
-    } else {
-	scr_term_wait();
-	return(0);
-    }
+	/* convert to external representation */
+	return unix2sword_tbl[ ( getky_internal() ) & 0xff ];
 }
 
 /* return TRUE if break */
@@ -1719,15 +1802,23 @@ int scr_brkey(void){
 	return(0);
 
     /* already pressed break key, so eat up till break code */
-    while((c = scr_getky()) != SCR_SOS_BREAK && c != '\0')
+    while((c = getky_internal()) != SCR_SOS_BREAK && c != '\0')
 	; /* eat up */
     breaked = 0;
     return(1);
 }
-
+/*
+  wait a key
+ */
 int scr_inkey(void){
-    scr_invisible();
-    return(scr_winkey());
+	int c;
+
+	do{
+		/* convert to external representation */
+		c = unix2sword_tbl[ ( inkey_internal() ) & 0xff ];
+	}while( c == SCR_SOS_NUL );
+
+	return c;
 }
 
 /*
@@ -1738,7 +1829,7 @@ int scr_pause(void){
     int	c;
 
     /* eat up input queue */
-    while((c = scr_getky()) != 0 &&
+    while((c = getky_internal()) != 0 &&
 	  c != ' ' &&
 	  c != SCR_SOS_BREAK)
 	/* nothing to do */
@@ -1749,7 +1840,7 @@ int scr_pause(void){
 	return(0);
       case ' ':		/* space */
 	scr_visible();
-	if (scr_inkey() == SCR_SOS_BREAK)	/* wait a key press & check break */
+	if (inkey_internal() == SCR_SOS_BREAK)	/* wait a key press & check break */
 	    return(1);
 	return(0);
       case SCR_SOS_BREAK:	/* break key */
@@ -1781,9 +1872,21 @@ void scr_loc(int y, int x){
     sync_xyadr(scr_vy, scr_vx);
 }
 
+/*
+    scr_flget:
+    get 1char (wait until input) with visible cursor.
+
+    NON PORTABLE FUNCTION
+*/
 int scr_flget(void){
-    scr_visible();
-    return(scr_winkey());
+	int c;
+
+	do{
+		/* convert to external representation */
+		c = unix2sword_tbl[ ( flget_internal() ) & 0xff ];
+	}while( c == SCR_SOS_NUL  );
+
+	return c;
 }
 
 void scr_width(int x){
