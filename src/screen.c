@@ -197,7 +197,7 @@ static char scr_keyfunc_idx2sword[]={
  * convert table to convert from a ctrl code in SWORD to a keyfunc index.
  * SCR_KEYMAP_IDX_NULL(0xff) means no entry exits in keyfunc index.
  */
-static char sword2keyfunc_idx[]={
+static int sword2keyfunc_idx[]={
 	SCR_KEYMAP_IDX_NULL,  /* 0x00 (NUL)  */
 	SCR_KEYMAP_IDX_NULL,  /* 0x01        */
 	SCR_KEYMAP_IDX_NULL,  /* 0x02        */
