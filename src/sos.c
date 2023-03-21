@@ -103,7 +103,8 @@ ccpline(char *p, int mode){
 	    if (chdir(np)){
 		    snprintf(lbuf, CCP_LINLIM, "%s: %s\r", np, strerror(errno));
 		scr_puts(lbuf);
-	    }
+	    } else
+		    trap_change_tape(SOS_DL_QD);  /* Reset #DIRNO and RETPOI */
 	}
 	if (getcwd(lbuf, sizeof(lbuf)) != NULL){
 	    scr_puts(lbuf);
