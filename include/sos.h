@@ -50,10 +50,11 @@
 #define SOS_FATTR_ASC     (0x4)   /* Ascii  */
 #define SOS_FATTR_RSV     (0x8)   /* Reserved */
 #define SOS_FATTR_HIDDEN  (0x10)  /* Hidden file */
-#define SOS_FATTR_RAW     (0x20)  /* Read after write */
+#define SOS_FATTR_RAW     (0x20)  /* Read after write (RAW) */
 #define SOS_FATTR_RONLY   (0x40)  /* Read only */
 #define SOS_FATTR_DIR     (0x80)  /* Sub directory */
 #define SOS_FATTR_EODENT  (0xFF)  /* End of directory entry */
+#define SOS_FATTR_MASK    (0x87)  /* File type mask and clear Hidden/RAW/ReadOnly bits */
 /*
    S-OS IOCS call in Z80 memory
    (only a part)
@@ -100,10 +101,12 @@
 #define SOS_DVSW_MONITOR   (1)
 #define SOS_DVSW_QD        (3)
 
+#define SOS_DRIVE_LETTER_LEN    (2)
 #define SOS_FNAMENAMELEN	(13)
 #define	SOS_FNAMEEXTLEN		(3)
 #define	SOS_FNAMELEN	        (SOS_FNAMENAMELEN + SOS_FNAMEEXTLEN)
-#define SOS_DIRFMTLEN           (SOS_FNAMELEN + 24)
+#define SOS_FNAMEBUF_SIZE       ( SOS_DRIVE_LETTER_LEN + SOS_FNAMELEN + 1)
+#define SOS_DIRFMTLEN           (SOS_FNAMELEN + 26)
 #define	SOS_MAXIMAGEDRIVES	(4)
 
 #define CCP_LINLIM              (2000)
@@ -143,6 +146,7 @@
 #define SOS_FIB_OFF_SIZE  (18)  /**< File Size      */
 #define SOS_FIB_OFF_DTADR (20)  /**< Data Addr      */
 #define SOS_FIB_OFF_EXADR (22)  /**< File Size      */
+#define SOS_EM_OWA_OFF    (24)  /**< Other Internal workarea starts from here */
 /*
    Emulator setting
 */
@@ -154,6 +158,8 @@
 #define	EM_SIZE		(EM_IBFAD + SOS_FIB_OFF_SIZE)  /* 0x1102 */
 #define	EM_DTADR	(EM_IBFAD + SOS_FIB_OFF_DTADR) /* 0x1104 */
 #define	EM_EXADR	(EM_IBFAD + SOS_FIB_OFF_EXADR) /* 0x1106 */
+#define EM_NAMEBF       (EM_IBFAD + SOS_EM_OWA_OFF)    /* 0x1108 */
+#define EM_NAMEBF_LEN   (18)                           /* NAMEBF in Sword */
 #define	EM_STKAD	(0x10f0)
 #define	EM_MEMAX	(0xffff)
 #define	EM_WKSIZ	(0xffff)

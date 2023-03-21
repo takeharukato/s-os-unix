@@ -216,7 +216,7 @@ char *trap_attr[] = {
 /*
    variables
 */
-BYTE	wkram[EM_WKSIZ+1];	/* S-OS special work */
+static BYTE	wkram[EM_WKSIZ+1];	/* S-OS special work */
 static sos_tape_device_info tapes[SOS_TAPE_NR];  /* tape devices */
 
 /** Initialize tape device emulation
@@ -796,13 +796,13 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
     /* get file name */
     while(ram[ri] == ' ')		/* space skip */
 	ri++;
-    for (len=0; len<13; len++){
+    for (len=0; len<SOS_FNAMENAMELEN; len++){
 	if ((c = ram[ri]) < ' ' || c == ':' || c == '.')
 	    break;
 	*buf++ = c;
 	ri++;
     }
-    for (; len<13; len++)
+    for (; len<SOS_FNAMENAMELEN; len++)
 	*buf++ = ' ';			/* space padding */
 
     /* skip "." of extension */
@@ -810,13 +810,13 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
 	ri++;
 
     /* get extention */
-    for (len=0; len<3; len++){
+    for (len=0; len<SOS_FNAMEEXTLEN; len++){
 	if ((c = ram[ri]) < ' ' || c == ':')
 	    break;
 	*buf++ = c;
 	ri++;
     }
-    for (; len<3; len++)
+    for (; len<SOS_FNAMEEXTLEN; len++)
 	*buf++ = ' ';			/* space padding */
 
     *buf = '\0';
@@ -828,7 +828,7 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
 int sos_file(void){
     WORD	wi;
     BYTE	attr;
-    unsigned char	buf[SOS_FNAMELEN + 1];
+    unsigned char	buf[SOS_FNAMEBUF_SIZE];
     unsigned char	dsk;
     int		r;
 
@@ -847,6 +847,7 @@ int sos_file(void){
 	return(TRAP_NEXT);
     }
     memcpy(ram + wi, buf, SOS_FNAMELEN);
+    memcpy(ram + EM_NAMEBF, buf, SOS_FNAMELEN);
     PutBYTE(SOS_DSK, dsk);
 
     SETFLAG(C, 0);
@@ -854,36 +855,66 @@ int sos_file(void){
 }
 
 int sos_fsame(void){
-    unsigned char	buf[SOS_FNAMELEN + 1];
+    unsigned char	buf[SOS_FNAMEBUF_SIZE];
     unsigned char	dsk;
+    WORD           saved_de;
     int	r;
 
     /* check attribute */
-    if (GetBYTE(EM_IBFAD) != Z80_A){
-	SETFLAG(Z, 0);
-	return(TRAP_NEXT);
+    if ( ( GetBYTE(EM_IBFAD) & SOS_FATTR_MASK ) != ( Z80_A & SOS_FATTR_MASK ) ) {
+
+	    SETFLAG(Z, 0);
+	    return(TRAP_NEXT);
     }
 
+    /*
+     * check the buffer pointed by DE register
+     */
+    saved_de = Z80_DE;
+
+    /* pass file name which is read by FILE */
+    Z80_DE = EM_NAMEBF;
     /* parse file name */
-    if (r = trap_fname(buf, &dsk, GetBYTE(SOS_DSK))){
-	Sethreg(Z80_AF, r);
-	SETFLAG(C, 1);
-	return(TRAP_NEXT);
+    r = trap_fname(buf, &dsk, GetBYTE(SOS_DSK));
+    Z80_DE = saved_de; /* restore DE */
+    if ( r != 0 )
+	    goto compare_with_de;
+
+    /* compare them */
+    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAMELEN) == 0){
+	    SETFLAG(Z, 1);
+	    goto out;
+    } else {
+	    SETFLAG(Z, 0);
+    }
+
+    /*
+     * Compare with DE register (MACE)
+     */
+compare_with_de:
+    r = trap_fname(buf, &dsk, GetBYTE(SOS_DSK));
+    if ( r != 0 ){
+
+	    Sethreg(Z80_AF, r);
+	    SETFLAG(C, 1);
+	    return(TRAP_NEXT);
     }
 
     /* compare them */
     if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAMELEN) == 0){
-	SETFLAG(Z, 1);
+	    SETFLAG(Z, 1);
     } else {
-	SETFLAG(Z, 0);
+	    SETFLAG(Z, 0);
     }
+
+out:
     SETFLAG(C, 0);
     return(TRAP_NEXT);
 }
 
 int sos_fprnt(void){
     WORD	namep;
-    char	buf[SOS_FNAMELEN+2], *p;
+    char	buf[SOS_FNAMEBUF_SIZE+1], *p;
     int		i;
     int	c;
 
@@ -1288,6 +1319,8 @@ int sos_rdi(void){
     sos_parsc();            /* Set #SIZE, #DTADR, #EXADR up */
     PutBYTE(SOS_OPNFG, 1);  /* open file */
 
+    sos_tropn();            /* open the file */
+
     inf->dirno = GetBYTE(SOS_DIRNO) + 1; /* Inc DIRNO of the device */
     if ( inf->dirno == 0xff )
 	    goto file_not_found; /* UCHAR_MAX reached */
@@ -1354,7 +1387,7 @@ int sos_trdd(void){
 
 int sos_tdir(void){
     int	dirno;
-    char	name[SOS_FNAMELEN + 1];
+    char	name[SOS_FNAMEBUF_SIZE];
     char	ext[SOS_FNAMEEXTLEN + 1];
     int	        len, attr, addr, exaddr;
     char	buf[SOS_DIRFMTLEN + 1];
