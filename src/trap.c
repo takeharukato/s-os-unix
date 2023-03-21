@@ -1319,6 +1319,8 @@ int sos_rdi(void){
     sos_parsc();            /* Set #SIZE, #DTADR, #EXADR up */
     PutBYTE(SOS_OPNFG, 1);  /* open file */
 
+    sos_tropn();            /* open the file */
+
     inf->dirno = GetBYTE(SOS_DIRNO) + 1; /* Inc DIRNO of the device */
     if ( inf->dirno == 0xff )
 	    goto file_not_found; /* UCHAR_MAX reached */
