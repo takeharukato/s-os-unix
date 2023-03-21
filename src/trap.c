@@ -78,6 +78,8 @@ int sos_parsc(void);
 int sos_parcs(void);
 int sos_boot(void);
 
+int sos_fcb(void);
+
 /*
    trap function table
 */
@@ -118,7 +120,7 @@ struct functbl {
   { sos_hlhex, 0x1fb2, 0},
   { NULL, 0x1faf, 0x22b3},		/* #wopen */
   { NULL, 0x1fac, 0x232d},		/* #wrd */
-  { NULL, 0x1fa9, 0x237c},		/* #fcb */
+  { sos_fcb, 0x1fa9, 0},		/* #fcb */
   { NULL, 0x1fa6, 0x234f},		/* #rdd */
   { sos_file, 0x1fa3, 0},
   { sos_fsame, 0x1fa0, 0},
@@ -249,6 +251,120 @@ sync_workarea(WORD addr){
 	return ;
 }
 
+/** Convert a drive letter to an unit number.
+    @param[in] _dsk drive letter.
+ */
+#define dev2unitno(_dsk) ( (_dsk) - 'A' )
+
+/** Convert an unit number to a drive letter.
+    @param[in] _num unit number
+ */
+#define unitno2dev(_num) ( (_num) + 'A' )
+
+/** Determine whether device is a tape.
+    @param[in] _dsk drive letter to be checked.
+ */
+#define device_is_tape(_dsk)						\
+	( ( (_dsk) == 'T' ) || ( (_dsk) == 'S' ) || ( (_dsk) == 'Q' ) )
+
+/** Determine whether device is a disk.
+    @param[in] _dsk drive letter to be checked.
+ */
+#define device_is_disk(_dsk)						\
+	( ( 'L' >= (_dsk) ) && ( (_dsk) >= 'A' ) )
+
+/** Determine whether device is standard disks.
+    @param[in] _dsk drive letter to be checked.
+ */
+#define device_is_standard_disk(_dsk)						\
+	( ( 'D' >= (_dsk) ) && ( (_dsk) >= 'A' ) )
+
+/** S-OS DEVCHK routine
+    @param[in] dsk drive letter to be checked.
+    @retval    0   Success
+    @retval    SOS_ERROR_BADF(3) Bad File Descriptor
+ */
+static int
+devchk_internal(BYTE dsk){
+
+	if ( device_is_tape(dsk) || device_is_disk(dsk) )
+		return SOS_ERROR_SUCCESS;  /* device ok */
+
+	return SOS_ERROR_BADF;  /* Bad File Descriptor */
+}
+
+/** S-OS ALCHK routine
+    @param[in] dsk drive letter to be checked.
+    @retval    0   DSK is a standard disk
+    @retval    SOS_ERROR_BADF(0x03) Bad File Descriptor
+    @retval    SOS_ERROR_RESERVED(0x0b) Reserved Feature
+ */
+static int
+alchk_internal(BYTE dsk){
+	int rc;
+
+	rc = devchk_internal(dsk);
+	if ( rc != 0 )
+		goto error;
+
+	rc = SOS_ERROR_BADF;
+	if ( device_is_tape(dsk) )
+		goto error;
+
+	rc = SOS_ERROR_RESERVED;
+	if ( !device_is_standard_disk(dsk) )
+		goto error;
+
+	return 0;
+
+error:
+	return rc;
+}
+/*
+  TRDVSW routine
+ */
+static int
+trdvsw_internal(void){
+
+	switch( GetBYTE(SOS_DVSW) ) {
+
+	case SOS_DVSW_COMMON:
+		return 'T';
+
+	case SOS_DVSW_MONITOR:
+		return 'S';
+
+
+	case SOS_DVSW_QD:
+		return 'Q';
+
+	default:
+		break;
+	}
+
+	return EM_DFDV;
+}
+
+static void
+dskred_internal(void){
+	int    rc;
+	BYTE  dsk;
+	BYTE unit;
+
+	dsk = GetBYTE(SOS_DSK);
+	rc = alchk_internal(dsk);
+	if ( rc != SOS_ERROR_SUCCESS )
+		goto error;
+	unit = dev2unitno(dsk);  /* disk unit number */
+
+	PutBYTE(SOS_UNITNO, unit); /* write unit number */
+	sos_dread();               /* read records */
+
+	return;
+error:
+	return;
+}
+
 /*
    initialize trap handler & SWORD memory
 */
@@ -300,7 +416,8 @@ trap_init(void){
     PutBYTE(0x1f5b, EM_MAXLN);	/* #MAXLIN */
 
     PutBYTE(SOS_DFDV, EM_DFDV);	/* %DFDV */
-
+    PutBYTE(SOS_RETPOI,0);      /* RETPOI */
+    PutBYTE(SOS_OPNFG,1);       /* %OPNFG (Initial value=1) */
     return(0);
 }
 
@@ -966,6 +1083,120 @@ int sos_tropn(void){
 
     SETFLAG(C, 0);
     return(TRAP_NEXT);
+}
+
+/** Read file control block on a tape or a disk.
+ */
+int sos_fcb(void){
+	int      rc;
+	BYTE    key;
+	BYTE  recno;
+	BYTE dirpos;
+	BYTE   attr;
+	WORD recoff;
+
+	PutBYTE(SOS_OPNFG, 0);  /* close file */
+
+	/*
+	 * Check device
+	 */
+	rc = devchk_internal(GetBYTE(SOS_DSK));
+	if ( rc != SOS_ERROR_SUCCESS ) {
+
+		Sethreg(Z80_AF, rc);  /* Set Error code. */
+		SETFLAG(C, 1);        /* Set Carry */
+		return(TRAP_NEXT);
+	}
+
+	/*
+	 * If the device is a tape device, call RDI.
+	 */
+	if ( device_is_tape(GetBYTE(SOS_DSK)) ) {
+
+		PutBYTE(SOS_DSK, trdvsw_internal());    /* Set device letter into #DSK */
+		return sos_rdi();          /* Call RDI */
+	}
+
+	/*
+	 * Read a file control block from a disk device
+	 */
+	key = scr_getky();
+
+	if ( key == SCR_SOS_BREAK )
+		goto file_not_found;
+
+	if ( key == SCR_SOS_CR ) {
+
+		if ( GetBYTE(SOS_RETPOI) > 0 ) {
+
+			/*
+			 * Decrement #DIRNO and reset RETPOI
+			 */
+			if ( GetBYTE(SOS_DIRNO) > 0 )
+				PutBYTE(SOS_DIRNO, ( GetBYTE(SOS_DIRNO) - 1) );
+
+			goto position_reset;
+		}
+	}
+
+	/*
+	 * Continue reading file control block
+	 */
+	for( attr = SOS_FATTR_FREE; attr == SOS_FATTR_FREE; ) {
+
+		/* record number offset */
+		recno = GetBYTE(SOS_DIRNO) / SOS_DENTRIES_PER_REC;
+		dirpos = GetWORD(SOS_DIRPS); /* record number of the first dentry */
+		recno += (dirpos & 0xff);  /* dentry record of #DIRNO */
+
+		/*
+		 * Read dentry sector
+		 */
+		Z80_HL = EM_DTBUF;    /* Destination address */
+		Z80_DE = recno;       /* Record number */
+		Sethreg(Z80_AF, 0x1); /* read count (1 record ) */
+		dskred_internal();    /* Set unit number and read sector */
+
+		/* Calculate offset address of dentry in the record
+		 * This should be done before update DIRNO.
+		 */
+		recoff = ( GetBYTE(SOS_DIRNO) % SOS_DENTRIES_PER_REC )
+			* SOS_DENTRY_SIZE;
+
+		attr = *( (char *)&ram[0] + EM_DTBUF + recoff);
+		if ( attr == SOS_FATTR_EODENT )
+			goto file_not_found;
+
+		/*
+		 * update DIRNO and RETPOI
+		 */
+		PutBYTE(SOS_DIRNO, GetBYTE(SOS_DIRNO) + 1);  /* Add #DIRNO */
+		if ( GetBYTE(SOS_DIRNO) == GetBYTE(EM_MXTRK) )
+			goto file_not_found; /* Max Track reached */
+		PutBYTE(SOS_RETPOI, GetBYTE(SOS_DIRNO));  /* Update RETPOI */
+		if ( attr != SOS_FATTR_FREE )
+			break;  /* new entry found */
+	}
+
+	/* Copy Information block */
+	memmove( ( (char *)&ram[0] ) + EM_IBFAD,
+	    ( (char *)&ram[0] ) + EM_DTBUF + recoff,
+	    SOS_DENTRY_SIZE);
+
+	sos_parsc();            /* Set parameters */
+	PutBYTE(SOS_OPNFG, 1);  /* open file */
+
+	SETFLAG(C, 0);          /* Clear carry */
+	return(TRAP_NEXT);
+
+file_not_found:
+	PutBYTE(SOS_DIRNO, 0);  /* Reset #DIRNO */
+
+position_reset:
+	PutBYTE(SOS_RETPOI,0);  /* Reset RETPOI */
+	Sethreg(Z80_AF, SOS_ERROR_NOENT);  /* File not found */
+	SETFLAG(C, 1);   /* Set carry */
+	return(TRAP_NEXT);
 }
 
 int sos_rdi(void){

@@ -1,8 +1,17 @@
 TODO list
 
-�EDOS �����̃��C�Z���X�̃N���A
-�E���A���^�C�����͂̉���
-�EBYTE,char,unsigned char �֌W�̃R�[�h�̐���
-�E�������Y��ȃL�[�J�X�^�}�C�Y
-�E�g���Z�b�g�̋@�\�̓���
-�E���z��ʊǗ����Ǝ���ʐ��䕔�̕���
+楯岡さんTODO
+
+・DOS 部分のライセンスのクリア
+・リアルタイム入力の改良
+・BYTE,char,unsigned char 関係のコードの整理
+・もっと綺麗なキーカスタマイズ
+・拡張セットの機能の導入
+・仮想画面管理部と実画面制御部の分離
+
+(*) DOS 部分のライセンスのクリアについては,
+加藤TODO
+・zedaでQ:のファイルを読めない原因の調査.
+・垂直同期の時間間隔の計測
+・クロックティックに応じてCPUの命令を処理
+・D88フォーマット対応

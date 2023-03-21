@@ -22,6 +22,39 @@
 #define SCR_SOS_DOWN    (0x1f)  /* down cursor code on S-OS */
 
 /*
+ * Error codes
+ */
+#define SOS_ERROR_SUCCESS     (0x0)  /* success */
+#define SOS_ERROR_IO          (0x1)  /* Device I/O Error */
+#define SOS_ERROR_OFFLINE     (0x2)  /* Device Offline */
+#define SOS_ERROR_BADF        (0x3)  /* Bad File Descriptor */
+#define SOS_ERROR_RDONLY      (0x4)  /* Write Protected */
+#define SOS_ERROR_BADR        (0x5)  /* Bad Record */
+#define SOS_ERROR_FMODE       (0x6)  /* Bad File Mode */
+#define SOS_ERROR_BADFAT      (0x7)  /* Bad Allocation Table */
+#define SOS_ERROR_NOENT       (0x8)  /* File not Found */
+#define SOS_ERROR_NOSPC       (0x9)  /* Device Full */
+#define SOS_ERROR_EXIST       (0xa)  /* File Already Exists */
+#define SOS_ERROR_RESERVED    (0xb)  /* Reserved Feature */
+#define SOS_ERROR_NOTOPEN     (0xc)  /* File not Open */
+#define SOS_ERROR_SYNTAX      (0xd)  /* Syntax Error */
+#define SOS_ERROR_INVAL       (0xe)  /* Bad Data */
+#define SOS_ERROR_NR          (0xf)  /* The number of error numbers */
+
+/*
+ * File attributes
+ */
+#define SOS_FATTR_FREE    (0x0)   /* Free entry */
+#define SOS_FATTR_BIN     (0x1)   /* Binary */
+#define SOS_FATTR_BAS     (0x2)   /* Basic  */
+#define SOS_FATTR_ASC     (0x4)   /* Ascii  */
+#define SOS_FATTR_RSV     (0x8)   /* Reserved */
+#define SOS_FATTR_HIDDEN  (0x10)  /* Hidden file */
+#define SOS_FATTR_RAW     (0x20)  /* Read after write */
+#define SOS_FATTR_RONLY   (0x40)  /* Read only */
+#define SOS_FATTR_DIR     (0x80)  /* Sub directory */
+#define SOS_FATTR_EODENT  (0xFF)  /* End of directory entry */
+/*
    S-OS IOCS call in Z80 memory
    (only a part)
 */
@@ -56,10 +89,16 @@
 #define	SOS_WIDTH (0x1f5c)
 #define	SOS_MAXLIN (0x1f5b)
 
-#define	SOS_FTYPE	(0x291f)
-#define	SOS_DFDV	(0x2920)
+#define SOS_RETPOI      (0x2418)
+#define SOS_OPNFG       (0x291e)
+#define SOS_FTYPE       (0x291f)
+#define SOS_DFDV        (0x2920)
 
 #define	SOS_UNITNO	(0x2b06)
+
+#define SOS_DVSW_COMMON    (0)
+#define SOS_DVSW_MONITOR   (1)
+#define SOS_DVSW_QD        (3)
 
 #define SOS_FNAMENAMELEN	(13)
 #define	SOS_FNAMEEXTLEN		(3)
@@ -70,11 +109,19 @@
 #define CCP_LINLIM              (2000)
 #define SOS_UNIX_BUFSIZ         (2000)
 #define TRAP_BUFSIZ             (80)
+
+#define SOS_RECORD_SIZE         (256) /* Record (Sector) size in byte. */
+#define SOS_DENTRY_SIZE         (32)  /* Directory entry size in byte . */
+#define SOS_DENTRIES_PER_REC    \
+	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /* 8 file entries. */
+
+
 #if defined(PATH_MAX)
 #define SOS_UNIX_PATH_MAX       (PATH_MAX)
 #else
 #define SOS_UNIX_PATH_MAX       (1024)
 #endif /* PATH_MAX */
+
 /*
    Emulator setting
 */
