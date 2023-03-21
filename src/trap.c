@@ -49,6 +49,7 @@ int sos_asc(void);
 int sos_hex(void);
 int sos_2hex(void);
 int sos_hlhex(void);
+int sos_fcb(void);
 int sos_file(void);
 int sos_fsame(void);
 int sos_fprnt(void);
@@ -77,8 +78,6 @@ int sos_tdir(void);
 int sos_parsc(void);
 int sos_parcs(void);
 int sos_boot(void);
-
-int sos_fcb(void);
 
 /*
    trap function table
@@ -218,7 +217,23 @@ char *trap_attr[] = {
    variables
 */
 BYTE	wkram[EM_WKSIZ+1];	/* S-OS special work */
+static sos_tape_device_info tapes[SOS_TAPE_NR];  /* tape devices */
 
+/** Initialize tape device emulation
+ */
+static void
+init_tape_devices(void){
+	int                     i;
+	sos_tape_device_info *inf;
+
+	for( i = 0; SOS_TAPE_NR > i; ++i) {
+
+		inf = &tapes[i];
+		inf->dsk = sos_tape_device_letter(i); /* device letter */
+		inf->dirno = 0;  /* initialize DIRNO of this device */
+		inf->retpoi = 0; /* initialize RETPOI of this device */
+	}
+}
 /** Detect writing to a workspace and sync behaviors according to a value in a workspace.
     @param[in] addr an address to be written
 */
@@ -261,24 +276,6 @@ sync_workarea(WORD addr){
  */
 #define unitno2dev(_num) ( (_num) + 'A' )
 
-/** Determine whether device is a tape.
-    @param[in] _dsk drive letter to be checked.
- */
-#define device_is_tape(_dsk)						\
-	( ( (_dsk) == 'T' ) || ( (_dsk) == 'S' ) || ( (_dsk) == 'Q' ) )
-
-/** Determine whether device is a disk.
-    @param[in] _dsk drive letter to be checked.
- */
-#define device_is_disk(_dsk)						\
-	( ( 'L' >= (_dsk) ) && ( (_dsk) >= 'A' ) )
-
-/** Determine whether device is standard disks.
-    @param[in] _dsk drive letter to be checked.
- */
-#define device_is_standard_disk(_dsk)						\
-	( ( 'D' >= (_dsk) ) && ( (_dsk) >= 'A' ) )
-
 /** S-OS DEVCHK routine
     @param[in] dsk drive letter to be checked.
     @retval    0   Success
@@ -287,7 +284,7 @@ sync_workarea(WORD addr){
 static int
 devchk_internal(BYTE dsk){
 
-	if ( device_is_tape(dsk) || device_is_disk(dsk) )
+	if ( sos_device_is_tape(dsk) || sos_device_is_disk(dsk) )
 		return SOS_ERROR_SUCCESS;  /* device ok */
 
 	return SOS_ERROR_BADF;  /* Bad File Descriptor */
@@ -308,11 +305,11 @@ alchk_internal(BYTE dsk){
 		goto error;
 
 	rc = SOS_ERROR_BADF;
-	if ( device_is_tape(dsk) )
+	if ( sos_device_is_tape(dsk) )
 		goto error;
 
 	rc = SOS_ERROR_RESERVED;
-	if ( !device_is_standard_disk(dsk) )
+	if ( !sos_device_is_standard_disk(dsk) )
 		goto error;
 
 	return 0;
@@ -329,14 +326,14 @@ trdvsw_internal(void){
 	switch( GetBYTE(SOS_DVSW) ) {
 
 	case SOS_DVSW_COMMON:
-		return 'T';
+		return SOS_DL_COM_CMT;
 
 	case SOS_DVSW_MONITOR:
-		return 'S';
+		return SOS_DL_MON_CMT;
 
 
 	case SOS_DVSW_QD:
-		return 'Q';
+		return SOS_DL_QD;
 
 	default:
 		break;
@@ -418,6 +415,9 @@ trap_init(void){
     PutBYTE(SOS_DFDV, EM_DFDV);	/* %DFDV */
     PutBYTE(SOS_RETPOI,0);      /* RETPOI */
     PutBYTE(SOS_OPNFG,1);       /* %OPNFG (Initial value=1) */
+
+    init_tape_devices();        /* Initialize tape device table */
+
     return(0);
 }
 
@@ -494,7 +494,7 @@ trap_put_word(WORD addr, WORD val){
     @retval -1  the addr is not corresponding to any workarea.
 */
 int
-write_workarea_without_sync(WORD addr, BYTE val){
+trap_write_workarea_without_sync(WORD addr, BYTE val){
 	int x, y;
 
 	switch( addr ) {
@@ -509,7 +509,21 @@ write_workarea_without_sync(WORD addr, BYTE val){
 
 	return 0;
 }
+/** Notify tape change
+    @param[in] dev the device letter of the tape.
+ */
+void
+trap_change_tape(char dev){
+    sos_tape_device_info *inf;
 
+    if ( !sos_device_is_tape( dev ) )
+	    return;  /* not tape device */
+
+    inf = &tapes[ sos_tape_devindex( dev ) ];
+
+    inf->dirno = 0;   /* reset #DIRNO */
+    inf->retpoi = 0;  /* reset RETPOI */
+}
 
 int sos_cold(void){
     Z80_PC = GetWORD(SOS_USR);
@@ -771,8 +785,8 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
     if (ram[ri + 1] == ':'){
 	if (islower(d = ram[ri]))
 	    d = toupper(d);
-	if ((d < 'A' || 'L' < d) && d != 'T' && d != 'S' && d != 'Q')
-	    return(14);			/* bad data */
+	if ( !sos_device_is_disk(d) && !sos_device_is_tape(d) )
+	    return SOS_ERROR_INVAL;	/* bad data */
 	ri += 2;
     } else {
 	d = defdsk;
@@ -1085,6 +1099,42 @@ int sos_tropn(void){
     return(TRAP_NEXT);
 }
 
+/**  FCB/RDI key processing
+     @retval 0             no key pressed or no need to reset RETPOI
+     @retval SCR_SOS_BREAK BREAK key pressed
+     @retval SCR_SOS_CR    CR  key pressed
+ */
+static BYTE
+sos_fcb_common(void){
+	BYTE    key;
+
+	/*
+	 * Read a file control block from a disk device
+	 */
+	key = scr_getky();
+
+	if ( key == SCR_SOS_BREAK )
+		goto out;
+
+	if ( key == SCR_SOS_CR ) {
+
+		if ( GetBYTE(SOS_RETPOI) > 0 ) {
+
+			/*
+			 * Decrement #DIRNO and reset RETPOI
+			 */
+			if ( GetBYTE(SOS_DIRNO) > 0 )
+				PutBYTE(SOS_DIRNO, ( GetBYTE(SOS_DIRNO) - 1 ) );
+
+			goto out;
+		}
+	}
+
+	key = 0x0;  /* no need to reset position. */
+out:
+	return key;
+}
+
 /** Read file control block on a tape or a disk.
  */
 int sos_fcb(void){
@@ -1111,33 +1161,22 @@ int sos_fcb(void){
 	/*
 	 * If the device is a tape device, call RDI.
 	 */
-	if ( device_is_tape(GetBYTE(SOS_DSK)) ) {
+	if ( sos_device_is_tape( GetBYTE(SOS_DSK) ) ) {
 
 		PutBYTE(SOS_DSK, trdvsw_internal());    /* Set device letter into #DSK */
 		return sos_rdi();          /* Call RDI */
 	}
 
 	/*
-	 * Read a file control block from a disk device
+	 * key handling
 	 */
-	key = scr_getky();
+	key = sos_fcb_common();
 
 	if ( key == SCR_SOS_BREAK )
-		goto file_not_found;
+		goto file_not_found;  /* Cancel Read File Control Block */
 
-	if ( key == SCR_SOS_CR ) {
-
-		if ( GetBYTE(SOS_RETPOI) > 0 ) {
-
-			/*
-			 * Decrement #DIRNO and reset RETPOI
-			 */
-			if ( GetBYTE(SOS_DIRNO) > 0 )
-				PutBYTE(SOS_DIRNO, ( GetBYTE(SOS_DIRNO) - 1) );
-
-			goto position_reset;
-		}
-	}
+	if ( key == SCR_SOS_CR )
+		goto position_reset;  /* Read position changed */
 
 	/*
 	 * Continue reading file control block
@@ -1170,67 +1209,106 @@ int sos_fcb(void){
 		/*
 		 * update DIRNO and RETPOI
 		 */
-		PutBYTE(SOS_DIRNO, GetBYTE(SOS_DIRNO) + 1);  /* Add #DIRNO */
+		PutBYTE(SOS_DIRNO, GetBYTE(SOS_DIRNO) + 1);  /* Inc #DIRNO */
 		if ( GetBYTE(SOS_DIRNO) == GetBYTE(EM_MXTRK) )
 			goto file_not_found; /* Max Track reached */
+
 		PutBYTE(SOS_RETPOI, GetBYTE(SOS_DIRNO));  /* Update RETPOI */
+
 		if ( attr != SOS_FATTR_FREE )
 			break;  /* new entry found */
 	}
 
-	/* Copy Information block */
+	/* Load Information block */
 	memmove( ( (char *)&ram[0] ) + EM_IBFAD,
 	    ( (char *)&ram[0] ) + EM_DTBUF + recoff,
 	    SOS_DENTRY_SIZE);
 
-	sos_parsc();            /* Set parameters */
+	sos_parsc();            /* Set #SIZE, #DTADR, #EXADR up */
 	PutBYTE(SOS_OPNFG, 1);  /* open file */
 
 	SETFLAG(C, 0);          /* Clear carry */
-	return(TRAP_NEXT);
+	return TRAP_NEXT;
 
 file_not_found:
 	PutBYTE(SOS_DIRNO, 0);  /* Reset #DIRNO */
 
 position_reset:
-	PutBYTE(SOS_RETPOI,0);  /* Reset RETPOI */
+	PutBYTE(SOS_RETPOI, 0);  /* Reset RETPOI */
 	Sethreg(Z80_AF, SOS_ERROR_NOENT);  /* File not found */
 	SETFLAG(C, 1);   /* Set carry */
-	return(TRAP_NEXT);
+	return TRAP_NEXT;
 }
 
 int sos_rdi(void){
     int	len, attr, addr, exaddr;
-    int	dirno;
-    int	r;
+    int	rc;
+    BYTE key;
+    sos_tape_device_info *inf;
 
-    if (scr_brkey()){
-	PutBYTE(SOS_DIRNO, 0);
-	Sethreg(Z80_AF, 8);	/* unknown reason, came from orignal code */
-	SETFLAG(C, 1);
-	return(TRAP_NEXT);
-    }
-    if (scr_getky() == '\r'){
-	Sethreg(Z80_AF, 8);	/* unknown reason, came from orignal code */
-	SETFLAG(C, 1);
-	return(TRAP_NEXT);
+    if ( !sos_device_is_tape( GetBYTE(SOS_DSK) ) ) {
+
+	    /* TODO: Strictly speaking, this should be assert.
+	     * FIX this in the future.
+	     */
+	    Sethreg(Z80_AF, SOS_ERROR_NOENT);  /* File not found */
+	    return TRAP_NEXT; /* ignore */
     }
 
-    if (r = dio_dopen((char *)ram +EM_IBFAD +1, &attr, &addr, &len,
-		      &exaddr, GetBYTE(SOS_DIRNO))){
-	PutBYTE(SOS_DIRNO, 0);
-	Sethreg(Z80_AF, r);
-	SETFLAG(C, 1);
-	return(TRAP_NEXT);
-    }
+    inf = &tapes[ sos_tape_devindex( GetBYTE(SOS_DSK) ) ];
 
-    PutBYTE(EM_IBFAD, attr);
-    PutWORD(SOS_DTADR, addr);
-    PutWORD(SOS_EXADR, exaddr);
-    PutWORD(SOS_SIZE, len);
+    PutBYTE( SOS_DIRNO, inf->dirno ); /* Restore DIRNO */
+
+    key = sos_fcb_common();  /* read key */
+
+    if ( key == SCR_SOS_BREAK )
+	    goto file_not_found;  /* Cancel Read File Control Block */
+
+    if ( key == SCR_SOS_CR )
+	    goto position_reset;  /* Read position changed */
+
+    /*
+     * Load file information block except for file attribute.
+     */
+    rc = dio_dopen((char *)ram + EM_FNAME, &attr, &addr, &len, &exaddr,
+	GetBYTE(SOS_DIRNO) );
+
+    if ( rc != 0 )
+	    goto file_not_found;  /* Cancel Read File Control Block */
+
+    /*
+     * Fill File Information Block
+     */
+    PutBYTE(EM_ATTR, attr);
+
+    PutWORD(EM_SIZE, len);
+    PutWORD(EM_DTADR, addr);
+    PutWORD(EM_EXADR, exaddr);
+
+    sos_parsc();            /* Set #SIZE, #DTADR, #EXADR up */
+    PutBYTE(SOS_OPNFG, 1);  /* open file */
+
+    inf->dirno = GetBYTE(SOS_DIRNO) + 1; /* Inc DIRNO of the device */
+    if ( inf->dirno == 0xff )
+	    goto file_not_found; /* UCHAR_MAX reached */
+
+    PutBYTE(SOS_DIRNO, inf->dirno);  /* Update #DIRNO */
+    inf->retpoi = inf->dirno;        /* Update RETPOI */
 
     SETFLAG(C, 0);
-    return(TRAP_NEXT);
+
+    return TRAP_NEXT;
+
+file_not_found:
+	PutBYTE(SOS_DIRNO, 0);  /* Reset #DIRNO */
+
+position_reset:
+	inf->retpoi = 0;  /* Reset RETPOI */
+	inf->dirno = GetBYTE(SOS_DIRNO);   /* Save DIRNO of the device */
+	Sethreg(Z80_AF, SOS_ERROR_NOENT);  /* File not found */
+	SETFLAG(C, 1);   /* Set carry */
+
+	return TRAP_NEXT;
 }
 
 int sos_wri(void){

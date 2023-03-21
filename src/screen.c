@@ -290,8 +290,8 @@ static void scr_delete(int _flag);
 static void
 sync_xyadr(int y, int x){
 
-	write_workarea_without_sync(EM_XYADR, x);
-	write_workarea_without_sync(EM_XYADR + 1, y);
+	trap_write_workarea_without_sync(EM_XYADR, x);
+	trap_write_workarea_without_sync(EM_XYADR + 1, y);
 }
 
 /*

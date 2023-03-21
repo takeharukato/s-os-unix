@@ -123,14 +123,37 @@
 #endif /* PATH_MAX */
 
 /*
+ * Drive letters
+ */
+#define SOS_DL_DRIVE_A   'A'
+#define SOS_DL_DRIVE_B   'B'
+#define SOS_DL_DRIVE_C   'C'
+#define SOS_DL_DRIVE_D   'D'
+#define SOS_DL_RESV_MIN  'E'
+#define SOS_DL_RESV_MAX  'L'
+#define SOS_DL_COM_CMT   'T'
+#define SOS_DL_MON_CMT   'S'
+#define SOS_DL_QD        'Q'
+
+/*
+ * SOS File Information Block/Directory Entry offset addresses in EM_IBFAD
+ */
+#define SOS_FIB_OFF_ATTR  (0)   /**< File Attribute */
+#define SOS_FIB_OFF_FNAME (1)   /**< File Name      */
+#define SOS_FIB_OFF_SIZE  (18)  /**< File Size      */
+#define SOS_FIB_OFF_DTADR (20)  /**< Data Addr      */
+#define SOS_FIB_OFF_EXADR (22)  /**< File Size      */
+/*
    Emulator setting
 */
 #define	EM_XYADR	(0x1171)
 #define	EM_KBFAD	(0x11a3)
 #define	EM_IBFAD	(0x10f0)
-#define	EM_SIZE		(0x1102)
-#define	EM_DTADR	(0x1104)
-#define	EM_EXADR	(0x1106)
+#define	EM_ATTR		(EM_IBFAD + SOS_FIB_OFF_ATTR)  /* 0x10f0 */
+#define	EM_FNAME	(EM_IBFAD + SOS_FIB_OFF_FNAME) /* 0x10f1 */
+#define	EM_SIZE		(EM_IBFAD + SOS_FIB_OFF_SIZE)  /* 0x1102 */
+#define	EM_DTADR	(EM_IBFAD + SOS_FIB_OFF_DTADR) /* 0x1104 */
+#define	EM_EXADR	(EM_IBFAD + SOS_FIB_OFF_EXADR) /* 0x1106 */
 #define	EM_STKAD	(0x10f0)
 #define	EM_MEMAX	(0xffff)
 #define	EM_WKSIZ	(0xffff)
@@ -142,7 +165,7 @@
 #define	EM_WIDTH	(0x50)
 #define	EM_MAXLN	(25)
 
-#define	EM_DFDV		('Q')
+#define	EM_DFDV		(SOS_DL_QD)
 
 #define	EM_VER		(0x1620)	/* XXX: SWORD version */
 
