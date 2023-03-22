@@ -9,9 +9,64 @@ TODO list
 ・拡張セットの機能の導入
 ・仮想画面管理部と実画面制御部の分離
 
-(*) DOS 部分のライセンスのクリアについては,
+(*) DOS 部分のライセンスのクリアについては, PDS宣言があるので問題は無し
 加藤TODO
 ・zedaでQ:のファイルを読めない原因の調査.
 ・垂直同期の時間間隔の計測
 ・クロックティックに応じてCPUの命令を処理
 ・D88フォーマット対応
+
+DOS依存システムコール
+1. HOT
+2. WOPEN
+3. WRD
+4. RDD
+5. DRDSB
+6. DWTSB
+7. DIR
+8. ROPEN
+9. SET
+10. RESET
+11. NAME
+12. KILL
+13. RDVSW
+14. SDVSW
+15. ERROR
+16. P#fnam
+17. devchk
+18. tpchk
+
+[1] RDD
+    - RDD  234f
+    - DEVCHK 2851
+    - RDD1 236a
+    - TRDD 290c
+    - DSKCHK 2591
+    - FATRED 26ff
+    - DLOAD 25e3
+
+    1. #DSKを読み込んでDEVCHKを呼ぶ
+    2. DEVCHKがエラーならキャリーをセットして復帰
+    3. DEVCHKした結果がテープデバイスならTRDDを呼び出し後復帰
+    4. DIRNOとRETPOIを0に設定
+    5. オープンされていなければ, File Not Openを返して, キャリーをセットして復帰
+    6. オープンされていればデバイスをクローズ
+    7. DSKCHKを呼び出して標準ディスクでなければ, Reserved Featureを返して復帰
+    8. FATREDを呼び出してFATをFATPOSに読み込む
+    9. DLOADを呼び出してFATの内容に従ってファイルの内容をDTADRに読み込む
+
+FATRED
+    内部関数だがAレジスタにエラー番号を設定して復帰する
+        1. DEとHLを保存
+	2. FATPS(FATのレコード)とFATBF(書込先WAアドレス)をDE,HLに設定,
+	   レコード読み取り数1をAに設定してDSKREDを呼んでセクタを読み込む
+	   (Aにエラー番号が入る)
+        3. DEとHLを復元
+	4. 復帰
+
+DLOAD 25e3
+    IBFADのオフセット0x1E(30)から先頭クラスタ番号を取り出して
+    クラスタチェインを追跡してレコードの内容をメモリに転送する
+    クラスタチェインを追跡する際に00を検出したら Bad allocation table(7)を
+    返して復帰
+    DSKREDがエラーを返したらそのエラーを返して復帰

@@ -119,7 +119,7 @@ struct functbl {
   { sos_hlhex, 0x1fb2, 0},
   { NULL, 0x1faf, 0x22b3},		/* #wopen */
   { NULL, 0x1fac, 0x232d},		/* #wrd */
-  { sos_fcb, 0x1fa9, 0},		/* #fcb */
+  { sos_fcb, 0x1fa9, 0},
   { NULL, 0x1fa6, 0x234f},		/* #rdd */
   { sos_file, 0x1fa3, 0},
   { sos_fsame, 0x1fa0, 0},
@@ -317,8 +317,8 @@ alchk_internal(BYTE dsk){
 error:
 	return rc;
 }
-/*
-  TRDVSW routine
+
+/** TRDVSW routine
  */
 static int
 trdvsw_internal(void){
@@ -341,24 +341,51 @@ trdvsw_internal(void){
 
 	return EM_DFDV;
 }
-
+/** DSKRED routine
+ */
 static void
 dskred_internal(void){
 	int    rc;
 	BYTE  dsk;
 	BYTE unit;
 
-	dsk = GetBYTE(SOS_DSK);
+	dsk = GetBYTE(SOS_DSK);    /* drive letter */
 	rc = alchk_internal(dsk);
 	if ( rc != SOS_ERROR_SUCCESS )
 		goto error;
-	unit = dev2unitno(dsk);  /* disk unit number */
+	unit = dev2unitno(dsk);    /* disk unit number */
 
 	PutBYTE(SOS_UNITNO, unit); /* write unit number */
 	sos_dread();               /* read records */
 
 	return;
 error:
+	return;
+}
+
+/** FATRED routine
+ */
+static void
+fatred_internal(void){
+	WORD hl,de;
+
+	/* save registers */
+	hl = Z80_HL;
+	de = Z80_DE;
+
+	/*
+	 * read FAT record
+	 */
+	Z80_HL = GetBYTE(SOS_FATBF);  /* FAT load address */
+	Z80_DE = GetBYTE(SOS_FATPOS); /* File Allocation Table record number */
+	Sethreg(Z80_AF, 1);           /* one record */
+
+	dskred_internal();            /* read fat record on SOS_DSK */
+
+	/* restore registers */
+	Z80_DE = de;
+	Z80_HL = hl;
+
 	return;
 }
 

@@ -401,18 +401,28 @@ dio_diclose(int diskno){
    1 record = 256 byte
 */
 int dio_dread(unsigned char *buf, int diskno, int recno, int numrec){
-    FILE *fp;
-    size_t	len;
+	FILE    *fp;
+	size_t	len;
+	size_t  res;
 
-    if ((fp = dio_diopen(diskno)) == NULL)
-	return(2);		/* device offline */
-    (void) fseek(fp, (long)recno * DIO_RECLEN, SEEK_SET);
-    len = (size_t) numrec * DIO_RECLEN;
-    if (fread(buf, sizeof(unsigned char), len, fp) < len){
-	dio_diclose(diskno);
-	return(1);		/* device I/O error */
-    }
-    return(0);
+	fp = dio_diopen(diskno);
+	if ( fp == NULL)
+		return(2);		/* device offline */
+
+	len = (size_t)numrec * DIO_RECLEN; /* load length in byte */
+
+	/* seek record position */
+	fseek(fp, (long)recno * DIO_RECLEN, SEEK_SET);
+
+
+	res = fread(buf, sizeof(unsigned char), len, fp);
+	if ( len > res ){
+
+		dio_diclose(diskno);
+		return(1);		/* device I/O error */
+	}
+
+	return(0);
 }
 
 int dio_dwrite(unsigned char *buf, int diskno, int recno, int numrec){
