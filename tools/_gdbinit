@@ -1,0 +1,105 @@
+#
+#S-OS on UNIX
+#
+define sos-setup
+target remote localhost:1234
+handle SIGINT pass
+end
+
+define wa_size
+  x /hx (uint16_t *)&ram[0x1f72]
+end
+
+define wa_dtadr
+  x /hx (uint16_t *)&ram[0x1f70]
+end
+
+define wa_exadr
+  x /hx (uint16_t *)&ram[0x1f6e]
+end
+
+define wa_xyaddr
+  x /hx (uint16_t *)&ram[0x1f78]
+end
+
+define wa_kbfad
+  x /hx (uint16_t *)&ram[0x1f76]
+end
+
+define wa_ibfad
+  x /hx (uint16_t *)&ram[0x1f74]
+end
+
+define wa_dirno
+  x /bx (uint8_t *)&ram[0x1f67]
+end
+
+define wa_mxtrk
+  x /bx (uint8_t *)&ram[0x1f66]
+end
+
+define wa_dtbuf
+  x /hx (uint16_t *)&ram[0x1f64]
+end
+
+define wa_fatbf
+  x /hx  (uint16_t *)&ram[0x1f62]
+end
+
+define wa_dirps
+  x /bx (uint8_t *)&ram[0x1f60]
+end
+
+define wa_fatpos
+  x /bx (uint8_t *)&ram[0x1f5e]
+end
+
+define wa_dsk
+  x /c (uint8_t *)&ram[0x1f5d]
+end
+
+define fib_raw
+x /32c &ram[0x10f0]
+end
+
+define fib_file
+  x /16c &ram[0x10f1]
+end
+
+define fib_attr
+  x /bt (uint8_t *)&ram[0x10f0]
+  x /bx (uint8_t *)&ram[0x10f0]
+  set $attr=ram[0x10f0]
+  if $attr
+end
+
+define fib_size
+  x /hx (uint16_t *)&ram[0x1102]
+end
+
+define fib_dtadr
+  x /hx (uint16_t *)&ram[0x1104]
+end
+
+define fib_exadr
+  x /hx (uint16_t *)&ram[0x1106]
+end
+
+define sos_fatbf
+  set $addr=*(uint16_t *)&ram[0x1f62]
+  x /256b &ram[$addr]
+end
+
+define sos_dtbuf
+  set $addr=*(uint16_t *)&ram[0x1f64]
+  x /256b &ram[$addr]
+end
+
+define sos_kbfad
+  set $addr=*(uint16_t *)&ram[0x1f76]
+  x /256c &ram[$addr]
+end
+
+define em_kbf
+  x /128c &ram[0x11a3]
+end

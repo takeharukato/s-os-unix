@@ -120,8 +120,8 @@
 #define	SOS_BOOT	        (0x2036)
 
 /*
-   S-OS work area in Z80 memory
-*/
+ * S-OS workarea in Z80 memory
+ */
 #define	SOS_USR                 (0x1f7e)
 #define	SOS_DVSW                (0x1f7d)
 #define	SOS_LPSW                (0x1f7c)
@@ -146,48 +146,23 @@
 #define	SOS_MAXLIN              (0x1f5b)
 
 /*
- * Internal work area
- */
-#define SOS_RETPOI              (0x2418)
-#define SOS_OPNFG               (0x291e)
-#define SOS_FTYPE               (0x291f)
-#define SOS_DFDV                (0x2920)
-
-#define	SOS_UNITNO	        (0x2b06)
-
-/*
- * Default Device  Switch (Tape devices)
- */
-#define SOS_DVSW_COMMON         (0)
-#define SOS_DVSW_MONITOR        (1)
-#define SOS_DVSW_QD             (3)
-
-/*
- * File name
+ * File name length
  */
 #define SOS_DRIVE_LETTER_LEN    (2)
-#define SOS_FNAMENAMELEN	(13)
-#define	SOS_FNAMEEXTLEN		(3)
-#define	SOS_FNAMELEN	        (SOS_FNAMENAMELEN + SOS_FNAMEEXTLEN)
-#define SOS_FNAMEBUF_SIZE       ( SOS_DRIVE_LETTER_LEN + SOS_FNAMELEN + 1)
-#define SOS_DIRFMTLEN           (SOS_FNAMELEN + 26)
+#define SOS_FNAME_NAMELEN	(13)
+#define	SOS_FNAME_EXTLEN	(3)
+#define	SOS_FNAME_LEN	        ( SOS_FNAME_NAMELEN + SOS_FNAME_EXTLEN )
+#define SOS_NAMEBF_LEN          \
+	( SOS_DRIVE_LETTER_LEN + SOS_FNAME_NAMELEN + SOS_FNAME_EXTLEN )
 #define	SOS_MAXIMAGEDRIVES	(4)
 
-#define CCP_LINLIM              (2000)
-#define SOS_UNIX_BUFSIZ         (2000)
-#define TRAP_BUFSIZ             (80)
-
+/*
+ * Disk I/O
+ */
 #define SOS_RECORD_SIZE         (256) /* Record (Sector) size in byte. */
 #define SOS_DENTRY_SIZE         (32)  /* Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /* 8 file entries. */
-
-
-#if defined(PATH_MAX)
-#define SOS_UNIX_PATH_MAX       (PATH_MAX)
-#else
-#define SOS_UNIX_PATH_MAX       (1024)
-#endif /* PATH_MAX */
 
 /*
  * Drive letters
@@ -210,21 +185,47 @@
 #define SOS_FIB_OFF_SIZE  (18)  /**< File Size      */
 #define SOS_FIB_OFF_DTADR (20)  /**< Data Addr      */
 #define SOS_FIB_OFF_EXADR (22)  /**< File Size      */
-#define SOS_EM_OWA_OFF    (24)  /**< Other Internal workarea starts from here */
+
+/*
+ * Internal workarea
+ */
+#define SOS_RETPOI              (0x2418)
+#define SOS_OPNFG               (0x291e)
+#define SOS_FTYPE               (0x291f)
+#define SOS_DFDV                (0x2920)
+
+#define	SOS_UNITNO	        (0x2b06)
+
+#define CCP_LINLIM              (2000)
+#define SOS_UNIX_BUFSIZ         (2000)
+#define TRAP_BUFSIZ             (80)
+
+/*
+ * Default Device  Switch (Tape devices)
+ */
+#define SOS_DVSW_COMMON         (0)
+#define SOS_DVSW_MONITOR        (1)
+#define SOS_DVSW_QD             (3)
+
+#if defined(PATH_MAX)
+#define SOS_UNIX_PATH_MAX       (PATH_MAX)
+#else
+#define SOS_UNIX_PATH_MAX       (1024)
+#endif /* PATH_MAX */
+
 /*
    Emulator setting
 */
-#define	EM_XYADR	(0x1171)
-#define	EM_KBFAD	(0x11a3)
-#define	EM_IBFAD	(0x10f0)
+#define	EM_STKAD	(0x10f0)   /* Stack grows to lower address. */
+#define	EM_IBFAD	(EM_STKAD)
 #define	EM_ATTR		(EM_IBFAD + SOS_FIB_OFF_ATTR)  /* 0x10f0 */
 #define	EM_FNAME	(EM_IBFAD + SOS_FIB_OFF_FNAME) /* 0x10f1 */
 #define	EM_SIZE		(EM_IBFAD + SOS_FIB_OFF_SIZE)  /* 0x1102 */
 #define	EM_DTADR	(EM_IBFAD + SOS_FIB_OFF_DTADR) /* 0x1104 */
 #define	EM_EXADR	(EM_IBFAD + SOS_FIB_OFF_EXADR) /* 0x1106 */
-#define EM_NAMEBF       (EM_IBFAD + SOS_EM_OWA_OFF)    /* 0x1108 */
-#define EM_NAMEBF_LEN   (18)                           /* NAMEBF in Sword */
-#define	EM_STKAD	(0x10f0)
+#define	EM_XYADR	(0x1171)                       /* 0x1171-0x1172 */
+#define EM_NAMEBF       (0x1173)  /* 0x1173-0x1184 (SOS_NAMEBF_LEN bytes) */
+#define	EM_KBFAD	(0x11a3)
 #define	EM_MEMAX	(0xffff)
 #define	EM_WKSIZ	(0xffff)
 #define	EM_MXTRK	(0x50)

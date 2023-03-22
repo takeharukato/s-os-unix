@@ -22,6 +22,40 @@
 #include "dio.h"
 
 /*
+ * File type in directory listing
+ */
+#define TRAP_FTYP_STR_NUL     "Nul"
+#define TRAP_FTYP_STR_BIN     "Bin"
+#define TRAP_FTYP_STR_BAS     "Bas"
+#define TRAP_FTYP_STR_ASC     "Asc"
+#define TRAP_FTYP_STR_DIR     "Dir"
+#define TRAP_FTYP_STR_UNDEF   "???"
+#define TRAP_FTYP_STR_LEN     (3)
+
+/*
+ * Buffer sizes
+ */
+#define TRAP_FNAME_BUFSIZ         ( SOS_FNAME_LEN + 1 )     /* name + ext + '\0' */
+#define TRAP_FNAME_EXT_BUFSIZ     ( SOS_FNAME_EXTLEN + 1 )  /* ext + '\0' */
+#define TRAP_FNAME_PRNT_BUFSIZ    ( TRAP_FNAME_BUFSIZ + 1 ) /* name + '.' + ext + '\0' */
+#define TRAP_ADRSTR_LEN           (4) /* File start, end, exec addr in string */
+
+/* Format string length for directory listing of 'Q'
+ * type                                        3 chars
+ * name                                       13 chars
+ * ext                                         3 chars
+ * start-addr,end-adr,exec-addr 4 chars * 3 = 12 chars
+ * spaces                                      2 chars
+ * 'Q', '.' and ':'                            6 chars
+ * \r                                          1 char
+ * total                                      40 chars
+ */
+#define TRAP_HOSTDRV_DIRFMT          "%s  Q:%.13s.%.3s:%04X:%04X:%04X\r"
+#define TRAP_HOSTDRV_DIRFMT_LEN							\
+	( TRAP_FTYP_STR_LEN + SOS_FNAME_LEN + ( TRAP_ADRSTR_LEN * 3 ) + 2 + 6 + 1 )
+#define TRAP_HOSTDRV_DIRFMT_BUFSIZ   ( TRAP_HOSTDRV_DIRFMT_LEN + 1 )
+
+/*
    trap functions
 */
 int sos_cold(void);
@@ -172,15 +206,15 @@ struct functbl {
 
 /* file attributes */
 char *trap_attr[] = {
-	"Nul",	/* 0 */
-	"Bin",	/* 1 */
-	"Bas",	/* 2 */
-	"???",
-	"Asc",	/* 4 */
-	"???",
-	"???",
-	"???",
-	"Dir",	/* 8 = 0x80 */
+	TRAP_FTYP_STR_NUL,	/* 0 */
+	TRAP_FTYP_STR_BIN,	/* 1 */
+	TRAP_FTYP_STR_BAS,	/* 2 */
+	TRAP_FTYP_STR_UNDEF,
+	TRAP_FTYP_STR_ASC,	/* 4 */
+	TRAP_FTYP_STR_UNDEF,
+	TRAP_FTYP_STR_UNDEF,
+	TRAP_FTYP_STR_UNDEF,
+	TRAP_FTYP_STR_DIR,	/* 8 = 0x80 */
 };
 #define trap_nattr 	(sizeof trap_attr / sizeof(char *))
 
@@ -823,13 +857,13 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
     /* get file name */
     while(ram[ri] == ' ')		/* space skip */
 	ri++;
-    for (len=0; len<SOS_FNAMENAMELEN; len++){
+    for (len=0; len<SOS_FNAME_NAMELEN; len++){
 	if ((c = ram[ri]) < ' ' || c == ':' || c == '.')
 	    break;
 	*buf++ = c;
 	ri++;
     }
-    for (; len<SOS_FNAMENAMELEN; len++)
+    for (; len<SOS_FNAME_NAMELEN; len++)
 	*buf++ = ' ';			/* space padding */
 
     /* skip "." of extension */
@@ -837,13 +871,13 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
 	ri++;
 
     /* get extention */
-    for (len=0; len<SOS_FNAMEEXTLEN; len++){
+    for (len=0; len<SOS_FNAME_EXTLEN; len++){
 	if ((c = ram[ri]) < ' ' || c == ':')
 	    break;
 	*buf++ = c;
 	ri++;
     }
-    for (; len<SOS_FNAMEEXTLEN; len++)
+    for (; len<SOS_FNAME_EXTLEN; len++)
 	*buf++ = ' ';			/* space padding */
 
     *buf = '\0';
@@ -855,7 +889,7 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
 int sos_file(void){
     WORD	wi;
     BYTE	attr;
-    unsigned char	buf[SOS_FNAMEBUF_SIZE];
+    unsigned char	buf[TRAP_FNAME_BUFSIZ];
     unsigned char	dsk;
     int		r;
 
@@ -873,8 +907,8 @@ int sos_file(void){
 	SETFLAG(C, 1);
 	return(TRAP_NEXT);
     }
-    memcpy(ram + wi, buf, SOS_FNAMELEN);
-    memcpy(ram + EM_NAMEBF, buf, SOS_FNAMELEN);
+    memcpy(ram + wi, buf, SOS_FNAME_LEN);
+    memcpy(ram + EM_NAMEBF, buf, SOS_FNAME_LEN);
     PutBYTE(SOS_DSK, dsk);
 
     SETFLAG(C, 0);
@@ -882,7 +916,7 @@ int sos_file(void){
 }
 
 int sos_fsame(void){
-    unsigned char	buf[SOS_FNAMEBUF_SIZE];
+    unsigned char	buf[TRAP_FNAME_BUFSIZ];
     unsigned char	dsk;
     WORD           saved_de;
     int	r;
@@ -908,7 +942,7 @@ int sos_fsame(void){
 	    goto compare_with_de;
 
     /* compare them */
-    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAMELEN) == 0){
+    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAME_LEN) == 0){
 	    SETFLAG(Z, 1);
 	    goto out;
     } else {
@@ -928,7 +962,7 @@ compare_with_de:
     }
 
     /* compare them */
-    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAMELEN) == 0){
+    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAME_LEN) == 0){
 	    SETFLAG(Z, 1);
     } else {
 	    SETFLAG(Z, 0);
@@ -941,14 +975,14 @@ out:
 
 int sos_fprnt(void){
     WORD	namep;
-    char	buf[SOS_FNAMEBUF_SIZE+1], *p;
+    char	buf[TRAP_FNAME_PRNT_BUFSIZ], *p;
     int		i;
     int	c;
 
     namep = EM_IBFAD + 1;
     /* copy file name */
     p = buf;
-    for (i=0; i<SOS_FNAMENAMELEN; i++){
+    for (i=0; i<SOS_FNAME_NAMELEN; i++){
 	if ((c = GetBYTE(namep)) < ' '){
 	    *p++ = ' ';
 	    continue;
@@ -961,7 +995,7 @@ int sos_fprnt(void){
     }
     *p++ = '.';
     /* copy extension */
-    for (i=0; i<SOS_FNAMEEXTLEN; i++){
+    for (i=0; i<SOS_FNAME_EXTLEN; i++){
 	if ((c = GetBYTE(namep)) < ' '){
 	    *p++ = ' ';
 	    continue;
@@ -1414,22 +1448,22 @@ int sos_trdd(void){
 
 int sos_tdir(void){
     int	dirno;
-    char	name[SOS_FNAMEBUF_SIZE];
-    char	ext[SOS_FNAMEEXTLEN + 1];
+    char	name[TRAP_FNAME_BUFSIZ];
+    char	ext[TRAP_FNAME_EXT_BUFSIZ];
     int	        len, attr, addr, exaddr;
-    char	buf[SOS_DIRFMTLEN + 1];
+    char	buf[TRAP_HOSTDRV_DIRFMT_BUFSIZ];
     char	*type;
 
     dirno = 0;
     while(dio_dopen(name, &attr, &addr, &len, &exaddr, dirno) == 0){
-	name[SOS_FNAMELEN] = '\0';	/* dopen will not terminate */
-	strcpy(ext, name+SOS_FNAMENAMELEN);
-	name[SOS_FNAMENAMELEN] = '\0';	/* terminate name part */
+	name[SOS_FNAME_LEN] = '\0';	/* dopen will not terminate */
+	strcpy(ext, name+SOS_FNAME_NAMELEN);
+	name[SOS_FNAME_NAMELEN] = '\0';	/* terminate name part */
 	if (attr < trap_nattr)
 	    type = trap_attr[attr];
 	else
-	    type = "???";
-	snprintf(buf, SOS_DIRFMTLEN + 1, "%s  Q:%s.%s:%04X:%04X:%04X\r",
+	    type = TRAP_FTYP_STR_UNDEF;
+	snprintf(buf, TRAP_HOSTDRV_DIRFMT_BUFSIZ, TRAP_HOSTDRV_DIRFMT,
 		type, name, ext, addr & 0xffff, (addr+len-1) & 0xffff, exaddr& 0xffff);
 	scr_puts(buf);
 	dirno++;

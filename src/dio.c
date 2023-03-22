@@ -54,17 +54,17 @@ dio_stou(char *sosname){
     int l;	/* length counter */
     int ei;	/* end index on name */
     int nei;	/* end of name part on name */
-    static char	name[SOS_FNAMELEN+2];
+    static char	name[SOS_FNAME_LEN+2];
     char	*p;
 
-    for (l=ei=0; l<SOS_FNAMENAMELEN; l++){
+    for (l=ei=0; l<SOS_FNAME_NAMELEN; l++){
 	if ((name[l] = *sosname++) != ' '){
 	    ei = l;
 	}
     }
     nei = ++ei;	/* save end mark (terminate at this pointif no extension) */
     name[ei] = '.';
-    for (l=0, ni=ei+1; l<SOS_FNAMEEXTLEN; l++){
+    for (l=0, ni=ei+1; l<SOS_FNAME_EXTLEN; l++){
 	if ((name[ni++] = *sosname++) != ' '){
 	    ei = ni;
 	}
@@ -86,24 +86,24 @@ dio_stou(char *sosname){
 */
 char *
 dio_utos(char *unixname){
-    static char	sosname[SOS_FNAMELEN+1];
+    static char	sosname[SOS_FNAME_LEN+1];
     int	i;
     char	c;
 
-    for (i=0; i<SOS_FNAMENAMELEN; i++){
+    for (i=0; i<SOS_FNAME_NAMELEN; i++){
 	if ((c = *unixname) == '\0' || c == '.')
 	    break;
 	sosname[i] = c;
 	unixname++;
     }
-    for (; i<SOS_FNAMENAMELEN; i++)
+    for (; i<SOS_FNAME_NAMELEN; i++)
 	sosname[i] = ' ';		/* space padding */
 
     /* skip extension mark */
     if (*unixname == '.')
 	unixname++;
 
-    for (i=SOS_FNAMENAMELEN; i< SOS_FNAMELEN; i++){
+    for (i=SOS_FNAME_NAMELEN; i< SOS_FNAME_LEN; i++){
 	if (*unixname != '\0')
 	    sosname[i] = *unixname++;
 	else
@@ -259,7 +259,7 @@ dio_dopen(char *namebuf, int *attr, int *dtadr, int *size, int *exadr, int dirno
         dircurrent = dirno + 1;
     } while((strcmp(dp->d_name,".") == 0) || (strcmp(dp->d_name,"..") == 0));
     sosname = dio_utos(dp->d_name);
-    strncpy(namebuf, sosname, SOS_FNAMELEN);
+    strncpy(namebuf, sosname, SOS_FNAME_LEN);
 
     /* read SWORD header information */
     if (dio_ropen(dp->d_name, attr, dtadr, size, exadr, 0) == 0){
