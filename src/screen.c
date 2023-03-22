@@ -1281,22 +1281,17 @@ scr_conv(char oc){
 	/* some system thinks char as signed char */
 	c = ((unsigned char) oc) & 0xff;
 
-	if ( ( 0 > c ) || ( c >= ' ' ) )
+	/*
+	 * When c is not control code or the keymap does not need to convert,
+	 * skip convert character.
+	 */
+	if ( ( 0 > c ) || ( c >= ' ' ) || ( 0 > keymap[c] ) )
 		goto skip_conv;
 
-	/*
-	 * Ctrl code
-	 */
-	if ( c == ( 'C'-'@' ) )
-		c = SCR_SOS_BREAK; /* C-c maps to SOS Break code */
-	else if ( ( keymap[c] >= SCR_KEYMAP_IDX_UP )
-	    && ( SCR_KEYMAP_IDX_BWD >= keymap[c] ) ) {
-
-		/*
-		 * Convert cursor keys
-		 */
+	/* Convert a control code on UNIX to a control code on Sword. */
+	if ( keyfuncs[keymap[c]].ch_on_sos != SCR_SOS_NUL )
 		c = keyfuncs[keymap[c]].ch_on_sos;
-	}
+
 skip_conv:
 	if (scr_capson){
 
