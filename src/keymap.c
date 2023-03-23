@@ -1,3 +1,7 @@
+/*
+   SWORD Emulator keymap module
+   tate@spa.is.uec.ac.jp
+*/
 
 #include "config.h"
 
@@ -15,33 +19,35 @@ static struct map {
     char *funcname;
 } defaultmap[] = {
 #ifdef OPT_KEYMAP_WM
-    {'S', "back"},
-    {'D', "forward"},
-    {'E', "up"},
-    {'X', "down"},
-    {'J', "redraw"},
-    {'G', "delete"},
-    {'B', "backspace"},
-    {'I', "tab"},
-    {'H', "backspace"},
-    {'O', "imode"},
-    {'Q', "clear"},
+    {'S', KEYMAP_NAME_BACK},
+    {'D', KEYMAP_NAME_FWD},
+    {'E', KEYMAP_NAME_UP},
+    {'X', KEYMAP_NAME_DOWN},
+    {'J', KEYMAP_NAME_REDRAW},
+    {'G', KEYMAP_NAME_DELETE},
+    {'B', KEYMAP_NAME_BACKSPACE},
+    {'I', KEYMAP_NAME_TAB},
+    {'H', KEYMAP_NAME_BACKSPACE},
+    {'O', KEYMAP_NAME_IMODE},
+    {'Q', KEYMAP_NAME_CLEAR},
+    {'C', KEYMAP_NAME_BREAK},
     {'\0', NULL}
 #else
-    {'H', "backspace"},
-    {'D', "delete"},
-    {'A', "begin"},
-    {'E', "end"},
-    {'P', "up"},
-    {'N', "down"},
-    {'F', "forward"},
-    {'B', "back"},
-    {'L', "redraw"},
-    {'K', "kill"},
-    {'I', "tab"},
-    {'Y', "yank"},
-    {'O', "imode"},
-    {'Q', "clear"},
+    {'H', KEYMAP_NAME_BACKSPACE},
+    {'D', KEYMAP_NAME_DELETE},
+    {'A', KEYMAP_NAME_BEGIN},
+    {'E', KEYMAP_NAME_END},
+    {'P', KEYMAP_NAME_UP},
+    {'N', KEYMAP_NAME_DOWN},
+    {'F', KEYMAP_NAME_FWD},
+    {'B', KEYMAP_NAME_BACK},
+    {'L', KEYMAP_NAME_REDRAW},
+    {'K', KEYMAP_NAME_KILL},
+    {'I', KEYMAP_NAME_TAB},
+    {'Y', KEYMAP_NAME_YANK},
+    {'O', KEYMAP_NAME_IMODE},
+    {'Q', KEYMAP_NAME_CLEAR},
+    {'C', KEYMAP_NAME_BREAK},
     {'\0', NULL}
 #endif
 };
