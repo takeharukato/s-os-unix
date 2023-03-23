@@ -54,6 +54,7 @@
 #include "compat.h"
 #include "sos.h"
 #include "screen.h"
+#include "keymap.h"
 #include "trap.h"
 #include "simz80.h"
 
@@ -152,45 +153,28 @@ void	scr_key_backspace(void), scr_key_delete(void),
 	scr_key_redraw(void), scr_key_kill(void), scr_key_tab(void),
 	scr_key_yank(void), scr_key_imode(void), scr_key_clear(void);
 struct keyfunc {
-    char	*funcname;	/* name of function */
-    void	(*func)(void);	/* pointer to function */
+	char	*funcname;	/* name of function */
+	void	(*func)(void);	/* pointer to function */
+	char    ch_on_sos;      /* character code in S-OS */
 };
 typedef struct keyfunc keyfunc_t;
 static keyfunc_t keyfuncs[] = {
-    {"backspace", scr_key_backspace},
-    {"delete", scr_key_delete},
-    {"begin", scr_key_top},
-    {"end", scr_key_end},
-    {"up", scr_key_up},
-    {"down", scr_key_down},
-    {"forward", scr_key_forward},
-    {"back", scr_key_back},
-    {"redraw", scr_key_redraw},
-    {"kill", scr_key_kill},
-    {"tab", scr_key_tab},
-    {"yank", scr_key_yank},
-    {"imode", scr_key_imode},
-    {"clear", scr_key_clear},
-    {NULL, NULL}
-};
-/*
- * convert table to convert from a keyfunc index to a ctrl code in SWORD.
- * SCR_SOS_NUL(0x00) means that SWORD does not have such ctrl codes.
- */
-static char scr_keyfunc_idx2sword[]={
-	SCR_SOS_NUL,    /* backspace */
-	SCR_SOS_NUL,    /* delete */
-	SCR_SOS_NUL,    /* begin */
-	SCR_SOS_NUL,    /* end */
-	SCR_SOS_UP,     /* up */
-	SCR_SOS_DOWN,   /* down */
-	SCR_SOS_RIGHT,  /* forward */
-	SCR_SOS_LEFT,   /* back */
-	SCR_SOS_NUL,    /* redraw */
-	SCR_SOS_NUL,    /* kill */
-	SCR_SOS_NUL,    /* tab */
-	SCR_SOS_NUL,    /* yank */
-	SCR_SOS_CLS     /* clear */
+	{KEYMAP_NAME_BACKSPACE, scr_key_backspace, SCR_SOS_NUL},
+	{KEYMAP_NAME_DELETE, scr_key_delete, SCR_SOS_NUL},
+	{KEYMAP_NAME_BEGIN, scr_key_top, SCR_SOS_NUL},
+	{KEYMAP_NAME_END, scr_key_end, SCR_SOS_NUL},
+	{KEYMAP_NAME_UP, scr_key_up, SCR_SOS_UP},
+	{KEYMAP_NAME_DOWN, scr_key_down, SCR_SOS_DOWN},
+	{KEYMAP_NAME_FWD, scr_key_forward, SCR_SOS_RIGHT},
+	{KEYMAP_NAME_BACK, scr_key_back, SCR_SOS_LEFT},
+	{KEYMAP_NAME_REDRAW, scr_key_redraw, SCR_SOS_NUL},
+	{KEYMAP_NAME_KILL, scr_key_kill, SCR_SOS_NUL},
+	{KEYMAP_NAME_TAB, scr_key_tab, SCR_SOS_NUL},
+	{KEYMAP_NAME_YANK, scr_key_yank, SCR_SOS_NUL},
+	{KEYMAP_NAME_IMODE, scr_key_imode, SCR_SOS_NUL},
+	{KEYMAP_NAME_CLEAR, scr_key_clear, SCR_SOS_NUL},
+	{KEYMAP_NAME_BREAK, NULL, SCR_SOS_BREAK},
+	{NULL, NULL, SCR_SOS_NUL}
 };
 
 /*
@@ -1297,22 +1281,17 @@ scr_conv(char oc){
 	/* some system thinks char as signed char */
 	c = ((unsigned char) oc) & 0xff;
 
-	if ( ( 0 > c ) || ( c >= ' ' ) )
+	/*
+	 * When c is not control code or the keymap does not need to convert,
+	 * skip convert character.
+	 */
+	if ( ( 0 > c ) || ( c >= ' ' ) || ( 0 > keymap[c] ) )
 		goto skip_conv;
 
-	/*
-	 * Ctrl code
-	 */
-	if ( c == ( 'C'-'@' ) )
-		c = SCR_SOS_BREAK; /* C-c maps to SOS Break code */
-	else if ( ( keymap[c] >= SCR_KEYMAP_IDX_UP )
-	    && ( SCR_KEYMAP_IDX_BWD >= keymap[c] ) ) {
+	/* Convert a control code on UNIX to a control code on Sword. */
+	if ( keyfuncs[keymap[c]].ch_on_sos != SCR_SOS_NUL )
+		c = keyfuncs[keymap[c]].ch_on_sos;
 
-		/*
-		 * Convert cursor keys
-		 */
-		c = scr_keyfunc_idx2sword[keymap[c]];
-	}
 skip_conv:
 	if (scr_capson){
 

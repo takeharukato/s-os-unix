@@ -1349,8 +1349,6 @@ int sos_rdi(void){
 
     inf = &tapes[ sos_tape_devindex( GetBYTE(SOS_DSK) ) ];
 
-    PutBYTE( SOS_DIRNO, inf->dirno ); /* Restore DIRNO */
-
     key = sos_fcb_common();  /* read key */
 
     if ( key == SCR_SOS_BREAK )
@@ -1359,46 +1357,45 @@ int sos_rdi(void){
     if ( key == SCR_SOS_CR )
 	    goto position_reset;  /* Read position changed */
 
-    /*
-     * Load file information block except for file attribute.
-     */
+    /* Get the next file name on the tape from UNIX direntries or the tape emulation. */
     rc = dio_dopen((char *)ram + EM_FNAME, &attr, &addr, &len, &exaddr,
-	GetBYTE(SOS_DIRNO) );
-
+	inf->dirno );
     if ( rc != 0 )
-	    goto file_not_found;  /* Cancel Read File Control Block */
+	    goto file_not_found;  /* No file found on inf->dirno */
+
+    /* Load the File Information Block (FIB) */
+    rc = dio_ropen((char *)ram +EM_FNAME, &attr, &addr, &len, &exaddr, 1);
+    if ( rc != 0 )
+	    goto inc_dirno; /* Some UNIX files can not be read by S-OS apps. */
 
     /*
      * Fill File Information Block
      */
     PutBYTE(EM_ATTR, attr);
-
     PutWORD(EM_SIZE, len);
     PutWORD(EM_DTADR, addr);
     PutWORD(EM_EXADR, exaddr);
 
-    sos_parsc();            /* Set #SIZE, #DTADR, #EXADR up */
-    PutBYTE(SOS_OPNFG, 1);  /* open file */
+    sos_parsc();  /* Fill SOS_DTADR, SOS_EXADR, SOS_SIZE */
 
-    sos_tropn();            /* open the file */
+inc_dirno:
+    if ( UCHAR_MAX > inf->dirno )
+	    inf->dirno = inf->dirno + 1; /* Inc DIRNO of the device */
+    else
+	    inf->dirno = 0; /* Reach the end of the tape, so rewind it. */
 
-    inf->dirno = GetBYTE(SOS_DIRNO) + 1; /* Inc DIRNO of the device */
-    if ( inf->dirno == 0xff )
-	    goto file_not_found; /* UCHAR_MAX reached */
-
-    PutBYTE(SOS_DIRNO, inf->dirno);  /* Update #DIRNO */
-    inf->retpoi = inf->dirno;        /* Update RETPOI */
+    inf->retpoi = inf->dirno;    /* Update RETPOI */
 
     SETFLAG(C, 0);
 
     return TRAP_NEXT;
 
 file_not_found:
-	PutBYTE(SOS_DIRNO, 0);  /* Reset #DIRNO */
+	inf->dirno = 0;   /* Reset #DIRNO */
 
 position_reset:
 	inf->retpoi = 0;  /* Reset RETPOI */
-	inf->dirno = GetBYTE(SOS_DIRNO);   /* Save DIRNO of the device */
+
 	Sethreg(Z80_AF, SOS_ERROR_NOENT);  /* File not found */
 	SETFLAG(C, 1);   /* Set carry */
 
