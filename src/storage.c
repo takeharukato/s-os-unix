@@ -26,44 +26,6 @@
  * Macros
  */
 
-/** Determine whether the drive letter points to a tape device.
-    @param[in] _ch a device letter
-    @retval TRUE a device letter is a tape device on SWORD
-    @retval FALSE a device letter is NOT a tape device on SWORD
- */
-#define STORAGE_DEVLTR_IS_TAPE(_ch)					\
-	( ( (_ch) == SOS_DL_COM_CMT ) || \
-	    ( (_ch) == SOS_DL_MON_CMT ) || \
-	    ( (_ch) == SOS_DL_QD ) )
-
-/** Determine whether the drive letter points to a standard disk device on SWORD
-    @param[in] _ch a device letter
-    @retval TRUE a device letter is a standard disk device on SWORD
-    @retval FALSE a device letter is NOT a standard disk device on SWORD
- */
-#define STORAGE_DEVLTR_IS_STD_DISK(_ch)					\
-	( ( SOS_DL_DRIVE_D >= (_ch) )					\
-	    && ( (_ch) >= SOS_DL_DRIVE_A ) )
-
-
-/** Determine whether the drive letter points to a disk device,
-    including reserved devices on SWORD.
-    @param[in] _ch a device letter
-    @retval TRUE a device letter is a disk device on SWORD
-    @retval FALSE a device letter is NOT a disk device on SWORD
- */
-#define STORAGE_DEVLTR_IS_DISK(_ch)					\
-	( ( SOS_DL_DRIVE_L >= (_ch) )					\
-	    && ( (_ch) >= SOS_DL_DRIVE_A ) )
-
-/** Determine whether the drive letter points to a device on SWORD.
-    @param[in] _ch a device letter
-    @retval TRUE a device letter is a device on SWORD
-    @retval FALSE a device letter is NOT a device on SWORD
- */
-#define STORAGE_DEVLTR_IS_VALID(_ch)					\
-	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
-
 /*
  * storage index for tape device
  */
@@ -174,6 +136,16 @@ check_device_letter_common(const sos_devltr ch, int *idxp){
 out:
 	return rc;
 }
+/** Reset storage disk image information
+    @param[out] inf storage disk image information
+ */
+static void
+init_storage_disk_image_info(struct _storage_disk_image *inf){
+
+	init_storage_position(&inf->di_pos);
+	inf->di_manager = NULL;
+	inf->di_private = NULL;
+}
 
 /*
  * Interface functions
@@ -184,18 +156,15 @@ out:
 void
 storage_init(void){
 	int i;
-	struct _storage_disk_image *img;
+	struct _storage_disk_image *inf;
 
 	for(i = 0; STORAGE_NR > i; ++i) {
-
-		img = &storage[i];
 
 		/*
 		 * Make all of the devices unmounted.
 		 */
-		init_storage_position(&img->di_pos);
-		img->di_manager = NULL;
-		img->di_private = NULL;
+		inf = &storage[i];
+		init_storage_disk_image_info(inf);
 	}
 
 }
@@ -282,12 +251,15 @@ unregister_storage_operation(const char *name){
     @retval EINVAL The device letter is not supported.
     @retval ENOENT The device is not supported.
     @retval EBUSY  The device has already been mounted.
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_mount_image(const sos_devltr ch, const char *const fname){
 	int                          rc;
 	int                        type;
 	int                         idx;
+	void                   *private;
 	struct _storage_disk_image *inf;
 	struct _list               *itr;
 	struct _storage_manager    *mgr;
@@ -301,10 +273,10 @@ storage_mount_image(const sos_devltr ch, const char *const fname){
 
 	inf = &storage[idx]; /* get disk image info */
 
-	if ( STORAGE_HANDLER_IS_INVALID(inf, mount_image) ) {
+	if ( inf->di_manager != NULL ) {
 
-		rc = ENOENT;
-		goto out;
+		rc = EBUSY;
+		goto out;  /* The device has already been mounted. */
 	}
 
 	rc = ENOENT;  /* Assume no handler found */
@@ -312,13 +284,13 @@ storage_mount_image(const sos_devltr ch, const char *const fname){
 
 		mgr = container_of(itr, struct _storage_manager, sm_node);
 
-		inf->di_private = NULL;
-		rc = mgr->sm_ops->mount_image(ch, fname, &inf->di_private);
+		private = NULL;
+		rc = mgr->sm_ops->mount_image(ch, fname, &private);
 		if ( rc != 0 )
 			continue;
-
 		++mgr->sm_use_cnt;     /* Inc use count */
 		inf->di_manager = mgr; /* Set manager */
+		inf->di_private = private;
 		rc = 0;
 		break;
 	}
@@ -336,6 +308,8 @@ out:
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval EBUSY  The device is busy.
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_unmount_image(const sos_devltr ch){
@@ -349,18 +323,28 @@ storage_unmount_image(const sos_devltr ch){
 		return rc;
 
 	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
 	inf = &storage[idx]; /* get disk image info */
+
+	if ( inf->di_manager == NULL ) {
+
+		rc = ENXIO;  /*  The device has not been mounted.  */
+		goto out;
+	}
 
 	if ( STORAGE_HANDLER_IS_INVALID(inf, umount_image) ) {
 
-		rc = ENOENT;
+		rc = ENOENT;  /*  The device is not supported.  */
 		goto out;
 	}
 
 	rc = inf->di_manager->sm_ops->umount_image(ch);
-	if ( rc == 0 )
-		--inf->di_manager->sm_use_cnt;     /* dec use count */
+	if ( rc == 0 ) {
 
+		sos_assert( inf->di_manager->sm_use_cnt > 0 );
+		--inf->di_manager->sm_use_cnt;     /* dec use count */
+		init_storage_disk_image_info(inf);
+	}
 out:
 	return rc;
 }
@@ -373,6 +357,8 @@ out:
     @retval EINVAL The device letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_get_image_info(const sos_devltr ch, struct _storage_disk_image *resp){
@@ -394,7 +380,7 @@ storage_get_image_info(const sos_devltr ch, struct _storage_disk_image *resp){
 		goto out;
 	}
 
-	return inf->di_manager->sm_ops->get_image_info(ch, resp);
+	return inf->di_manager->sm_ops->get_image_info(ch, &inf->di_pos);
 out:
 	return rc;
 }
@@ -405,8 +391,11 @@ out:
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_fib_read(const sos_devltr ch, const BYTE dirno, struct _storage_fib *fib){
@@ -440,9 +429,12 @@ out:
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
     @retval EROFS Read-only device
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_fib_write(const sos_devltr ch, const BYTE dirno,
@@ -478,8 +470,11 @@ out:
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_seq_read(const sos_devltr ch, BYTE *dest, const WORD len){
@@ -514,10 +509,13 @@ out:
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
     @retval EPERM  Operation not permitted
     @retval EROFS  Read-only device
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_seq_write(const sos_devltr ch, const BYTE *src, const WORD len){
@@ -545,20 +543,25 @@ out:
 	return rc;
 }
 
-/** Read a sector from a disk
+/** Read sectors from a disk
     @param[in]  ch    The device letter of a device on SWORD
     @param[out] dest  The destination address of the data from a storage
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
+    @param[out] rdcntp The number how many records read
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
     @retval ENOTBLK Block device required
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
-storage_record_read(const sos_devltr ch, BYTE *dest, const WORD rec, const WORD count){
+storage_record_read(const sos_devltr ch, BYTE *dest, const WORD rec, const WORD count,
+	WORD *rdcntp){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;
@@ -577,29 +580,33 @@ storage_record_read(const sos_devltr ch, BYTE *dest, const WORD rec, const WORD 
 		goto out;
 	}
 
-	return inf->di_manager->sm_ops->record_read(ch, dest, rec, count);
+	return inf->di_manager->sm_ops->record_read(ch, dest, rec, count, rdcntp);
 
 out:
 	return rc;
 }
 
-/** Write a sector to a disk
+/** Write sectors to a disk
     @param[in]  ch    The device letter of a device on SWORD
     @param[in]  src   The source address of the data to write
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
+    @param[out] wrcntp The number how many records written
     @retval  0 success
     @retval ENODEV No such device
     @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
     @retval ENOTBLK Block device required
     @retval EPERM  Operation not permitted
     @retval EROFS  Read-only device
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
  */
 int
 storage_record_write(const sos_devltr ch, const BYTE *src, const WORD rec,
-    const WORD count){
+    const WORD count, WORD *wrcntp){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;
@@ -618,7 +625,7 @@ storage_record_write(const sos_devltr ch, const BYTE *src, const WORD rec,
 		goto out;
 	}
 
-	return inf->di_manager->sm_ops->record_write(ch, src, rec, count);
+	return inf->di_manager->sm_ops->record_write(ch, src, rec, count, wrcntp);
 
 out:
 	return rc;

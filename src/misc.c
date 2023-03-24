@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <string.h>
 #include <errno.h>
 
 /** Check whether the file exists and the file is readable
@@ -52,4 +53,21 @@ ascii_to_int(const char *numstr, int *vp){
 	*vp = (int)v;
 
 	return 0;
+}
+
+/** Refer the file extention part of the file name.
+    @param[in]  fname The file name (file path)
+    @return  NULL if the file name has no extention
+    @return  string for file extention from dot('.')
+ */
+const char *
+refer_file_extention(const char *fname){
+	char *ext;
+
+	if ( fname == NULL )
+		return NULL;  /* the file name has no extention */
+
+	ext = strrchr(fname,'.');
+
+	return ext;  /* if no '.' found, strrchr returns NULL */
 }

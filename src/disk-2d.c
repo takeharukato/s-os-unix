@@ -45,19 +45,20 @@
  */
 static int mount_2dimg(const sos_devltr _ch, const char *_fname, void **_ref_priv);
 static int umount_2dimg(const sos_devltr _ch);
-static int get_info_2dimg(const sos_devltr _ch, struct _storage_disk_image * _resp);
+
+static int get_image_info_2dimg(const sos_devltr _ch, struct _storage_disk_pos *_posp);
 static int fib_read_2dimg(const sos_devltr _ch, const BYTE _dirno,
-	    struct _storage_fib *_fib, struct _storage_disk_pos *_posp);
+    struct _storage_fib *_fib, struct _storage_disk_pos *_pos);
 static int fib_write_2dimg(const sos_devltr _ch, const BYTE _dirno,
-	    const struct _storage_fib *const _fib, struct _storage_disk_pos *_posp);
+    const struct _storage_fib *const _fib, struct _storage_disk_pos *_posp);
 static int seq_read_2dimg(const sos_devltr _ch, BYTE *_dest,
 	    const WORD _len, struct _storage_disk_pos *_posp);
 static int seq_write_2dimg(const sos_devltr _ch, const BYTE *_src,
 	    const WORD _len, struct _storage_disk_pos *_posp);
 static int record_read_2dimg(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-	    const WORD _count);
+	    const WORD _count, WORD *_rdcntp);
 static int record_write_2dimg(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-	    const WORD _count);
+	    const WORD _count, WORD *_wrcntp);
 
 /*
  * Variables
@@ -70,16 +71,35 @@ static int record_write_2dimg(const sos_devltr _ch, const BYTE *_src, const WORD
 static struct _storage_di_ops diops_2dimg={
 	mount_2dimg,
 	umount_2dimg,
-	NULL, //get_info_2dimg,
-	NULL, //get_fib_2dimg,
-	NULL, //set_fib_2dimg,
-	NULL, //seq_read_2dimg,
-	NULL, //seq_write_2dimg,
-	NULL, //record_read_2dimg,
-	NULL //record_write_2dimg
+	get_image_info_2dimg,
+	fib_read_2dimg,
+	fib_write_2dimg,
+	seq_read_2dimg,
+	seq_write_2dimg,
+	record_read_2dimg,
+	record_write_2dimg
 };
 
 static struct _disk2d_private disk_2d_private;  /* Private information */
+
+/*
+ * Internal functions
+ */
+
+/** Initialize private information
+ */
+static void
+init_private_info_2dimg(void){
+	int                     i;
+	struct _disk2d_image *img;
+
+	for(i = 0; DISK_2D_IMAGES_NR > i; ++i) {
+
+		img = &disk_2d_private.images[i];  /* Disk image */
+		img->fd = -1;
+		img->fname = NULL;
+	}
+}
 
 /** mount a storage image file
     @param[in] ch        The device letter of a device on SWORD
@@ -159,19 +179,232 @@ umount_2dimg(const sos_devltr ch){
 	return 0;
 }
 
-/** Initialize private information
+/** Get storage image information
+    @param[in]  ch    the device letter of a device on SWORD
+    @param[out] posp  the address to store storage position information.
+    @retval  0 success
+    @retval ENOENT The device is not supported.
  */
-static void
-init_private_info_2dimg(void){
-	int                     i;
+static int
+get_image_info_2dimg(const sos_devltr ch, struct _storage_disk_pos *posp){
+	int                    rc;
+	int                   idx;
 	struct _disk2d_image *img;
 
-	for(i = 0; DISK_2D_IMAGES_NR > i; ++i) {
+	if ( !DISK_2D_DEVLTR_IS_VALID(ch) )
+		return ENOENT;  /* The device is not supported by this module */
 
-		img = &disk_2d_private.images[i];  /* Disk image */
-		img->fd = -1;
-		img->fname = NULL;
+	return 0;
+}
+
+/** Read a file information block
+    @param[in] ch    the device letter of a device on SWORD
+    @param[in] dirno the #DIRNO of the file
+    @param[out] fib  the address to store a file information block
+    @param[out] posp the address to store storage position information
+    @retval  0 success
+    @retval ENOENT The device is not supported.
+ */
+static int
+fib_read_2dimg(const sos_devltr ch, const BYTE dirno,
+    struct _storage_fib *fib, struct _storage_disk_pos *pos){
+
+	/* The device is not supported because this device is not tape  */
+	return ENOENT;
+}
+
+/** Read a file information block
+    @param[in] ch    the device letter of a device on SWORD
+    @param[in] dirno the #DIRNO of the file
+    @param[out] fib  the address to store a file information block
+    @param[out] posp the address to store storage position information
+    @retval  0 success
+    @retval ENOENT The device is not supported.
+ */
+static int
+fib_write_2dimg(const sos_devltr ch, const BYTE dirno,
+    const struct _storage_fib *const fib, struct _storage_disk_pos *posp){
+
+	/* The device is not supported because this device is not tape  */
+	return ENOENT;
+}
+
+/** Read sequential data
+    @param[in]  ch    the device letter of a device on SWORD
+    @param[out] dest  the destination address to transfer data to
+    @param[in]  len   transfer length
+    @param[out] posp the address to store storage position information
+    @retval  0 success
+    @retval ENOENT The device is not supported.
+*/
+static int
+seq_read_2dimg(const sos_devltr ch, BYTE *dest,
+    const WORD len, struct _storage_disk_pos *posp){
+
+	/* The device is not supported because this device is not tape  */
+	return ENOENT;
+}
+
+/** Write sequential data
+    @param[in]  ch    the device letter of a device on SWORD
+    @param[out] dest  the destination address to transfer data to
+    @param[in]  len   transfer length
+    @param[out] posp the address to store storage position information
+    @retval  0 success
+    @retval ENOENT The device is not supported.
+ */
+static int
+seq_write_2dimg(const sos_devltr ch, const BYTE *src,
+    const WORD len, struct _storage_disk_pos *posp){
+
+	/* The device is not supported because this device is not tape  */
+	return ENOENT;
+}
+
+/** Read sectors from a disk
+    @param[in]  ch    The device letter of a device on SWORD
+    @param[out] dest  The destination address of the data from a storage
+    @param[in]  rec   The start record number to read
+    @param[in]  count The number how many records to read
+    @retval  0 success
+    @retval ENODEV No such device
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+    @retval ENOSPC File not found
+    @retval ENOTBLK Block device required
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
+ */
+static int
+record_read_2dimg(const sos_devltr ch, BYTE *dest, const WORD rec,
+    const WORD count, WORD *rdcntp){
+	int                     rc;
+	int                    idx;
+	struct _disk2d_image  *img;
+	BYTE data[SOS_RECORD_SIZE];
+	ssize_t                res;
+	WORD               remains;
+	off_t                  pos;
+	void                   *dp;
+
+	if ( !DISK_2D_DEVLTR_IS_VALID(ch) )
+		return ENOENT;  /* The device is not supported by this module */
+
+
+	idx = DISK_2D_DEVLTR2IDX(ch);        /* Get index  */
+	img = &disk_2d_private.images[idx];  /* Disk image */
+
+	/* For the case of the failure of the lseek,
+	 * calculate the remaining record counts beforehand.
+	 */
+	remains = count;
+
+	/*
+	 * Seek record position
+	 */
+	pos = lseek(img->fd, SEEK_SET, rec * SOS_RECORD_SIZE);
+	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
+
+		rc = EIO;
+		goto out;
 	}
+
+	/*
+	 * Read records
+	 */
+	rc = 0;                              /* Assume success */
+
+	for(dp = dest; remains > 0; --remains) { /* read records sequentially */
+
+
+		res = read(img->fd, &data[0], SOS_RECORD_SIZE);
+		if ( res !=  SOS_RECORD_SIZE ) {
+
+			rc = EIO;
+			break;
+		}
+		memcpy(dp, &data[0], SOS_RECORD_SIZE); /* copy one record */
+		dp += SOS_RECORD_SIZE; /* next address */
+	}
+
+out:
+	if ( rdcntp != NULL )
+		*rdcntp = count - remains;  /* retuns read records */
+
+	return rc;
+}
+
+/** Write sectors from a disk
+    @param[in]  ch    The device letter of a device on SWORD
+    @param[out] dest  The destination address of the data from a storage
+    @param[in]  rec   The start record number to read
+    @param[in]  count The number how many records to read
+    @retval  0 success
+    @retval ENODEV No such device
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+    @retval ENOSPC File not found
+    @retval ENOTBLK Block device required
+    @retval EIO    I/O Error.
+    @retval ENOMEM Out of memory.
+ */
+static int
+record_write_2dimg(const sos_devltr ch, const BYTE *src, const WORD rec,
+    const WORD count, WORD *wrcntp){
+	int                     rc;
+	int                    idx;
+	struct _disk2d_image  *img;
+	ssize_t                res;
+	WORD               remains;
+	off_t                  pos;
+	void                   *sp;
+
+	if ( !DISK_2D_DEVLTR_IS_VALID(ch) )
+		return ENOENT;  /* The device is not supported by this module */
+
+
+	idx = DISK_2D_DEVLTR2IDX(ch);        /* Get index  */
+	img = &disk_2d_private.images[idx];  /* Disk image */
+
+	/* For the case of the failure of the lseek,
+	 * calculate the remaining record counts beforehand.
+	 */
+	remains = count;
+
+	/*
+	 * Seek record position
+	 */
+	pos = lseek(img->fd, SEEK_SET, rec * SOS_RECORD_SIZE);
+	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
+
+		rc = EIO;
+		goto out;
+	}
+
+	/*
+	 * Write records
+	 */
+	rc = 0;                              /* Assume success */
+
+	for(sp = (char *)src; remains > 0; --remains) { /* write records sequentially */
+
+		res = write(img->fd, sp, SOS_RECORD_SIZE);
+		if ( res !=  SOS_RECORD_SIZE ) {
+
+			rc = EIO;
+			break;
+		}
+
+		sp += SOS_RECORD_SIZE; /* next address */
+	}
+
+out:
+	if ( wrcntp != NULL )
+		*wrcntp = count - remains;  /* retuns written records */
+
+	return rc;
 }
 
 /** Initialize 2D disk image module

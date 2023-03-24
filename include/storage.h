@@ -13,16 +13,57 @@
 #include "sos.h"
 #include "queue.h"
 
+/*
+ * Macros
+ */
+
 #define STORAGE_NR       (SOS_DEVICES_NR)     /**< The number of devices */
 
 /*
  * File Extention
  */
-#define STORAGE_DSKIMG_EXT_2D        "2d"     /**< 2D logical byte stream image */
 #define STORAGE_DSKIMG_EXT_D88       "d88"    /**< D88 disk image */
 #define STORAGE_DSKIMG_EXT_MZT1      "mzt"    /**< Japanese MZT tape image */
 #define STORAGE_DSKIMG_EXT_MZT2      "m12"    /**< Japanese MZT tape image */
 #define STORAGE_DSKIMG_EXT_MZT3      "mzf"    /**< Japanese MZT tape image */
+
+
+/** Determine whether the drive letter points to a tape device.
+    @param[in] _ch a device letter
+    @retval TRUE a device letter is a tape device on SWORD
+    @retval FALSE a device letter is NOT a tape device on SWORD
+ */
+#define STORAGE_DEVLTR_IS_TAPE(_ch)					\
+	( ( (_ch) == SOS_DL_COM_CMT ) || \
+	    ( (_ch) == SOS_DL_MON_CMT ) || \
+	    ( (_ch) == SOS_DL_QD ) )
+
+/** Determine whether the drive letter points to a standard disk device on SWORD
+    @param[in] _ch a device letter
+    @retval TRUE a device letter is a standard disk device on SWORD
+    @retval FALSE a device letter is NOT a standard disk device on SWORD
+ */
+#define STORAGE_DEVLTR_IS_STD_DISK(_ch)					\
+	( ( SOS_DL_DRIVE_D >= (_ch) )					\
+	    && ( (_ch) >= SOS_DL_DRIVE_A ) )
+
+/** Determine whether the drive letter points to a disk device,
+    including reserved devices on SWORD.
+    @param[in] _ch a device letter
+    @retval TRUE a device letter is a disk device on SWORD
+    @retval FALSE a device letter is NOT a disk device on SWORD
+ */
+#define STORAGE_DEVLTR_IS_DISK(_ch)					\
+	( ( SOS_DL_DRIVE_L >= (_ch) )					\
+	    && ( (_ch) >= SOS_DL_DRIVE_A ) )
+
+/** Determine whether the drive letter points to a device on SWORD.
+    @param[in] _ch a device letter
+    @retval TRUE a device letter is a device on SWORD
+    @retval FALSE a device letter is NOT a device on SWORD
+ */
+#define STORAGE_DEVLTR_IS_VALID(_ch)					\
+	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
 /*
  * Foward declaration
@@ -72,7 +113,7 @@ struct _storage_disk_image{
 struct _storage_di_ops{
 	int (*mount_image)(const sos_devltr _ch, const char *_fname, void **_ref_priv);
 	int (*umount_image)(const sos_devltr _ch);
-	int (*get_image_info)(const sos_devltr _ch, struct _storage_disk_image * _resp);
+	int (*get_image_info)(const sos_devltr _ch, struct _storage_disk_pos *_posp);
 	int (*fib_read)(const sos_devltr _ch, const BYTE _dirno,
 	    struct _storage_fib *_fib, struct _storage_disk_pos *_posp);
 	int (*fib_write)(const sos_devltr _ch, const BYTE _dirno,
@@ -82,9 +123,9 @@ struct _storage_di_ops{
 	int (*seq_write)(const sos_devltr _ch, const BYTE *_src,
 	    const WORD _len, struct _storage_disk_pos *_posp);
 	int (*record_read)(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-	    const WORD _count);
+	    const WORD _count, WORD *_rdcntp);
 	int (*record_write)(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-	    const WORD _count);
+	    const WORD _count, WORD *_wrcntp);
 };
 
 /** Disk image operations
@@ -103,8 +144,8 @@ int storage_fib_write(const sos_devltr _ch, const BYTE _dirno,
 int storage_seq_read(const sos_devltr _ch, BYTE *_dest, const WORD _len);
 int storage_seq_write(const sos_devltr _ch, const BYTE *_src, const WORD _len);
 int storage_record_read(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-    const WORD _count);
+    const WORD _count, WORD *_rdcntp);
 int storage_record_write(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-    const WORD _count);
+    const WORD _count, WORD *_wrcntp);
 
 #endif  /*  _STORAGE_H  */

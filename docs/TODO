@@ -24,6 +24,14 @@ TODO list
 * strrchrのOS依存の排除
 * strncasecmpのOS依存の排除
 
+src/trap.cをsos.hに移動
+#define TRAP_FNAME_BUFSIZ         ( SOS_FNAME_LEN + 1 )     /* name + ext + '\0' */
+#define TRAP_FNAME_EXT_BUFSIZ     ( SOS_FNAME_EXTLEN + 1 )  /* ext + '\0' */
+#define TRAP_FNAME_PRNT_BUFSIZ    ( TRAP_FNAME_BUFSIZ + 1 ) /* name + '.' + ext + '\0' */
+check_file_existsが不要になるので削除
+fib_read/fib_writeは, シーケンシャルデバイスからの読み書きを使用すれば実現できるが
+テープの内部ポジションを知っている必要があるのでstorageオペレーションに入っている
+
 DOS依存システムコール
 1. HOT
 2. WOPEN

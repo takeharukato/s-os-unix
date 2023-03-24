@@ -154,10 +154,17 @@
 	( SOS_DRIVE_LETTER_LEN + SOS_FNAME_NAMELEN + SOS_FNAME_EXTLEN )
 #define	SOS_MAXIMAGEDRIVES	(4)
 
+#define SOS_FNAME_BUFSIZ         ( SOS_FNAME_LEN + 1 )     /* name + ext + '\0' */
+#define SOS_FNAME_EXT_BUFSIZ     ( SOS_FNAME_EXTLEN + 1 )  /* ext + '\0' */
+#define SOS_FNAME_PRNT_BUFSIZ    ( SOS_FNAME_BUFSIZ + 1 )  /* name + '.' + ext + '\0' */
+
 /*
  * Disk I/O
  */
 #define SOS_RECORD_SIZE         (256) /* Record (Sector) size in byte. */
+#define SOS_CLUSTER_SHIFT       (4)   /* 16 records per cluster  */
+#define SOS_CLUSTER_SIZE        \
+	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /* Cluster size in byte. */
 #define SOS_DENTRY_SIZE         (32)  /* Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /* 8 file entries. */
