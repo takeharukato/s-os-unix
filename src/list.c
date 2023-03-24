@@ -12,7 +12,7 @@
     @param[in] node A pointer to the list node to initialize.
  */
 void
-list_init(list *node){
+list_init(struct _list *node){
 
 	node->prev = node->next = node;
 }
@@ -21,7 +21,7 @@ list_init(list *node){
     @param[in] node A pointer to the list node to be removed.
  */
 void
-list_del(list *node) {
+list_del(struct _list *node) {
 
 	/*
 	 * Remove the node from the list
@@ -37,7 +37,7 @@ list_del(list *node) {
     @param[in] node A pointer to the list node to be checked.
  */
 int
-list_not_linked(list *node) {
+list_not_linked(struct _list *node) {
 
 	return ( ( node->prev == node ) && ( node->next == node ) );
 }

@@ -24,6 +24,7 @@ AC_CHECK_HEADERS(termios.h term.h unistd.h curses.h)
 AC_CHECK_FUNCS(getcwd strdup strerror strtol strcasecmp)
 AC_CHECK_FUNCS(cfmakeraw memmove sigprocmask)
 AC_CHECK_FUNCS(fcntl)
+AC_CHECK_FUNCS(strrchr memcmp)
 AC_FUNC_MEMCMP
 
 dnl special options

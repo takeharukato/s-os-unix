@@ -91,7 +91,7 @@ queue_ref_top(struct _queue *head) {
  */
 struct _list *
 queue_get_top(struct _queue *head) {
-	list *top;
+	struct _list *top;
 
 	top = queue_ref_top(head);
 	list_del(top);

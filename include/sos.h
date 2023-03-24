@@ -5,9 +5,7 @@
 #ifndef	_SOS_H_
 #define	_SOS_H_
 
-#if defined(__STDC__)
-#include <limits.h>
-#endif  /*  __STDC__  */
+#include "sim-type.h"
 
 /*
  * Sword control codes
@@ -167,16 +165,17 @@
 /*
  * Drive letters
  */
-#define SOS_DL_DRIVE_A   'A'
-#define SOS_DL_DRIVE_B   'B'
-#define SOS_DL_DRIVE_C   'C'
-#define SOS_DL_DRIVE_D   'D'
-#define SOS_DL_RESV_MIN  'E'
-#define SOS_DL_RESV_MAX  'L'
-#define SOS_DL_COM_CMT   'T'
-#define SOS_DL_MON_CMT   'S'
-#define SOS_DL_QD        'Q'
-
+#define SOS_DL_DRIVE_A   ('A')
+#define SOS_DL_DRIVE_B   ('B')
+#define SOS_DL_DRIVE_C   ('C')
+#define SOS_DL_DRIVE_D   ('D')
+#define SOS_DL_DRIVE_L   ('L')
+#define SOS_DL_RESV_MIN  ('E')
+#define SOS_DL_RESV_MAX  (SOS_DL_DRIVE_L)
+#define SOS_DL_COM_CMT   ('T')
+#define SOS_DL_MON_CMT   ('S')
+#define SOS_DL_QD        ('Q')
+#define SOS_DEVICES_NR   (15)
 /*
  * SOS File Information Block/Directory Entry offset addresses in EM_IBFAD
  */
@@ -240,4 +239,7 @@
 
 #define	EM_VER		(0x1620)	/* XXX: SWORD version */
 
+#if !defined(_ASM)
+typedef BYTE            sos_devltr;  /**< device letter */
+#endif  /*  _ASM  */
 #endif

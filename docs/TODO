@@ -21,6 +21,8 @@ TODO list
 * 垂直同期の時間間隔の計測
 * クロックティックに応じてCPUの命令を処理
 * D88フォーマット対応
+* strrchrのOS依存の排除
+* strncasecmpのOS依存の排除
 
 DOS依存システムコール
 1. HOT

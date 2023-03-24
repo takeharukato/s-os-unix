@@ -56,6 +56,16 @@ void	cfmakeraw(struct termios *t);
 
 #ifndef HAVE_STRCASECMP
 int strcasecmp(const char *s1, const char *2);
-#endif
+#endif  /*  !HAVE_STRCASECMP  */
 
+#ifndef HAVE_STRRCHR
+char *strrchr(const char *_s, int _c);
+#endif  /*  !HAVE_STRRCHR  */
+
+#ifndef HAVE_MEMCMP
+int memcmp(const void *_s1, const void *_s2, size_t _n);
+#endif  /* !HAVE_MEMCMP  */
+#ifndef HAVE_STRTOL
+long int strtol(const char *_nptr, char **_endptr, int _base)
+#endif  /*  !HAVE_STRTOL  */
 #endif

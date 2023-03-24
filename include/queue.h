@@ -17,18 +17,18 @@
 
 /** Queue data structure
  */
-typedef struct _queue{
+struct _queue{
 	struct _list *prev;       /*<  The pointer to the last member  */
 	struct _list *next;       /*<  The pointer to the first member */
-}queue;
+};
 
 /** Queue initializer
    @param[in] _que The pointer to the queue head.
  */
 #define __QUEUE_INITIALIZER(_que)			\
 	{						\
-		.prev = (struct _list *)(_que),		\
-		.next = (struct _list *)(_que),		\
+		(struct _list *)(_que),		\
+		(struct _list *)(_que),		\
 	}
 
 /** Macro for earch in the queue
@@ -165,7 +165,7 @@ typedef struct _queue{
 void queue_add(struct _queue *_head, struct _list *_node);
 void queue_add_top(struct _queue *_head, struct _list *_node);
 void queue_add_before(struct _list *_target, struct _list *_node);
-void queue_add_after(list *_target, list *_node);
+void queue_add_after(struct _list *_target, struct _list *_node);
 int queue_del(struct _queue *_head, struct _list *_node);
 struct _list *queue_ref_top(struct _queue *_head);
 struct _list *queue_get_top(struct _queue *_head);

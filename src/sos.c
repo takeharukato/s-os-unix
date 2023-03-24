@@ -80,10 +80,10 @@ emu_quit(void){
 int
 ccpline(char *p, int mode){
     char lbuf[CCP_LINLIM];
-    char *np,c;
+    char *np,*endp,c;
     char *cp;
     char *ref;
-    int n;
+    int  n;
     int rc;
 
     /* prompt & space skip */
@@ -135,7 +135,13 @@ ccpline(char *p, int mode){
 	    }
 	    return(0);
 	}
-	n = atoi(np);
+
+	if ( ascii_to_int(np, &n) != 0 ){
+
+		scr_puts("bad drive number\r");
+		return(0);
+	}
+
 	if (n < 0 || n >= SOS_MAXIMAGEDRIVES){
 	    scr_puts("bad drive number\r");
 	    return(0);
