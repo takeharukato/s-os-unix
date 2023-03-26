@@ -73,13 +73,14 @@ struct _storage_di_ops;
 /** File Information Block of the file
  */
 struct _storage_fib{
-	BYTE                       fib_attr;   /**< File attribute    */
-	BYTE                       fib_pad1;   /**< padding           */
-	WORD                       fib_size;   /**< File size         */
-	WORD                      fib_dtadr;   /**< File load address */
-	WORD                      fib_exadr;   /**< File exec address */
-	BYTE  fib_sword_name[SOS_FNAME_LEN];   /**< the file name in Sword */
-	unsigned char        *fib_unix_name;   /**< unix file name    */
+	sos_devltr                       ch;  /**< Device letter     */
+	BYTE                       fib_attr;  /**< File attribute    */
+	BYTE                        fib_rec;  /**< Directory Entry Record No on a disk */
+	WORD                       fib_size;  /**< File size         */
+	WORD                      fib_dtadr;  /**< File load address */
+	WORD                      fib_exadr;  /**< File exec address */
+	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< the file name in Sword */
+	unsigned char        *fib_unix_name;  /**< unix file name    */
 };
 
 /** Position information

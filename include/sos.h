@@ -6,6 +6,7 @@
 #define	_SOS_H_
 
 #include "sim-type.h"
+#include "misc.h"
 
 /*
  * Sword control codes
@@ -161,14 +162,41 @@
 /*
  * Disk I/O
  */
-#define SOS_RECORD_SIZE         (256) /* Record (Sector) size in byte. */
-#define SOS_CLUSTER_SHIFT       (4)   /* 16 records per cluster  */
+#define SOS_RECORD_SIZE         (256) /**< Record (Sector) size in byte. */
+#define SOS_CLUSTER_SHIFT       (4)   /**< 16 records per cluster  */
 #define SOS_CLUSTER_SIZE        \
-	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /* Cluster size in byte. */
-#define SOS_DENTRY_SIZE         (32)  /* Directory entry size in byte . */
+	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /**< Cluster size in byte. */
+#define SOS_CLUSTER_RECS        \
+	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xffff ) ) ) /**< 16 records */
+#define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
-	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /* 8 file entries. */
+	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
 
+/** Convert from a cluster number to a record number
+    @param[in] _clsno The cluster number
+    @return The first record number of the cluster
+ */
+#define SOS_CLS2REC(_clsno) ((WORD)( ( ( ( _clsno ) & 0xff ) << SOS_CLUSTER_SHIFT ) \
+		& 0xffff ) )
+
+/** Convert from a record number to a cluster number
+    @param[in] _recno The record number
+    @return The cluster number
+ */
+#define SOS_REC2CLS(_recno) \
+	((BYTE)( ( ( _recno ) >> SOS_CLUSTER_SHIFT ) & 0xff ) )
+
+/*
+ * FAT Entries
+ */
+#define SOS_FAT_SIZE            SOS_RECORD_SIZE  /**< FAT record size */
+#define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
+#define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
+/** Calculate how many records are used in the cluster at the end of the file
+    @param[in] _ent The value of the file allocation table entry at the end of the file
+    @return The number of used records in the cluster at the end of the file
+ */
+#define SOS_FAT_END_CLS_RECS(_ent) ( ( (_ent) & 0xf ) + 1 )
 /*
  * Drive letters
  */
@@ -191,6 +219,8 @@
 #define SOS_FIB_OFF_SIZE  (18)  /**< File Size      */
 #define SOS_FIB_OFF_DTADR (20)  /**< Data Addr      */
 #define SOS_FIB_OFF_EXADR (22)  /**< File Size      */
+#define SOS_FIB_OFF_DATE  (24)  /**< Date info      */
+#define SOS_FIB_SIZE      (32)  /**< Size of File Information Block */
 
 /*
  * Internal workarea

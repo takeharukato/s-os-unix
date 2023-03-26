@@ -14,8 +14,13 @@
 
 #include "sim-type.h"
 
+#if !defined(FALSE)
 #define FALSE    (!!0)
+#endif  /*  !FALSE  */
+
+#if !defined(TRUE)
 #define TRUE     ( !FALSE )
+#endif  /* !TRUE */
 
 /** assert for S-OS on UNIX
    @param[in] cond the condition must be TRUE.
@@ -36,20 +41,18 @@
 		abort();						\
 	}while(0)
 
-/** Calc aligned address
+/** Calc aligned z80 address
     @param[in] _val   The value to align
     @param[in] _align Alignment
  */
-#define SOS_CALC_ALIGN(_val, _align)		\
-	( (WORD)(	( (WORD)(_val) & ~( ( (WORD)(_align) ) - 1 ) ) \
-	    & ( (WORD)(~((WORD)0)) ) ) )
-
-/** Calc next aligned address
+#define SOS_CALC_ALIGN_Z80_WORD(_val, _align)		\
+	( (WORD)( ( (_val) & ~( (_align) - 1 ) )  & 0xffff ) )
+/** Calc next aligned z80 address
     @param[in] _val   The value to align
     @param[in] _align Alignment
  */
-#define CALC_NEXT_ALIGN(_val, _align)		\
-	SOS_CALC_ALIGN(( (_val) + ( (_align) - 1 ) ), _align)
+#define CALC_NEXT_ALIGN_Z80_WORD(_val, _align)		\
+	SOS_CALC_ALIGN_Z80_WORD(( (_val) + ( (_align) - 1 ) ), _align)
 int check_file_exists(const char *_path, int _flags);
 int ascii_to_int(const char *_numstr, int *_vp);
 const char *refer_file_extention(const char *_fname);

@@ -1,0 +1,268 @@
+DSAVE(0x265C)
+新たにクラスタを割り当ててディスクにファイルをセーブする
+おそらく前もって先頭のクラスタ番号を覚えておいて,
+成功時に既存のクラスタチェインを削除しているはず。
+
+
+入力:
+	DEBUF(0x27df)に操作対象ファイルのディレクトリエントリレコード番号が入っている
+	#SIZE  書込みサイズが入っている
+	#DTBUF 操作対象ファイルのディレクトリエントリレコードを読み込んだアドレス
+	       (#WOPENでそのように設定する?)
+
+内部ワークエリア:
+	DEBUF(0x27df)
+	HLBUF(0x27e1)
+
+破壊レジスタ: AF, BC, DE, HL
+保存レジスタ:
+フラグ:C = 0 A = 0 正常終了
+       C != 0 エラー
+            A = SOS_ERROR_IO(1) デバイスI/Oエラー
+            A = SOS_ERROR_OFFLINE(2) デバイスオフライン
+	    A = SOS_ERROR_BADR(5)    不正レコード
+	    A = SOS_ERROR_NOSPC(9)   デバイスに空き領域がない
+-- 擬似コード
+/*
+ *  fib->ch, fib->attr, fib->size, fib->dtadr, fib->exadrを設定して呼び出す
+ *  また以下のコードでは, fib->recにFile Information Block格納先レコードが
+ *  格納されていることを前提としている
+ */
+int
+disk_save(const struct _storage_fib *fib, const void *src){
+	int                         rc;
+	BYTE     dent[SOS_RECORD_SIZE];
+	BYTE         fat[SOS_FAT_SIZE];
+	BYTE                  free_cls;
+	BYTE                    *dentp;
+	BYTE                  need_cls;
+	size_t                 remains;
+	BYTE               wrt_cls_idx;
+	BYTE             first_cls_idx;
+	BYTE                       *sp;
+	WORD                     wrcnt;
+	BYTE               remain_recs;
+
+	/* 書込み対象ファイルのディレクトリエントリレコードを読み込む */
+	rc = fs_dent_record_read(fib, &dent[0]);
+	if ( rc != 0 )
+		return rc;  /*  I/Oエラー, 不正レコード, デバイスオフライン */
+
+        /* 空きクラスタ数を取得する */
+	free_cls = fs_get_free_clusters(fib->ch);
+
+	/*
+	 * 書込みサイズ算出
+	 */
+	remains = CALC_NEXT_ALIGN_Z80_WORD(fib->fib_size & 0xffff, SOS_CLUSTER_SIZE);
+	need_cls = remains / SOS_CLUSTER_SIZE;  /* 必要クラスタ数 */
+	if ( need_cls > free_cls )
+		return SOS_ERROR_NOSPC; /* device full */
+
+	/*
+	 * 日付情報以降をクリアする
+	 */
+	dentp = (BYTE *)( (BYTE *)&dent[0] + SOS_FIB_OFF_DATE );
+	memset(dentp, 0x0, SOS_FIB_SIZE - SOS_FIB_OFF_DATE);
+
+	rc = fs_fat_read(&fat[0]); /*  FATをロード  */
+
+	/* 新規空きクラスタのインデクス取得(FCGET) */
+	rc = fs_find_new_cluster(fib->ch, &first_cls_idx);
+	sos_assert( rc == 0 );  /* 空きクラスタ数を事前に確認済みのはず */
+	wrt_cls_idx = first_cls_idx; /* 最初のクラスタのインデクスを操作対象に設定 */
+
+	/*
+	 * データを書込み
+	 */
+	for( sp = src; remains > 0; sp += SOS_CLUSTER_SIZE) {
+
+		/* 終了クラスタフラグを記録 */
+		fat[wrt_cls_idx] = SOS_FAT_ENT_EOF_MASK;
+
+		set_reg(HL, sp);  /* HLに最終書込み済みアドレスを反映 */
+		if ( SOS_CLUSTER_SIZE > remains ) {
+
+			/*
+			 * 最終クラスタの処理
+			 */
+			remain_recs =					\
+				CALC_NEXT_ALIGN_Z80_WORD(remains, SOS_RECORD_SIZE) \
+				/ SOS_RECORD_SIZE; /* 使用レコード数を算出 */
+			sos_assert( ( 0x10 >= remain_recs ) && ( remain_recs > 0 ) );
+			/* 最終クラスタのFATを更新 */
+			fat[wrt_cls_idx] = SOS_FAT_ENT_EOF_MASK|(remain_recs - 1);
+
+			rc = fs_fat_write(&fat[0]); /*  FATを更新  */
+
+			/* 書込み対象ファイルのディレクトリエントリレコードを更新 */
+			rc = fs_dent_record_write(fib, &dentp);
+			if ( rc != 0 )
+				goto error_out;
+		} else {
+
+			/*
+			 * 非最終クラスタの処理
+			 */
+
+			/* 新規空きクラスタのインデクス取得(FCGET) */
+			rc = fs_find_new_cluster(fib->ch, &wrt_cls_idx);
+			sos_assert( rc == 0);  /* 空きクラスタ数を事前に確認済みのはず */
+
+			fat[wrt_cls_idx] = wrt_cls_idx; /* クラスタチェインをつなぐ */
+
+			/*
+			 * メモリの内容を1クラスタ分書込み
+			 */
+			rc = storage_record_write(fib->ch, sp,
+			    SOS_CLS2REC(_clsno), SOS_CLUSTER_RECS, &wrcnt);
+			if ( rc != 0 )
+				goto error_out;
+			sos_assert( wrcnt == SOS_CLUSTER_RECS );
+		}
+	}
+
+	return  0;
+
+error_out:
+	return rc;
+}
+--
+
+DSAVE:
+	LD	DE, (DEBUF)
+	LD	HL, (HLBUF)
+	LD	BC, (#SIZE)
+
+	;;
+	;; データ長分空きクラスタがあることを確認する
+	;;
+	PUSH	BC
+	DEC	BC	; (オフセット0から書き込むので)書込み長を1減算
+	SRL	B	; 1レコード256バイトなので, サイズ長の上位バイト
+			; (Bの値)の値は必要レコード数を表す
+	SRL	B	; 1クラスタにつき16レコードなのでBを右に4ビットシフトして
+	SRL	B	; 16で割った数が必要クラスタ数-1になる
+	SRL	B	;
+	INC	B	; 最終クラスタ分を足す
+	CALL	FRECLU	; 空きクラスタ数を取得してAにセット
+	CP	B	; 空きクラスタ数 - 必要クラスタ数を算出
+	POP	BC	;
+	LD	A,9	; 空きクラスタ数 < 必要クラスタ数の場合は,
+	RET	C	; Aに9(Device Full)をセットして復帰
+	LD	HL,(#IBFAD)  ; File Informatio Block(FIB)のアドレスをロード
+
+	;;
+	;; FIBの日付以降を0クリア
+	;;
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	DE, $18      ; HL(FIB)のオフセット24バイト(0x18)のアドレス(日付の最初)を
+	ADD	HL, DE	     ; HLにロード
+	LD	E, L	     ; DEにHLをコピー
+	LD	D, H	     ;
+	INC	DE	     ;
+	LD	(HL),0	     ; HLが指しているアドレスの先頭(FIB日付の最初)を0にクリア
+	LD	BC,7	     ; コピー長(BC)をFIBの日付以降のバイト数(8)-1バイト(=7)に設定
+	LDIR		     ; HLから7バイトをDEにコピー(FIBの日付以降を0クリア)
+	POP	BC
+	POP	DE
+	POP	HL
+
+	;;
+	;; HL=HLBUF先頭アドレス
+	;; HLBUF[0x1e(30)]に空きクラスタのインデクス(0x00-0x7F)を格納
+	LD	A, $1E	;
+	ADD	A,L	;
+	LD	L,A	;
+	IF	C THEN	;
+		INC	H ;
+	ENDIF		  ;
+	CALL	FCGET	  ; 空きクラスタのインデクスを取得
+	LD	(HL),A	  ; 空きクラスタのインデクスをHLBUF[0x1e(30)]に保存
+	LD	HL, (#DTADR) ; HL
+
+DSAVE1:
+	;; Aに空きクラスタのインデクスが入っている
+	;; HL=書込み対象データの先頭アドレス
+
+	;;
+	;; DEに空きクラスタのレコード番号をロード
+	;;
+	PUSH	HL		;; HLを保存(書込み対象データアドレス)
+	LD	HL, (#FATBF)	;; HLにFATをロード
+	LD	E,A 		;; 空きクラスタインデクスをDEにロード
+	LD	D,0
+	ADD	HL,DE		;; HLに空きクラスタのFATのアドレスをロード
+	EX	DE, HL		;; DE=クラスタのFATのアドレス,HL=空きクラスタ番号
+	ADD	HL,HL		;; HLを16倍して最初のレコード番号を算出
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	EX	DE, HL		;; DE=空きクラスタレコード番号,HL=空きクラスタFATアドレス
+
+	;; DE=空きクラスタレコード番号
+	;; HL=空きクラスタFATアドレス
+	;; BC=セーブするメモリサイズ
+	DEC	BC		; セーブするメモリサイズをデクリメント
+	LD	A,B		; Aにセーブするレコード数をロード
+	INC	BC		; BC=セーブするメモリサイズ
+	CP	$10		; クラスタ当たりのレコード数と比較
+	JR	C, DSAVE3	; クラスタ当たりのレコード数>残セーブレコード数なら
+		   		; DSAVE3へ
+	LD	(HL),$80	; 終了クラスタフラグを一旦記録
+	CALL	FCGET		; Aに空きクラスタ番号を取得
+	LD	(HL),A		; 後続のクラスタをFATに記録し直す
+	POP	HL		; HLを書込み対象データアドレスに復元
+	PUSH	AF		; AFを保存
+	LD	A,$10		; 1クラスタ分書込み
+	CALL	DSKWRT		; ディスクにデータを書き込み
+	JR	C,DSAVE2 ;Disk Error ; エラー時はDSAVE2にジャンプ
+	LD	DE,$1000        ; DE=クラスタサイズ(4096)
+	ADD	HL, DE		; 書込み対象データアドレスを1クラスタ分加算
+	PUSH	HL  		; HLを保存
+	LD	L,C		; HLにBC（残セーブサイズ )をコピー
+	LD 	H,B		;
+	OR	A		; キャリーをクリア
+	SBC	HL,DE		; 残セーブサイズを1クラスタサイズ分減算
+	LD	C,L		; BCに残セーブサイズをコピー
+	LD	B,H		;
+	POP 	HL		; HLに書込み対象データアドレスをロード
+	POP	AF		; AFを復元
+	JR	DSAVE1		; 次のクラスタのセーブへ
+DSAVE2:	; ディスクエラー処理
+	POP	HL		; HLに書込み対象データアドレスをロード
+	RET
+
+DSAVE3:	; 最終クラスタの処理
+	;; A=残セーブレコード数
+	;; DE=空きクラスタレコード番号
+	;; HL=空きクラスタFATアドレス
+	;; BC=セーブするメモリサイズ
+	INC	A	; 残セーブレコード数をインクリメント
+	PUSH	AF	; AFを保存
+	ADD	A,$7F	; 最終クラスタの使用レコード数を設定
+	LD	(HL),A	; 空きクラスタFATアドレスに最終クラスタの使用レコード数を記録
+	POP	AF	; AFを復元
+	POP	HL	; HLに書込み対象データアドレスをロード
+	CALL	DSKWRT	; 最終クラスタの内容を保存
+	RET	C	; Disk error
+	CALL	FATWRT	; 更新したFATの内容を保存
+	RET	C	; Disk error
+
+	;;
+	;; ディレクトリエントリ情報の更新
+	;;
+	LD	HL,(#IBFAD)	;; FIBのアドレスをHLにロード
+	LD	DE,(HLBUF)	;; HLBUFの先頭アドレスをDEにロード
+	;; コメント INC DE
+	LD	BC,$20		; FIB長(32バイト)
+	LDIR			; FIBの内容をDEが指すアドレス(HLBUF)にコピー
+	LD	HL, (#DTBUF)	; #DTBUF(ディレクトリエントリキャッシュの先頭)をロード
+	LD	DE, (DEBUF)	; DEBUFにディレクトリエントリのレコード番号が入っている
+	LD	A,1 		; 1レコード書込み
+	CALL	DSKWRT 		; Directory write
+	RET	C      		; Disk error
+	XOR	A		; 正常復帰
+	RET

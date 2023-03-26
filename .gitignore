@@ -81,3 +81,4 @@ sos
 *.2d
 confdefs.h
 *.log
+objs/
