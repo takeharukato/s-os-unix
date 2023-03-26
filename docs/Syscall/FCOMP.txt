@@ -1,0 +1,28 @@
+FCOMP(0x27CD)
+
+ファイル名(16文字)を比較する
+入力: DE 比較する文字列(#IFBAD内のファイル名部分の先頭アドレス)
+      HL 比較対象ディレクトリエントリデータのファイル名部分の先頭アドレス
+
+破壊レジスタ: AF
+保存レジスタ: BC, DE, HL
+フラグ:C 比較する文字列(#IFBAD内のファイル名部分の先頭アドレス)の方が小さい
+       Z 比較する文字列(#IFBAD内のファイル名部分の先頭アドレス)の方と等しい
+       NC: 比較する文字列(#IFBAD内のファイル名部分の先頭アドレス)が
+       	   比較対象ディレクトリエントリ以上
+
+FCOMP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	B, 16	; 比較文字列長
+FCOMP1:
+	LD	A, (DE)
+	CP	(HL)
+	JR	NZ, FCOMP2
+	DJNZ	FCOMP1
+FCOMP2:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET

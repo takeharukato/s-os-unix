@@ -1,0 +1,143 @@
+FATRED(0x2700)
+DEにFATのセクタ
+HLにFAT読み込み先アドレス
+Aにレコードカウント(1)を入れてディスクに書き込む
+AFにはDSKREDの結果が返る
+
+FATRED:
+	PUSH DE
+	PUSH HL
+	LD   DE,(#FATPS)
+	LD   HL,(#FATBF)
+	LD   A, 1
+	CALL DSKRED
+	POP HL
+	POP DE
+	RET
+
+
+FATWRT(0x2710)
+DEにFATのセクタ
+HLにFAT読み込み先アドレス
+Aにレコードカウント(1)を入れてディスクに書き込む
+AFにはDSKWRTの結果が返る
+FATWRT:
+	PUSH DE
+	PUSH HL
+	LD   DE,(#FATPS)
+	LD   HL,(#FATBF)
+	LD   A, 1
+	CALL DSKWRT
+	POP HL
+	POP DE
+	RET
+
+DSKRED(0x2544)
+
+引数
+	DE:読み取る先頭レコード番号
+	HL:読み込み先アドレス
+	A:読み取るレコード数
+
+
+AFを保存してDSKのユニット番号(A-Dを0-3にマップ下番号)を
+UNITNOに入れてDREADを呼ぶ, DREADのフラグと返り値(Aレジスタ)が
+返る(IOエラー(1), 不正レコード(5)を返せば良いはず)
+
+DSKRED:
+	EX	AF,AF'
+	LD	A,(#DSK)
+	CALL    ALCHK
+	RET	C
+	CALL	DSKCHK
+	RET	C
+	SUB	"A"
+	LD	(UNITNO),A
+	EX	AF,AF'
+	CALL	DREAD
+	RET
+
+DSKWRT(0x255A)
+
+引数
+	DE:読み取る先頭レコード番号
+	HL:読み込み先アドレス
+	A:読み取るレコード数
+
+AFを保存してDSKのユニット番号(A-Dを0-3にマップ下番号)を
+UNITNOに入れてDWRITEを呼ぶ, DWRITEのフラグと返り値(Aレジスタ)が
+返る(IOエラー(1), 不正レコード(5), 書込禁止(4)を返せば良いはず)
+
+DSKWRT:
+	EX	AF,AF'
+	LD	A,(#DSK)
+	CALL    ALCHK
+	RET	C
+	CALL    DSKCHK
+	RET	C
+	SUB	"A"
+	LD	(UNITNO),A
+	EX	AF,AF'
+	CALL	DWRITE
+	RET
+
+DSKCHK(0x2591)
+#DSKが'A'-'D'でなければ, 11(Reserved feature)を返して
+エラー復帰する。正常時はAレジスタの内容は破壊しない
+DSKCHK:
+	CP	"A"
+	JR	C,DSKCH1
+	CP	"D"+1
+	CFF
+	RET	NC
+DSKCH1:
+	LD	A,11 ; Reserved feature
+	RET
+
+ALCHK(0x259C)
+ドライブレターが標準ディスクであることを確認する
+
+DEVCHKでドライブレターの正当性を確認, エラー時は返されたエラーを返す
+TPCHKでテープデバイスであるかを確認, テープの場合0復帰(Zフラグが立って復帰)
+するため, テープだった場合は, 3(Bad file descriptor)を返す
+
+ALCHK:
+	CALL DEVCHK
+	RET  C
+	CALL TPCHK
+	IF Z THEN
+	LD   A,3 ; Bad file descriptor
+	SCF
+	RET
+	ELSE
+	CALL DSKCHK
+	RET
+
+DEVCHK(0x2851)
+ドライブレターが正しいこと('A'から'L')を確認し,
+正しければNCで復帰, ドライブレターの範囲に無ければ
+Aに3(Bad file descriptor), Cフラグをセットして復帰
+DEVCHK:
+	CALL TPCHK
+	RET  Z
+	CP   "A"
+	JR   C,DEVCH1
+	CP   "L"+1
+	CCF
+	IF NC THEN
+	OR A
+	RET
+	ELSE
+DEVCH1:
+	LD	A,3 ;Bad file descriptor
+	RET
+
+TPCHK(0x2863)
+	テープのドライブレターの場合Zフラグを立てて戻る
+TPCHK:
+	CP  "T"
+	RET Z
+	CP  "S"
+	RET Z
+	CP  "Q"
+	RET Z

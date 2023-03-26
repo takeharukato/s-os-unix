@@ -108,6 +108,14 @@ struct _storage_disk_image{
 	void                    *di_private; /**< Private information for the device */
 };
 
+/** Directory entry structure
+ */
+struct _sword_dirent{
+       sos_devltr ch;  /**< The device letter */
+       WORD    dirps;  /**< The start of the directory entry record */
+       WORD      cur;  /**< The number of current directory entry */
+};
+
 /** Disk image operations
  */
 struct _storage_di_ops{

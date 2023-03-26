@@ -1,0 +1,30 @@
+FRECLU(0x2721)
+
+空きクラスタ数を計算する。
+
+破壊レジスタ:AF
+保存レジスタ:BC,DE,HL
+返り値: A 空きクラスタ数
+
+FRECLU:
+	PUSH BC
+	PUSH HL
+
+	LD	B, $80	    ; 総クラスタ数(128クラスタ)分調査する
+	LD   	C, 0	    ; 空きクラスタ数カウンタ
+	LD   	HL,(#FATBF) ; FATBFのアドレスを取得
+
+FRECL1:
+	LD	A, (HL)	  ; FATの内容をAにロード
+	OR	A         ; キャリークリア
+	JR	NZ,FRECL2 ; 0x00(空きクラスタ)で無ければ加算しない
+	INC	C   	  ; 空きクラスタ数を加算
+
+FRECL2:
+	INC	HL	  ; 次のクラスタを参照
+	DJNZ		  ; 128クラスタ調査するまで繰り返す
+	LD	A, C	  ; 空きクラスタ数をAにロード
+
+	POP	HL
+	POP	BC
+	RET

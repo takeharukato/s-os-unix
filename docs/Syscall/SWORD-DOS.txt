@@ -1,0 +1,104 @@
+HOT(0x2100)
+
+SWORDのコマンドライン処理部.
+スタックを#STKADから読み込んで初期化, プリンタをOFFにしてから
+プロンプト'#'を表示して, #KBFADで指定されたキーボードバッファへ
+行文字列入力(#GETL)を行う.
+入力結果をDEレジスタを通してコマンドライン解析部(MCOM)に引き渡す。
+エラーがあった場合はエラーメッセージを表示して, 同じ処理を繰り返す。
+
+HOT:
+	LD	SP,(#STKAD)
+	CALL	#LPTOF
+	LD	A,"#"
+	CALL	#PRINT
+	LD	DE,(#KBFAD)
+	CALL	#GETL
+	CALL	MCOM
+	CALL	C,#ERROR
+	JR 	HOT
+
+MCOM(0x211B)
+行読み込みバッファ内の#の後1文字をコマンド文字と見なしAレジスタにセットして
+コマンド文字の次の文字のアドレスをDEにセットして, コマンド処理用のサブルーチン
+にジャンプ(各サブルーチン内のRETでHOTに復帰).
+
+'S'と'D'はそれぞれ後続のコマンド文字を持つためCMDSB1, CMDSB2を呼ぶ形になっている。
+
+* 'S'  'S' (SAVE) と 'ST'(SET/RESET, ライトプロテクト操作)
+* 'D'  'D' (DIR) と 'DV' (デフォルトデバイス変更)
+
+
+MCOM:
+	LD	A,(DE)
+	IF	A<>"#"
+		OR A
+		RET
+	ENDIF
+	INC	DE
+	LD	A,(DE)
+	INC	DE
+	OR	A
+	RET	Z
+	IF	A="!"
+		JP	#BOOT
+	ENDIF
+	IF	A="J"
+		JP	JUMP
+	ENDIF
+	IF	A="L"
+		JP	LOAD
+	ENDIF
+	IF	A="K"
+		JP	MKILL
+	ENDIF
+	IF	A="N"
+		JP	MNAME
+	ENDIF
+	IF	A="M"
+		JP	MON
+	ENDIF
+	IF	A="W"
+		JP	MWIDTH
+	ENDIF
+	IF	A="S"
+		JP	CMDSB1
+	ENDIF
+	IF	A="D"
+		JP	CMDSB2
+	ENDIF
+	LD	A,13	; Syntax Error
+	SCF
+	RET
+
+CMDSB1(0x2156)
+S/STコマンド処理部
+
+'S', 'ST'のいずれかを切り分け, コマンド文字の直後のアドレスを
+DEにセットして, MSET(STコマンド処理部), SAVE(Sコマンド処理部を呼び出す)
+
+CMDSB1:
+	LD A,(DE)
+	CALL TOUPER
+	INC  DE
+	IF   A="T"
+	     JP MSET
+	ENDIF
+	DEC  DE
+	JP   SAVE
+
+CMDSB2(0x2164)
+D/DVコマンド処理部
+
+'S', 'ST'のいずれかを切り分け, コマンド文字の直後のアドレスを
+DEにセットして, MSET(STコマンド処理部), SAVE(Sコマンド処理部を呼び出す)
+
+CMDSB2:
+	LD A,(DE)
+	CALL TOUPER
+	INC  DE
+	IF   A="V"
+	     JP DEVST
+	ENDIF
+	DEC  DE
+	JP   MDIR

@@ -80,3 +80,4 @@ install-sh
 sos
 *.2d
 confdefs.h
+*.log

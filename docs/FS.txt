@@ -1,0 +1,37 @@
+
+
+## IF
+#define FS_GETBLK_RD (0)  /**< Get block for read */
+#define FS_GETBLK_WR (1)  /**< Get block for write */
+
+#define FS_SWORD_BLK_SIZ  (SOS_CLUSTER_SIZE)
+
+[1] クラスタ単位での読み書き
+int fs_getblk(WORD blkno, BYTE buf, BYTE len){
+}
+int fs_putblk(WORD blkno, BYTE buf, BYTE len){
+}
+[2] ディレクトリ操作(優先度低, ディレクトリエントリをread/writeすればいいので)
+struct _sword_dirent{
+       sos_devltr ch;  /**< The device letter */
+       WORD    dirps;  /**< The start of the directory entry record */
+       WORD      cur;  /**< The number of current directory entry */
+};
+
+int
+fs_opendir(const sos_devltr _ch, const struct _sword_dirent *ent)
+
+int
+fs_closedir(struct _sword_dirent *ent)
+
+[3] ファイル操作
+struct _sword_fd{
+       sos_devltr ch;  /**< The device letter */
+       WORD    dirps;  /**< The start record of the directory entry contains the file. */
+       WORD      pos;  /**< current file position */
+}
+int
+fs_openfile(const char *filepath, struct _sword_fd *ent )
+
+int
+fs_closefile

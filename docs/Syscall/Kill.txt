@@ -1,0 +1,72 @@
+KILL(0x2477)
+KILL:
+	LD A,(#DSK)
+	CALL ALCHK  ; 0x259c
+	RET C
+	CALL DSKCHK ; 0x2591
+	RET C
+
+	CALL FATRED  ; 0x26FF
+	RET C ; Disk Error(IOエラー?)
+	CALL FCBSCH  ; 0x276B ディレクトリエントリのサーチ 16エントリ/レコード
+	RET C ; Disk Error(IOエラー?)
+	LD  A,8 ;File Not Found
+	SCF
+	RET NZ  ; エラー時は復帰
+	LD  A,(HL) ; HLの中は?
+	CALL WPCHK
+	RET C ; Write Protected
+
+	LD  (HL),0
+	PUSH HL
+	LD BC, $1E ; 本来はFATPSを読まないといけないが即値で書かれている?
+	ADD HL, BC ;
+	LD  A,(HL) ; 最初のクラスタ番号?
+	POP HL
+	CALL ERAFAT ; イレース本体処理
+	RET C       ; Bad allocation table
+	LD  HL,(#DTBUF)
+	LD  A, 1
+	CALL DSKWRT ; FIBの書き戻しか?
+	CALL NC,FATWRT ; FIBの書き戻しに失敗していなければFATを書き戻す
+本体は, ERAFAT(0x274E)
+やっていることはFATの内容を読み込んで,
+
+最初のFATへのインデクスを引数(Aレジスタ)に取る
+Aレジスタを現在のFATインデクスと呼ぶ
+1. FATテーブルの現在のFATインデクス位置に書かれている値(次のインデクス)をレジスタにロード
+2-1. 次のインデクスが0x80以上なら3.最終クラスタの処理へ
+2-1. 次のインデクスが0x80より小さければ, FATテーブルの現在のFATインデクス位置に
+     書かれている値を消去
+2-2. 2-1.でレジスタにロードした値で現在のFATインデクスを更新(Aレジスタにセット)
+2-3. 1.へ
+3-1. 次のインデクスの値が0x90以上ならBad allocation table(7)をAにセットして復帰
+   最終クラスタフラグは0x80(最上位ビット), 最終クラスタ使用レコード数は
+   次のインデクスの下位4ビットの値+1(1-16)なので, 0x90以上ならクラスタ
+   使用数に異常があるということ)
+3-2.  次のインデクスの値が0x90未満なら、正常復帰(キャリーを落として復帰)
+?? 最終クラスタを消してないのでは?
+
+ERAFAT:
+	push de
+        push hl
+	ld de,(#FATBF) ; FAT読み込み先アドレス
+ERAFA1:
+	LD L,A
+	LD, H,0
+	ADD HL,DE  ; FATBFの先頭アドレス+現在のFATインデクスを算出
+	LD  A,(HL) ; 次のインデクスを(FATBFの先頭アドレス+現在のFATインデクスから)取得
+	LD  (HL),0 ; 現在のインデクスの値を0x00(未使用セクタの削除)
+	CP $80     ;
+	JR C,ERAFA1; 次のインデクスが0x80より小さい(有効クラスタ)ならERAFAへ
+	POP HL     ; 最終クラスタの処理, HLをスタックから復元
+	POP DE     ; 最終クラスタの処理, DEをスタックから復元
+	CP $90     ; 次のインデクス値(最終クラスタに書かれた値)が
+	            ;0x90(*最終クラスタの最大使用セクタ数(0xf)より使用セクタ数が1多い)
+	JR NC,ERAFA2 ; 以上ならFAT異常で復帰
+	XOR A     ;  正常復帰(A=0にして, かつ, キャリーを落とす)
+	RET
+ERAFA2:
+        LD A,7 ; Bad allocation table をエラーコードに返す
+	SCF    ; エラー復帰
+	RET

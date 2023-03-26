@@ -1,0 +1,32 @@
+FCGET(0x2736)
+
+空きクラスタポジション(FAT配列のインデクス)を計算する。
+破壊レジスタ:AF
+保存レジスタ:BC,DE,HL
+返り値: A 空きクラスタのインデクス(0x00-0x7F)
+
+FCGET:
+	PUSH	BC
+	PUSH	HL
+
+	LD	B, $80		; 総クラスタ数(128)分調査する
+	LD	HL, (#FATBF)	; FATBFのアドレスを取得
+
+FCGET2:
+	LD	A,(HL)		; FATの内容をAにロード
+	OR	A		; キャリーをクリア
+	JR	Z, FCGET3	; 空きクラスタ(0x00)を検出
+	INC	HL 		; 次のクラスタへ
+	DJNZ	FCGET2		; 128クラスタ分調査する
+	SCF			; キャリーをセット
+	JR	FCGET4		; 呼び出し元へ復帰
+
+FCGET3:				; 空きクラスタ検出時の処理
+	LD	A, $80		; 総クラスタ数
+	SUB	B  		; クラスタのインデクスを算出(総クラスタ-残調査クラスタ数)
+	OR	A		; キャリーをクリア
+
+FCGET4:
+	POP	HL
+	POP	BC
+	RET

@@ -1,0 +1,221 @@
+# DIOの見直し
+
+## 目的
+
+マウントされている仮想デバイスを統一的に扱えるようにdio.cを見直す
+
+## 現状のIF整理
+
+### 外部IF
+
+int dio_wopen(char *sosname, int attr, int dtadr, int size, int exadr)
+dio_wopen        1409 src/trap.c           if (r = dio_wopen((char *)ram + EM_IBFAD + 1, GetBYTE(EM_IBFAD),
+
+int dio_ropen(char *sosname, int *attr, int *dtadr, int *size, int *exadr, int conv)
+dio_ropen         351 src/sos.c            if (r = dio_ropen(name, &fattr, &fdtadr, &fsize, &fexadr, 0))
+     fileload()関数でホスト上のdosモジュールのロードに使用(FIXME:専用関数に置換え)
+dio_ropen        1179 src/trap.c           if (r = dio_ropen((char *)ram +EM_IBFAD +1, &attr, &addr, &len, &exaddr, 1)){
+dio_ropen        1367 src/trap.c           rc = dio_ropen((char *)ram +EM_FNAME, &attr, &addr, &len, &exaddr, 1);
+
+int dio_dopen(char *namebuf, int *attr, int *dtadr, int *size, int *exadr, int dirno)
+dio_dopen        1361 src/trap.c           rc = dio_dopen((char *)ram + EM_FNAME, &attr, &addr, &len, &exaddr,
+dio_dopen        1455 src/trap.c           while(dio_dopen(name, &attr, &addr, &len, &exaddr, dirno) == 0){
+
+int dio_wdd(unsigned char *buf, int len)
+dio_wdd          1424 src/trap.c           if (r = dio_wdd(ram + GetWORD(SOS_DTADR), GetWORD(SOS_SIZE))){
+
+int dio_rdd(unsigned char *buf, int len)
+dio_rdd           358 src/sos.c            return(dio_rdd(ram + addr, fsize));
+     fileload()関数でホスト上のdosモジュールのロードに使用(FIXME:専用関数に置換え)
+dio_rdd          1437 src/trap.c           if (r = dio_rdd(ram + GetWORD(SOS_DTADR), GetWORD(SOS_SIZE))){
+
+void dio_diclose(int diskno)
+dio_diclose       148 src/sos.c        		dio_diclose(n);
+アンマウント処理なのでメッセージ表示を含めて置換え(dio_diskも不要)
+```
+            if (dio_disk[n] != NULL){
+		    snprintf(lbuf, CCP_LINLIM,
+			"unmount <%s> as disk#%d\r",dio_disk[n],n);
+		scr_puts(lbuf);
+		dio_diclose(n);
+		free(dio_disk[n]);
+		dio_disk[n] = NULL;
+	    }
+```
+dio_diclose       169 src/sos.c        		dio_diclose(n);
+マウント処理なのでメッセージ表示を含めて置換え(dio_diskも不要)
+```
+else if (strcasecmp(np, "mount") == 0){
+	if ((np = strtok(NULL, " ")) == NULL){
+	    for (n=0; n<SOS_MAXIMAGEDRIVES; n++){
+		if (dio_disk[n] != NULL){
+			snprintf(lbuf, CCP_LINLIM,"disk#%d : %s\r", n, dio_disk[n]);
+		    scr_puts(lbuf);
+		} else {
+			snprintf(lbuf, CCP_LINLIM, "disk#%d : not mounted.\r", n);
+		    scr_puts(lbuf);
+		}
+	    }
+	    return(0);
+	}
+	n = atoi(np);
+	if (n < 0 || n >= SOS_MAXIMAGEDRIVES){
+	    scr_puts("bad drive number\r");
+	    return(0);
+	}
+	if ((np = strtok(NULL, " ")) == NULL){
+	    if (dio_disk[n] != NULL){
+		    snprintf(lbuf, CCP_LINLIM,
+			"unmount <%s> as disk#%d\r",dio_disk[n],n);
+		scr_puts(lbuf);
+		dio_diclose(n);
+		free(dio_disk[n]);
+		dio_disk[n] = NULL;
+	    } else {
+		    snprintf(lbuf, CCP_LINLIM, "disk#%d : not mounted.\r",n);
+		    scr_puts(lbuf);
+	    }
+	    return(0);
+	}
+
+	rc = check_file_exists(np, O_RDWR);
+	if ( rc == 0 ) {
+
+		ref = strdup(np);
+		if ( ref == NULL ){
+
+			scr_puts(strerror(errno));
+			scr_nl();
+			return 0;
+		}
+
+		dio_diclose(n);
+		free(dio_disk[n]);
+		dio_disk[n] = ref;
+		snprintf(lbuf, CCP_LINLIM, "<%s> mounted as disk#%d\r", dio_disk[n],n);
+		scr_puts(lbuf);
+	} else {
+
+		snprintf(lbuf, CCP_LINLIM, "Can not open image file:%s \r", np);
+		scr_puts(lbuf);
+	}
+```
+int dio_dread(unsigned char *buf, int diskno, int recno, int numrec)
+dio_dread        1154 src/trap.c           r = dio_dread(ram + Z80_HL, (int) GetBYTE(SOS_UNITNO),
+
+int dio_dwrite(unsigned char *buf, int diskno, int recno, int numrec){
+dio_dwrite       1164 src/trap.c           r = dio_dwrite(ram + Z80_HL, (int) GetBYTE(SOS_UNITNO),
+
+### 内部IF
+char *dio_stou(char *_sosname);
+char *dio_utos(char *_unixname);
+FILE *dio_diopen(int diskno);
+
+## 機能仕様
+
+Swordのストレージデバイスの仮想イメージを管理するために以下の機能を実現する
+
+* ストレージデバイスマウント機能
+* ストレージデバイスアンマウント機能
+* ストレージデバイスのDIRNO/RETPOI設定/参照機能
+* DIRNOによるFile Information Block参照機能
+* DIRNOによるFile Information Block更新機能
+* シーケンシャルリード機能
+* シーケンシャルライト機能
+* 指定レコードの読取り機能
+* 指定レコードの書込み機能
+* SwordのバイナリファイルをZ80メモリにロードする機能(DOSモジュールのロード)
+
+ストレージデバイスのイメージファイルとして以下をサポートする。
+
+* mztテープデバイスイメージ
+* UNIXホストファイル(QDとして扱う)
+* 2Dベタディスクイメージ
+* 88Dディスクイメージ
+
+## 外部IF一覧
+
+|関数名|機能|
+|---|---|
+|storage_init|ストレージ管理情報を初期化する|
+|storage_mount_image|イメージファイルをマウントする|
+|storage_unmount_image|イメージファイルをアンマウントする|
+|storage_get_image_info|指定デバイスのイメージファイル情報を取得する|
+|storage_get_dirno|対象デバイスのDIRNOを取得する|
+|storage_get_retpoi|対象デバイスのRETPOIを取得する|
+|storage_set_dirno|対象デバイスのDIRNOを設定する|
+|storage_set_retpoi|対象デバイスのRETPOIを設定する|
+|storage_get_fib|指定されたDIRNOのFile Information Blockを参照する|
+|storage_set_fib|指定されたDIRNOのFile Information Blockを更新する|
+|storage_seq_read|指定されたホストメモリに現在のファイルポジションの内容を読み込む|
+|storage_seq_write|指定されたホストメモリの内容を現在のファイルポジションから書き込む|
+|storage_record_read|対象デバイスの指定レコードの内容を読み取りバッファに格納する|
+|storage_record_write|対象デバイスの指定レコードに指定されたバッファの内容を格納する|
+|storage_load_sword_binary|SwordのバイナリファイルをZ80メモリにロードする|
+
+## 内部IF
+
+* Swordのファイル名をUNIXのファイル名に変換する機能
+* UNIXのファイル名をSwordのファイル名に変換する機能
+* ファイルオフセット指定によるレコード読み取り機能
+* ファイルオフセット指定によるレコード書込み機能
+
+## 実装
+
+### データ構造
+
+#### ファイルインフォメーションブロック
+
+ファイルインフォメーションブロックをキャッシュするためのデータ構造
+
+struct _storage_fib{
+	BYTE                       attr;   /**< File attribute    */
+	BYTE                       pad1;   /**< padding           */
+	WORD                       size;   /**< File size         */
+	WORD                      dtadr;   /**< File load address */
+	WORD                      exadr;   /**< File exec address */
+	BYTE  sword_name[SOS_FNAME_LEN];   /**< the file name in Sword */
+	unsigned char        *unix_name;   /**< unix file name    */
+};
+
+#### ディスクイメージオペレーション構造体
+
+ディスクイメージに対する操作インターフェースを定義する。
+struct _storage_di_ops{
+	int (*mount_image)(const sos_devltr _dev, const char *_fname);
+	int (*umount_image)(const sos_devltr _dev);
+	int (*get_image_info)(const sos_devltr _dev, struct _storage_disk_image *_resp);
+	int (*get_fib)(const sos_devltr _dev, BYTE _dirno, struct _storage_fib *_resp);
+	int (*set_fib)(const sos_devltr _dev, BYTE _dirno, struct _storage_fib *_resp);
+	int (*seq_read)(const sos_devltr _dev, WORD _offset, BYTE *_dest,
+	    WORD _count, WORD *_newoffsetp);
+	int (*seq_write)(const sos_devltr _dev, WORD _offset, const BYTE *_src,
+	    WORD _count, WORD *_newoffsetp);
+	int (*record_read)(const sos_devltr _dev, BYTE *_dest, WORD _rec, WORD _count);
+	int (*record_write)(const sos_devltr _dev, const BYTE *_src, WORD _rec,
+	    WORD _count);
+};
+
+#### ディスクイメージ構造体
+
+ディスクイメージを管理するためのデータ構造
+
+struct _storage_disk_image{
+	sos_devltr              dev;   /**< Device letter of the device       */
+	BYTE                   type;   /**< Disk image type                   */
+	BYTE                  dirno;   /**< Current #DIRNO                    */
+	BYTE                 retpoi;   /**< Current RETPOI                    */
+	WORD                   fpos;   /**< File or device position           */
+	int                      fd;   /**< File descriptor of the image file */
+	char               *imgfile;   /**< File name of the image file       */
+	struct _storage_di_ops  *di_ops;   /**< Disk image operations             */
+};
+
+### IF関数
+
+ディスクイメージ操作を登録する
+int register_diskimage_operation(const int idx, const struct _storage_di_ops *const ops);
+ディスクイメージ操作の登録を解除する
+int unregister_diskimage_operation(const int idx);
+配列で管理するのをやめて, ファイル名を引き渡して拡張子を調査してマウントを試みさせる
+ようにすることで拡張性を担保すること

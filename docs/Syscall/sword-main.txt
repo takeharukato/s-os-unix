@@ -1,0 +1,28 @@
+COLD 1500
+PCOLD(0x1bf5)を呼んでワークエリアの初期化を行い,
+0x12b(エントリアドレス)にコールドスタートを設定する
+COLD:
+	CALL PCOLD
+	LD   ($012b),HL
+	LD   A,80
+	CALL @WIDCH	; BIOSを呼んで80桁モードに移行
+	LD   BC,$1000
+	XOR  A		; パレットクリア
+	OUT  (C),A	; パレットB(試験に出るX1第0章参照)
+	INC  B
+	OUT  (C),A	; パレットR(試験に出るX1第0章参照)
+	INC  B
+	OUT  (C),A	; パレットG(試験に出るX1第0章参照)
+	LD   (@CLKSW),A ; キーボードクリックON
+	LD   (#LPSW),A  ; プリンタ出力OFF
+	LD   (#DVSW),A  ; デフォルトデバイスをDriveAに設定
+	LD   (@PRCNT),A ; 改行後表示文字数を0にリセット
+	INC  A		; A=1にする
+	LD   (@KBFSW),A ; キーボードバッファ初期化(1に設定)
+	LD   (@REPSW),A ; キーリピート有効化
+	CALL @MPRNT
+	DB   $0C        ; 画面クリア
+	DM   "<<<<< S-OS SWORD >>>>> "  ; タイトル文字列表示
+	DW   $000D      ; 改行後文字列をターミネート
+	LD   HL,(#USR)  ; ユーザプログラムエントリ(Swordモニタ)に
+	JP   (HL)       ; ジャンプする
