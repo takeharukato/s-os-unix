@@ -12,16 +12,20 @@ FCBを検索する
 返り値:
 	フラグ値で終了時の状態を判定する
 	C=0, Z=0    一致するディレクトリエントリを見つけて正常終了
+	            HLに, ディレクトリエントリエントリを格納した#DTBUF
+		    の先頭アドレス
+		    DEに, ディレクトリエントリのレコード番号
+		    を設定して戻る
 	C=0, Z=1    一致するディレクトリエントリが見つからなかった
 	C=1         ディレクトリ探査中にエラーが発生した
 	            Aレジスタにエラーコードが設定される
 		    ディスクリード時(DSKRED)が返却するエラーコードが
 		    設定される
-
 --- 擬似コード
+int
+fs_sword_search_dent_low(sos_devltr ch, void **res_dent){
         BYTE attr;
 	BYTE *res = NULL;  /* 見つかったエントリ情報を参照する変数 */
-        save_regs(BC)
 
 	for(rec=#DIRPSで指定されたレコード番号; ; ++rec ) {
 
@@ -60,15 +64,15 @@ FCBを検索する
 		      */
 		    if ( !memcmp(#DTBUF+ (ディレクトリエントリ長(32) * i) + 1,
 		       	 #IFBAD + 1, 16) ) {
-			 *ret_dent = res;  /* 呼び出し元に見つかったエントリを返却 */
+			 *res_dent = res;  /* 呼び出し元に見つかったエントリを返却 */
 		       	 goto out;
 		    }
 	    }
        }
 
 out:
-	restore_regs(BC)
 	return rc;
+}
 --- 擬似コード
 
 

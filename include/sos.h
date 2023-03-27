@@ -165,7 +165,7 @@
 #define SOS_RECORD_SIZE         (256) /**< Record (Sector) size in byte. */
 #define SOS_CLUSTER_SHIFT       (4)   /**< 16 records per cluster  */
 #define SOS_CLUSTER_SIZE        \
-	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /**< Cluster size in byte. */
+	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /**< Cluster size in byte (4096). */
 #define SOS_CLUSTER_RECS        \
 	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xffff ) ) ) /**< 16 records */
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
@@ -192,6 +192,14 @@
 #define SOS_FAT_SIZE            SOS_RECORD_SIZE  /**< FAT record size */
 #define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
 #define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
+
+/** Determine whether the cluster is the cluster at the end of file.
+    @param[in] _nxt_cls the next cluster number of the cluster to examine
+    @retval TRUE   The cluster is placed at the end of file.
+    @retval FALSE  The cluster is NOT placed at the end of file.
+ */
+#define SOS_IS_END_CLS(_nxt_cls) ( (_nxt_cls) & SOS_FAT_ENT_EOF_MASK )
+
 /** Calculate how many records are used in the cluster at the end of the file
     @param[in] _ent The value of the file allocation table entry at the end of the file
     @return The number of used records in the cluster at the end of the file
@@ -211,6 +219,14 @@
 #define SOS_DL_MON_CMT   ('S')
 #define SOS_DL_QD        ('Q')
 #define SOS_DEVICES_NR   (15)
+
+/*
+ * Tape device switch
+ */
+#define SOS_TAPE_DVSW_COM  (0)  /**< Common format tape */
+#define SOS_TAPE_DVSW_MON  (1)  /**< Monitor format tape */
+#define SOS_TAPE_DVSW_QD   (3)  /**< Quick disk */
+
 /*
  * SOS File Information Block/Directory Entry offset addresses in EM_IBFAD
  */
@@ -220,6 +236,7 @@
 #define SOS_FIB_OFF_DTADR (20)  /**< Data Addr      */
 #define SOS_FIB_OFF_EXADR (22)  /**< File Size      */
 #define SOS_FIB_OFF_DATE  (24)  /**< Date info      */
+#define SOS_FIB_OFF_CLS   (30)  /**< The first cluster number of the file */
 #define SOS_FIB_SIZE      (32)  /**< Size of File Information Block */
 
 /*

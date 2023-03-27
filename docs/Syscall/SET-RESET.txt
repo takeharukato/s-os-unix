@@ -1,0 +1,142 @@
+SET(0x2508)
+
+-- 擬似コード
+/** Make the file readonly
+    @param[in] ch  The device letter of the device.
+    @retval    0   success
+    @retval    SOS_ERROR_BADF CH is not a valid device letter or the device is a tape.
+    @retval    SOS_ERROR_RESERVED CH points a reserved device.
+ */
+int
+set_protection(sos_devltr ch, const struct _storage_fib *fib){
+	int rc;
+	void *res;
+	struct _storage_fib new;
+
+	rc = storage_alchk(ch);  /* Check the device letter */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = storage_dskchk(ch); /* Check the device is a disk */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = fs_dent_search(ch, fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	memmove(&new, fib, sizeof(struct _storage_fib));
+
+	new.fib_attr |= SOS_FATTR_RONLY;  /* set write protect bit */
+
+	rc = fs_dent_write(ch, &new);  /* write back new file information block */
+	if ( rc != 0 )
+		goto error_out;
+
+error_out:
+	return rc;
+}
+--
+
+SET:
+	LD	A,(#DSK)
+	CALL	ALCHK
+	RET	C
+	CALL	DSKCHK
+	RET	C
+
+	CALL	FCBSH	; #IFBADに格納されているファイル名をキーにファイルを検索する
+	RET	C	; Disk error
+	LD	A,8	; File not found
+	SCF
+	RET	NZ	; 見つからなかった場合, File not foundを返してエラー復帰
+
+	;; HL 見つかったファイルのディレクトリエントリエントリを格納した
+	;; #DTBUFの先頭アドレス
+
+	;;
+	;; ライトプロテクトをセットする
+	;;
+	SET	6, (HL)		    ; 6ビット目 (0x40)をセットする
+	LD	HL,(#DTBUF)	    ; HLに更新したディレクトリエントリのアドレスをロード
+	LD	A,1		    ; 1レコード
+	;;  HL 更新したディレクトリエントリのアドレス
+	;;  DE ディレクトリエントリのレコード番号
+	;;  A  書込みレコード数(1)
+	CALL	DSKWRT		    ; ディレクトリエントリを書き戻す
+	RET
+
+RESET(0x2526)
+
+#IFBADに格納されているファイル名と同一名称のファイルのライトプロテクトを解除する
+
+入力:
+
+出力:
+	A	デフォルトデバイスのドライブレター
+
+-- 擬似コード
+/** Make the file writable
+    @param[in] ch  The device letter of the device.
+    @retval    0   success
+    @retval    SOS_ERROR_BADF CH is not a valid device letter or the device is a tape.
+    @retval    SOS_ERROR_RESERVED CH points a reserved device.
+ */
+int
+reset_protection(sos_devltr ch, const struct _storage_fib *fib){
+	int rc;
+	void *res;
+	struct _storage_fib new;
+
+	rc = storage_alchk(ch); /* Check the device letter */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = storage_dskchk(ch); /* Check the device is a disk */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = fs_dent_search(ch, fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	memmove(&new, fib, sizeof(struct _storage_fib));
+
+	new.fib_attr &= ~SOS_FATTR_RONLY;  /* clear write protect bit */
+
+	rc = fs_dent_write(ch, &new);  /* write back new file information block */
+	if ( rc != 0 )
+		goto error_out;
+
+error_out:
+	return rc;
+}
+--
+
+RESET:
+	LD	A,(#DSK)
+	CALL	ALCHK
+	RET	C
+	CALL	DSKCHK
+	RET	C
+
+	CALL	FCBSH	; #IFBADに格納されているファイル名をキーにファイルを検索する
+	RET	C	; Disk error
+	LD	A,8	; File not found
+	SCF
+	RET	NZ	; 見つからなかった場合, File not foundを返してエラー復帰
+
+	;; HL 見つかったファイルのディレクトリエントリエントリを格納した
+	;; #DTBUFの先頭アドレス
+
+	;;
+	;; ライトプロテクトを解除する
+	;;
+	RES	6, (HL)		    ; 6ビット目 (0x40)をクリアする
+	LD	HL,(#DTBUF)	    ; HLに更新したディレクトリエントリのアドレスをロード
+	LD	A,1		    ; 1レコード
+	;;  HL 更新したディレクトリエントリのアドレス
+	;;  DE ディレクトリエントリのレコード番号
+	;;  A  書込みレコード数(1)
+	CALL	DSKWRT		    ; ディレクトリエントリを書き戻す
+	RET

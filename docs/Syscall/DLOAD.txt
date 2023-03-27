@@ -1,0 +1,205 @@
+DLOAD(0x25F5)
+ディスク中のファイル内容をメモリにロードする
+
+入力:
+	#IBFAD ロード対象ファイルのFile Information Block
+	#DTADR 転送先アドレス
+	#SIZE  転送サイズ
+
+内部ワークエリア:
+	NXCLST(0x27de) ロード対象クラスタ( (次に)ロードするクラスタのクラスタ番号 )
+
+破壊レジスタ: AF, BC, DE, HL
+保存レジスタ:
+フラグ:C = 0 A = 0 正常終了
+       C != 0 エラー
+            A = SOS_ERROR_IO(1) デバイスI/Oエラー
+            A = SOS_ERROR_OFFLINE(2) デバイスオフライン
+	    A = SOS_ERROR_BADR(5)    不正レコード
+	    A = SOS_ERROR_BADFAT(7)  不正なアロケーションテーブル
+
+-- 擬似コード
+int
+disk_load(const struct _storage_fib *fib, void *dest, size_t size){
+	int                             rc;
+	BYTE                      next_cls;
+	BYTE                           *dp;
+	WORD                         rdcnt;
+	BYTE                       cur_rec;
+	BYTE                   remain_recs;
+	BYTE             fat[SOS_FAT_SIZE];
+	BYTE    last_cls[SOS_CLUSTER_SIZE];
+
+	rc = fs_fat_read(&fat[0]); /*  FATをロード  */
+	if ( rc != 0 )
+		return rc;  /* FATロードエラー */
+
+	cur_rec = SOS_CLS2REC(fib->fib_cls); /* クラスタの先頭レコード番号取得 */
+
+	/*
+	 * クラスタの内容を順番に読み込む
+	 */
+	for(dp = dest, next_cls = fat[fib->fib_cls]; !SOS_IS_END_CLS(next_cls);
+	    next_cls = fat[next_cls], dp += SOS_CLUSTER_SIZE) {
+
+		if ( next_cls == SOS_FAT_ENT_FREE )  /* 途中で空きクラスタを見つけた */
+			goto error_out;  /* 不正クラスタチェイン */
+
+		/*
+		 * 1クラスタ分のデータをメモリに転送
+		 */
+		rc = storage_record_read(fib->ch, dp,
+		    cur_rec, SOS_CLUSTER_RECS, &rdcnt);
+		if ( rc != 0 )
+			goto error_out;
+		sos_assert( rdcnt == SOS_CLUSTER_RECS );
+		cur_rec = SOS_CLS2REC(next_cls); /* クラスタの先頭レコード番号取得 */
+	}
+
+	/*
+	 * 最終クラスタの処理
+	 */
+	remain_recs = SOS_FAT_END_CLS_RECS(next_cls);  /*  読み取りレコード数算出  */
+
+	/*
+	 * 最終クラスタの内容を使用レコード分一時バッファに読み込む
+	 */
+	rc = storage_record_read(fib->ch, &last_cls[0],
+	    cur_rec, remain_recs, &rdcnt);
+	if ( rc != 0 )
+		goto error_out;
+
+	sos_assert( rdcnt == remain_recs );
+
+	/* 指定サイズ分だけ転送先メモリにコピー */
+	memmove(dp, &last_cls[0], size - (size_t)(dp - dest));
+
+	return 0;
+
+error_out:
+	return rc;
+}
+--
+
+DLOAD:
+	LD	HL,(#IBFAD)		; File Information Block (FIB)のアドレスを取得
+	LD	BC, $1E			; FIB中のファイル開始クラスタ番号オフセット取得
+	ADD	HL, BC			; ファイル開始クラスタ番号のアドレス取得
+	LD	A, (HL)			; AにRecord no. (開始クラスタ番号)をロード
+	LD	(NXCLST),A		; ロード対象クラスタを開始クラスタ番号に設定
+	LD	BC,(#SIZE)		; BCに転送バイト数をロード
+	LD	HL,(#DTADR)		; HLに転送先アドレスをロード
+DLOAD1:
+	PUSH	HL			; HL(転送先アドレス)を保存
+	LD	A,(NXCLST)		; Aにロード対象クラスタをロード
+	LD	HL,(#FATBF)		; メモリ中にロードしたFATレコードのアドレスを取得
+	LD	E,A			; DEにロード対象クラスタをロード
+	LD	D,0			;
+	ADD	HL,DE			; ロード対象クラスタのFATエントリアドレス取得
+	LD	A,(HL)			; FATエントリ値(次のクラスタ)取得
+	LD	(NXCLST),A		; ロード対象クラスタを更新
+	EX	DE,HL			; HL=ロード対象クラスタ番号
+					; DE=ロード対象クラスタのFATエントリアドレス
+	ADD	HL,HL			; ロード対象クラスタの先頭レコード番号を算出
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	EX	DE,HL			; HL=ロード対象クラスタのFATエントリアドレス
+					; DE=ロード対象クラスタの先頭レコード
+	POP	HL			; HLに転送先アドレスをロード
+	OR	A			; キャリークリア
+	JR	Z,DLOAD2		; 次のロード対象クラスタに0が入っている場合
+	                                ; エラー処理(DLOAD2)へ
+	CP	$80			; 次のロード対象クラスタが0x80以上の場合
+	JR	NC,DLOAD3		; 最終クラスタの処理(DLOAD3)へ
+
+	LD	A,$10			; 1クラスタ分ロードする
+	;; HL 転送先アドレス
+	;; DE ロード対象クラスタの先頭レコード
+	;; A  転送レコード数( 16レコード ( = 1クラスタ) )
+	CALL	DSKRED	      		; クラスタの内容をメモリにロード
+	RET	C			; エラー復帰
+	LD	DE,$1000		; 1クラスタ分転送先アドレスを加算
+	ADD	HL,DE			; (1クラスタ=4096バイト)
+	PUSH	HL			; 転送先アドレスを保存
+	LD	L,C			; HLにBC(総転送サイズ)をロード
+	LD	H,B			;
+	OR	A			; キャリークリア
+	SBC	HL,DE			; 残転送サイズを減算
+	LD	C,L			; BCに更新後の残転送サイズをロード
+	LD	B,H			;
+	POP	HL			; HLに転送先アドレスをロード
+	JR	NC, DLOAD1		; 次のクラスタの転送処理へ
+
+	;;
+	;; Bad allocation table(7)を返してエラー復帰する
+	;;
+DLOAD2:
+	LD	A,7 ; Bad allocation table
+	SCF
+	RET
+
+	;;
+	;; 最終クラスタの処理
+	;;
+	;; A=残ロードレコード数
+	;; DE=ロード対象クラスタの先頭レコード
+	;; HL=転送先アドレス
+	;; BC=残転送サイズ
+DLOAD3:
+	SUB	$7F		; 最終クラスタの使用レコード数を算出
+	CP	$10+1		; 不正なアロケーションテーブルの場合(17レコード以上)
+	JR	NC,DLOAD2       ; エラー処理へ
+	DEC	A		; FATに記載された転送レコード数を算出
+	DEC	BC		; 残転送サイズから転送レコード数を算出
+	CP	B		; FATに記載された転送レコード数と残転送サイズから
+				; 算出したレコード数が合わなければ
+	JR	NZ,DLOAD2	; エラー処理へ(FATの記載値を不正と見なす)
+	LD	B,0		; レコード内の転送バイト数を算出
+	INC	BC		;
+	OR	A		; 最終レコードの場合
+	JR	Z,DLOAD4	; DLOAD4へ
+	PUSH	AF		; AFを保存
+	;; A=ロードレコード数
+	;; DE=ロード対象クラスタの先頭レコード
+	;; HL=転送先アドレス
+	CALL	DSKRED		; クラスタの内容をロード
+	JR	C,DLOAD5	; Diskエラー時は, (保存したAFをを捨てて)エラー復帰
+	POP	AF		; AFを復元
+
+	;;
+	;; 最終レコードの処理
+	;;
+	;; A=残ロードレコード数(0になっている)
+	;; DE=ロード対象クラスタの先頭レコード
+	;; HL=転送先アドレス
+	;; BC=残転送サイズ
+DLOAD4:
+	PUSH	DE		; DE(ロード対象クラスタの先頭レコード)を保存
+	LD	E,0		;
+	LD	D,A		;
+	ADD	HL,DE		; 最終転送先アドレスを算出
+	EX	(SP),HL		; 最終転送先アドレスをスタックに書込み
+				; HLにロード対象クラスタの先頭レコードをロード
+	LD	E,A		; DEを0に設定
+	LD	D,0		;
+	ADD	HL,DE		; HLにロード対象クラスタの先頭レコードをロード
+	EX	DE,HL		; DE=ロード対象クラスタの先頭レコードをロード
+				; HL=0
+	LD	HL,(#DTBUF)	; HLにデータバッファのアドレスをロード
+	LD	A,1		; 1レコード読み込み
+	;; A=ロードレコード数(1レコード)
+	;; DE=ロード対象クラスタの先頭レコード
+	;; HL=転送先アドレス(#DTBUFで指定されたデータバッファ)
+	CALL	DSKRED		; レコード読み込み
+DLOAD5:
+	POP	DE		; DEに最終転送先アドレスをロード
+	RET	C		; I/Oエラー時はエラー復帰
+
+	;; DE 最終転送先アドレス
+	;; HL 最終レコードをロードしたメモリアドレス
+	;; BC 残転送サイズ
+	LDIR			; 最終転送先アドレスに最終レコード内の有効データ部分を
+				; 転送
+	XOR	A		; キャリークリア
+	RET			; 正常復帰

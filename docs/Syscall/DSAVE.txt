@@ -5,6 +5,7 @@ DSAVE(0x265C)
 
 
 入力:
+	HLBUF(0x27e1)FIBが格納されている
 	DEBUF(0x27df)に操作対象ファイルのディレクトリエントリレコード番号が入っている
 	#SIZE  書込みサイズが入っている
 	#DTBUF 操作対象ファイルのディレクトリエントリレコードを読み込んだアドレス
@@ -60,12 +61,14 @@ disk_save(const struct _storage_fib *fib, const void *src){
 		return SOS_ERROR_NOSPC; /* device full */
 
 	/*
-	 * 日付情報以降をクリアする
+	 * 日付情報以降をクリアする(Swordはディスクのファイルの日付情報を常に0で保存する)
 	 */
 	dentp = (BYTE *)( (BYTE *)&dent[0] + SOS_FIB_OFF_DATE );
 	memset(dentp, 0x0, SOS_FIB_SIZE - SOS_FIB_OFF_DATE);
 
 	rc = fs_fat_read(&fat[0]); /*  FATをロード  */
+	if ( rc != 0 )
+	   return rc;
 
 	/* 新規空きクラスタのインデクス取得(FCGET) */
 	rc = fs_find_new_cluster(fib->ch, &first_cls_idx);
@@ -94,6 +97,8 @@ disk_save(const struct _storage_fib *fib, const void *src){
 			fat[wrt_cls_idx] = SOS_FAT_ENT_EOF_MASK|(remain_recs - 1);
 
 			rc = fs_fat_write(&fat[0]); /*  FATを更新  */
+			if ( rc != 0 )
+				goto error_out;
 
 			/* 書込み対象ファイルのディレクトリエントリレコードを更新 */
 			rc = fs_dent_record_write(fib, &dentp);
@@ -115,7 +120,7 @@ disk_save(const struct _storage_fib *fib, const void *src){
 			 * メモリの内容を1クラスタ分書込み
 			 */
 			rc = storage_record_write(fib->ch, sp,
-			    SOS_CLS2REC(_clsno), SOS_CLUSTER_RECS, &wrcnt);
+			    SOS_CLS2REC(wrt_cls_idx), SOS_CLUSTER_RECS, &wrcnt);
 			if ( rc != 0 )
 				goto error_out;
 			sos_assert( wrcnt == SOS_CLUSTER_RECS );
@@ -171,8 +176,10 @@ DSAVE:
 	POP	HL
 
 	;;
-	;; HL=HLBUF先頭アドレス
-	;; HLBUF[0x1e(30)]に空きクラスタのインデクス(0x00-0x7F)を格納
+	;; HL=HLBUF先頭アドレス(File Information Block)
+	;; HLBUF[0x1e(30)](ファイルの先頭クラスタ番号)に
+	;; 獲得した空きクラスタのインデクス(0x00-0x7F)を格納
+	;;
 	LD	A, $1E	;
 	ADD	A,L	;
 	LD	L,A	;

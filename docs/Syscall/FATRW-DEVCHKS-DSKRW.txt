@@ -1,9 +1,27 @@
 FATRED(0x2700)
 DEにFATのセクタ
 HLにFAT読み込み先アドレス
-Aにレコードカウント(1)を入れてディスクに書き込む
+Aにレコードカウント(1)を入れてディスクからFATレコードを読み込む
 AFにはDSKREDの結果が返る
+-- 擬似コード
+int
+fs_fat_read(sos_devltr ch, BYTE rec, void *fatbuf){
+	int rc;
+	WORD rdcnt;
 
+	rc = storage_record_read(ch, fatbuf,
+		    rec, SOS_FAT_SIZE/SOS_RECORD_SIZE, &rdcnt);
+
+	if ( rc != 0 )
+		return rc;
+
+	if ( rdcnt != SOS_FAT_SIZE/SOS_RECORD_SIZE )
+		return SOS_ERROR_IO;
+
+	return 0;
+}
+
+--
 FATRED:
 	PUSH DE
 	PUSH HL
@@ -21,6 +39,24 @@ DEにFATのセクタ
 HLにFAT読み込み先アドレス
 Aにレコードカウント(1)を入れてディスクに書き込む
 AFにはDSKWRTの結果が返る
+-- 擬似コード
+int
+fs_fat_write(sos_devltr ch, BYTE rec, const void *fatbuf){
+	int rc;
+	WORD wrcnt;
+
+	rc = storage_record_write(ch, fatbuf,
+		    rec, SOS_FAT_SIZE/SOS_RECORD_SIZE, &wrcnt);
+
+	if ( rc != 0 )
+		return rc;
+
+	if ( wrcnt != SOS_FAT_SIZE/SOS_RECORD_SIZE )
+		return SOS_ERROR_IO;
+
+	return 0;
+}
+--
 FATWRT:
 	PUSH DE
 	PUSH HL
@@ -40,10 +76,12 @@ DSKRED(0x2544)
 	A:読み取るレコード数
 
 
-AFを保存してDSKのユニット番号(A-Dを0-3にマップ下番号)を
+AFを保存してDSKのユニット番号(A-Dを0-3にマップした番号)を
 UNITNOに入れてDREADを呼ぶ, DREADのフラグと返り値(Aレジスタ)が
 返る(IOエラー(1), 不正レコード(5)を返せば良いはず)
-
+-- 擬似コード
+storage_record_read()参照
+--
 DSKRED:
 	EX	AF,AF'
 	LD	A,(#DSK)
@@ -64,10 +102,12 @@ DSKWRT(0x255A)
 	HL:書込み元アドレス
 	A:書込みレコード数
 
-AFを保存してDSKのユニット番号(A-Dを0-3にマップ下番号)を
+AFを保存してDSKのユニット番号(A-Dを0-3にマップした番号)を
 UNITNOに入れてDWRITEを呼ぶ, DWRITEのフラグと返り値(Aレジスタ)が
 返る(IOエラー(1), 不正レコード(5), 書込禁止(4)を返せば良いはず)
-
+-- 擬似コード
+storage_record_write()参照
+--
 DSKWRT:
 	EX	AF,AF'
 	LD	A,(#DSK)
@@ -84,11 +124,27 @@ DSKWRT:
 DSKCHK(0x2591)
 #DSKが'A'-'D'でなければ, 11(Reserved feature)を返して
 エラー復帰する。正常時はAレジスタの内容は破壊しない
+-- 擬似コード
+/** Determine whther the device is a standard disk.
+    @param[in] ch  The device letter of the device.
+    @retval    0   success
+    @retval    SOS_ERROR_RESERVED Reserved Feature
+ */
+int
+storage_dskchk(sos_devltr ch){
+	int rc;
+
+	if ( !STORAGE_DEVLTR_IS_STD_DISK(ch) )
+		return SOS_ERROR_RESERVED;  /* Reserved Feature */
+
+	return 0;
+}
+--
 DSKCHK:
 	CP	"A"
 	JR	C,DSKCH1
 	CP	"D"+1
-	CFF
+	CCF
 	RET	NC
 DSKCH1:
 	LD	A,11 ; Reserved feature
@@ -99,17 +155,43 @@ ALCHK(0x259C)
 
 DEVCHKでドライブレターの正当性を確認, エラー時は返されたエラーを返す
 TPCHKでテープデバイスであるかを確認, テープの場合0復帰(Zフラグが立って復帰)
-するため, テープだった場合は, 3(Bad file descriptor)を返す
+するため, テープだった場合は, 3(Bad file descriptor)を返してエラー復帰する
+(Cフラグをセットして復帰)。
 
+ドライブレターがディスクだった場合は, DSKCHKにより標準ドライブであることを
+確認する。標準ドライブでない場合は, 11(Reserved feature)を返してエラー復帰する
+(Cフラグをセットして復帰)。
+
+-- 擬似コード
+/** Determine whther the device is a valid disk drive.
+    @param[in] ch  The device letter of the device.
+    @retval    0   success
+    @retval    SOS_ERROR_BADF CH is not a valid device letter or the device is a tape.
+    @retval    SOS_ERROR_RESERVED CH points a reserved device.
+ */
+int
+storage_alchk(sos_devltr ch){
+	int rc;
+
+	rc = storage_devchk(ch);
+	if ( rc != 0 )
+		return rc;  /* Bad File Descriptor */
+
+	if ( STORAGE_DEVLTR_IS_TAPE(ch) )
+		return SOS_ERROR_BADF;  /* Bad File Descriptor */
+
+	return 	storage_dskchk(ch);
+}
+--
 ALCHK:
 	CALL DEVCHK
 	RET  C
 	CALL TPCHK
 	IF Z THEN
-	LD   A,3 ; Bad file descriptor
-	SCF
+		LD   A,3 ; Bad file descriptor
+		SCF
 	RET
-	ELSE
+	ENDIF
 	CALL DSKCHK
 	RET
 
@@ -117,6 +199,22 @@ DEVCHK(0x2851)
 ドライブレターが正しいこと('A'から'L')を確認し,
 正しければNCで復帰, ドライブレターの範囲に無ければ
 Aに3(Bad file descriptor), Cフラグをセットして復帰
+-- 擬似コード
+/** Determine whther the device is valid.
+    @param[in] ch  The device letter of the device.
+    @retval    0   success
+    @retval    SOS_ERROR_BADF Invalid device letter
+ */
+int
+storage_devchk(sos_devltr ch){
+	int rc;
+
+	if ( !STORAGE_DEVLTR_IS_VALID(ch) )
+		return SOS_ERROR_BADF;  /* Bad File Descriptor */
+
+	return 0;
+}
+--
 DEVCHK:
 	CALL TPCHK
 	RET  Z

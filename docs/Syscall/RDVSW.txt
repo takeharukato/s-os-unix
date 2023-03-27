@@ -1,0 +1,44 @@
+RDVSW(0x25ad)
+
+デフォルトデバイスを取得する
+
+入力:
+
+出力:
+	A	デフォルトデバイスのドライブレター
+
+内部ワークエリア:
+	%DFDV(0x2920)      切替先デバイスのドライブレター
+	#DVSW              ドライブまたはテープデバイス種別
+
+-- 擬似コード
+static sos_devltr default_device;
+static int             tape_dvsw;
+void
+read_default_device(void){
+
+	if ( STORAGE_DEVLTR_IS_TAPE(default_device) )
+		return default_device;
+
+	return STORAGE_DVSW2DEVLTR(tape_dvsw);
+}
+--
+
+RDVSW:
+	PUSH
+	LD	A, (%DFDV)	; デフォルトデバイスを取得
+	CALL	TPCHK		; テープデバイスの場合
+	LD	A, (#DVSW)	; テープデバイス種別を取得
+	;;
+	;; テープデバイス種別を元にデバイスレターを返却
+	;;
+	IF	A=0
+		LD	A,"T"
+	ENDIF
+	IF	A=1
+		LD	A,"S"
+	ENDIF
+	IF	A=3
+		LD	A,"Q"
+	ENDIF
+	RET

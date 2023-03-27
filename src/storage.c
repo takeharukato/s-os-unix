@@ -136,6 +136,7 @@ check_device_letter_common(const sos_devltr ch, int *idxp){
 out:
 	return rc;
 }
+
 /** Reset storage disk image information
     @param[out] inf storage disk image information
  */

@@ -38,6 +38,28 @@
 	    ( (_ch) == SOS_DL_MON_CMT ) || \
 	    ( (_ch) == SOS_DL_QD ) )
 
+/** Convert from a tape device letter to a tape device switch value
+    @param[in] _ch a device letter of a tape
+    @retval 0 Common tape device
+    @retval 1 Monitor tape device
+    @retval 3 Quick Disk tape device
+ */
+#define STORAGE_DEVLTR2DVSW(_ch)					\
+	( ( (_ch) == SOS_DL_COM_CMT ) ? ( SOS_TAPE_DVSW_COM ) :		\
+	    ( ( (_ch) == SOS_DL_COM_CMT ) ? ( SOS_TAPE_DVSW_MON ) :	\
+		SOS_TAPE_DVSW_QD) )
+
+/** Convert from a tape device switch value to a tape device letter
+    @param[in] _v  tape device switch value
+    @retval 'T' Common tape device
+    @retval 'S' Monitor tape device
+    @retval 'Q' Quick Disk tape device
+ */
+#define STORAGE_DVSW2DEVLTR(_v)						\
+	( ( (_v) == SOS_TAPE_DVSW_COM ) ? ( SOS_DL_COM_CMT ) :		\
+	    ( ( (_v) == SOS_TAPE_DVSW_MON ) ? ( SOS_DL_COM_CMT ) :	\
+		SOS_DL_QD ) )
+
 /** Determine whether the drive letter points to a standard disk device on SWORD
     @param[in] _ch a device letter
     @retval TRUE a device letter is a standard disk device on SWORD
@@ -61,6 +83,7 @@
     @param[in] _ch a device letter
     @retval TRUE a device letter is a device on SWORD
     @retval FALSE a device letter is NOT a device on SWORD
+    @remark This macro is the core function of DEVCHK
  */
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
@@ -75,10 +98,11 @@ struct _storage_di_ops;
 struct _storage_fib{
 	sos_devltr                       ch;  /**< Device letter     */
 	BYTE                       fib_attr;  /**< File attribute    */
-	BYTE                        fib_rec;  /**< Directory Entry Record No on a disk */
+	BYTE                   fib_dent_rec;  /**< Directory Entry Record No on a disk */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
 	WORD                      fib_exadr;  /**< File exec address */
+	WORD                        fib_cls;  /**< The first cluster on a disk */
 	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< the file name in Sword */
 	unsigned char        *fib_unix_name;  /**< unix file name    */
 };

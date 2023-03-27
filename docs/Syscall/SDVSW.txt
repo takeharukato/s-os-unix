@@ -1,0 +1,42 @@
+SDVSW(0x25c9)
+
+デフォルトデバイスを切り替える
+
+入力:
+	A	切替先デバイスのドライブレター
+出力:
+
+内部ワークエリア:
+	%DFDV(0x2920)      切替先デバイスのドライブレター
+	#DVSW              ドライブまたはテープデバイス種別
+
+-- 擬似コード
+static sos_devltr default_device;
+static int             tape_dvsw;
+void
+set_default_device(sos_devltr ch){
+
+	default_device = ch;
+	if ( STORAGE_DEVLTR_IS_TAPE(ch) )
+		tape_dvsw = STORAGE_DEVLTR2DVSW(ch);
+}
+--
+
+SDVSW:
+	PUSH	AF
+	LD	(%DFDV), A	; デフォルトデバイスを更新
+	;;
+	;; テープデバイス種別を更新
+	;;
+	IF	A="T"
+		XOR	A	; 標準テープ
+	ENDIF
+	IF	A="S"
+		LD	A,1	; モニタテープ
+	ENDIF
+	IF	A="Q"
+		LD	A,3	; Quick Disk
+	ENDIF
+	LD	(#DVSW), A	; デバイス種別を更新
+	POP	AF
+	RET
