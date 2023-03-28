@@ -88,6 +88,31 @@
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
+/** Fill the file information block
+    @param[in] _fib    The pointer to the file information block
+    @param[in] _dent   The directory entry to copy the FIB to
+ */
+#define STORAGE_FIB2DENT(_fib, _dent) do{				\
+		*(BYTE *)( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR ) =	\
+			((struct _storage_fib *)(_fib))->fib_attr;	\
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_SIZE ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_size); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_DTADR ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_dtadr); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_EXADR ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_exadr); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_CLS ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_cls); \
+		memcpy(( (BYTE *)(_dent) + SOS_FIB_OFF_FNAME ),		\
+		    &((struct _storage_fib *)(_fib))->fib_sword_name[0], \
+		    SOS_FNAME_LEN);					\
+		memset((BYTE *)( (BYTE *)(_dent) + SOS_FIB_OFF_DATE ), 0x0, \
+		    SOS_FIB_SIZE - SOS_FIB_OFF_DATE);			\
+	}while(0)
 
 /** Fill the file information block
     @param[in] _fib    The pointer to the file information block

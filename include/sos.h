@@ -172,7 +172,8 @@
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
-
+#define SOS_DENTRY_LEN         (SOS_CLUSTER_SIZE)  /**< Directory entry length */
+#define SOS_DENTRY_NR          (SOS_CLUSTER_SIZE / SOS_DENTRY_SIZE)  /**< The maximum number of directory entries */
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
 

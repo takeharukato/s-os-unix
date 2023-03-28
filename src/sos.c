@@ -55,7 +55,6 @@ WORD IFF;
 
 BYTE ram[EM_MEMAX + 1];		/* Z80 memory space */
 
-static char *progname;
 char	*dosfile = NULL;	/* common DOS image file */
 
 /* getopt declarations */
@@ -80,7 +79,7 @@ emu_quit(void){
 int
 ccpline(char *p, int mode){
     char lbuf[CCP_LINLIM];
-    char *np,*endp,c;
+    char *np,c;
     char *cp;
     char *ref;
     int  n;
@@ -351,10 +350,10 @@ free_homedir_out:
 int
 fileload(char *name, int addr){
     int		fattr, fdtadr, fexadr, fsize;
-    BYTE	*p;
     int		r;
 
-    if (r = dio_ropen(name, &fattr, &fdtadr, &fsize, &fexadr, 0))
+    r = dio_ropen(name, &fattr, &fdtadr, &fsize, &fexadr, 0);
+    if ( r != 0 )
 	return(r);
 
     if (addr < 0)
@@ -442,7 +441,6 @@ int
 main(int argc, char **argv)
 {
     int	                c;
-    int                rc;
     int	    loadaddr = -1;
     int     jumpaddr = -1;
     char *loadfile = NULL;
