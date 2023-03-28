@@ -208,6 +208,7 @@ register_storage_operation(struct _storage_manager *ops){
 error_out:
 	return rc;
 }
+
 /** Unregister a storage operation
     @param[in] name   The name of  the storage manager to unregister
     @retval    0      success

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 
 #include "storage.h"
@@ -35,6 +36,7 @@ main(int argc, char *argv[]){
 	int                          i;
 	BYTE              temp[BUFSIZ];
 	BYTE      rec[SOS_RECORD_SIZE];
+	BYTE     rec2[SOS_RECORD_SIZE];
 	BYTE swdname[SOS_FNAME_BUFSIZ];
 	WORD                       len;
 	unsigned char        *unixname;
@@ -132,6 +134,30 @@ main(int argc, char *argv[]){
 	rc = fs_unix2sword("q:01 3 5 7 9 b.a z", &swdname[0], SOS_FNAME_BUFSIZ);
 	print_sword_filename(&swdname[0]);
 	print_unix_filename(&swdname[0]);
+
+	rc = read_fat_sword('A', SOS_FATPOS_DEFAULT, &rec[0]);
+	sos_assert( rc == 0 );
+
+	rc = write_fat_sword('A', SOS_FATPOS_DEFAULT, &rec[0]);
+	sos_assert( rc == 0 );
+
+	rc = read_fat_sword('A', SOS_FATPOS_DEFAULT, &rec2[0]);
+	sos_assert( rc == 0 );
+
+	rc = memcmp(rec,rec2,SOS_RECORD_SIZE);
+	sos_assert( rc == 0 );
+
+	rc = storage_record_read('A', &rec[0], SOS_DIRPS_DEFAULT, 1, &len);
+	sos_assert( rc == 0 );
+	sos_assert( len == 1 );
+
+	rc = search_dent_sword('A', SOS_DIRPS_DEFAULT, "inside-r.obj", &fib);
+	sos_assert( rc == SOS_ERROR_NOENT );
+	rc = fs_unix2sword("cs84x1.bin", &swdname[0], SOS_FNAME_BUFSIZ);
+	sos_assert( rc == 0 );
+
+	rc = search_dent_sword('A', SOS_DIRPS_DEFAULT, &swdname[0], &fib);
+	sos_assert( rc == 0 );
 
 	return 0;
 }

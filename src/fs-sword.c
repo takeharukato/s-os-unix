@@ -31,7 +31,7 @@
     @retval EIO     I/O Error.
     @retval ENOMEM  Out of memory.
  */
-static int
+int
 read_fat_sword(sos_devltr ch, BYTE rec, void *fatbuf){
 	int     rc;
 	WORD rdcnt;
@@ -62,7 +62,7 @@ read_fat_sword(sos_devltr ch, BYTE rec, void *fatbuf){
     @retval EIO     I/O Error.
     @retval ENOMEM  Out of memory.
  */
-static int
+int
 write_fat_sword(sos_devltr ch, BYTE rec, const void *fatbuf){
 	int     rc;
 	WORD wrcnt;
@@ -83,11 +83,11 @@ write_fat_sword(sos_devltr ch, BYTE rec, const void *fatbuf){
     @param[in] ch    The drive letter
     @param[in] dirps The record number of the directory entry
     @param[in] swd_fname The file name in SWORD(NOT C String)
-    @param[out] fibp The file information block
+    @param[out] fib  The destination address of the file information block
  */
-static int
+int
 search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
-    struct _storage_fib *fibp){
+    struct _storage_fib *fib){
 	int                     rc;
 	int                      i;
 	BYTE                   rec;
@@ -99,18 +99,17 @@ search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
 	BYTE                 *dent;
 	BYTE  buf[SOS_RECORD_SIZE];
 
-	dent = &buf[0];
 	for(rec = dirps, dirno = 0; ; ++rec) {
 
 		/*
 		 * Read a directory entry
 		 */
-		rc = storage_record_read(ch, dent,
-		    rec, 1, &rdcnt);
-		if ( ( rc != 0 ) || ( rdcnt != SOS_RECORD_SIZE ) )
+		rc = storage_record_read(ch, &buf[0], rec, 1, &rdcnt);
+		if ( ( rc != 0 ) || ( rdcnt != 1 ) )
 			goto error_out;  /* I/O Error */
 
-		for(i = 0; SOS_DENTRIES_PER_REC > i ; ++i, ++dirno ) {
+		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
+		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
 
 			attr = *( dent + SOS_FIB_OFF_ATTR );
 			fname = ( dent + SOS_FIB_OFF_FNAME );
@@ -133,18 +132,7 @@ found:
 	/*
 	 * Fill the file information block
 	 */
-	fibp->ch = ch;
-	fibp->fib_dent_rec = rec;
-	fibp->fib_dirno = dirno;
-	fibp->fib_size = bswap_word_z80_to_host( *(WORD *)( dent + SOS_FIB_OFF_SIZE ) );
-	fibp->fib_dtadr =
-		bswap_word_z80_to_host( *(WORD *)( dent + SOS_FIB_OFF_DTADR ) );
-	fibp->fib_exadr =
-		bswap_word_z80_to_host( *(WORD *)( dent + SOS_FIB_OFF_EXADR ) );
-	fibp->fib_cls =							\
-		bswap_word_z80_to_host( *(WORD *)( dent + SOS_FIB_OFF_CLS ) );
-	memcpy(&fibp->fib_sword_name[0], fname, SOS_FNAME_NAMELEN);
-	fibp->fib_unix_name = NULL;
+	STORAGE_FILL_FIB(fib,ch,rec,dirno,dent);
 
 	return 0;
 

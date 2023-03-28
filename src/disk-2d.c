@@ -384,7 +384,7 @@ record_write_2dimg(const sos_devltr ch, const BYTE *src, const WORD rec,
 	/*
 	 * Seek record position
 	 */
-	pos = lseek(img->fd, SEEK_SET, rec * SOS_RECORD_SIZE);
+	pos = lseek(img->fd, rec * SOS_RECORD_SIZE, SEEK_SET);
 	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
 
 		rc = EIO;

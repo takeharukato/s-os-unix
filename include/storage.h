@@ -88,6 +88,36 @@
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
+
+/** Fill the file information block
+    @param[in] _fib    The pointer to the file information block
+    @param[in] _ch     The device letter
+    @param[in] _rec    The record number contains the file information block
+    @param[in] _dirno  The #DIRNO of the file from the beginning of the directory entry
+    @param[in] _dent   The directory entry to copy the FIB from
+ */
+#define STORAGE_FILL_FIB(_fib, _ch, _rec, _dirno, _dent) do{ \
+		((struct _storage_fib *)(_fib))->ch = (_ch);		\
+		((struct _storage_fib *)(_fib))->fib_attr =		\
+			*( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR );	\
+		((struct _storage_fib *)(_fib))->fib_dent_rec = (_rec);	\
+		((struct _storage_fib *)(_fib))->fib_dirno = (_dirno);	\
+		((struct _storage_fib *)(_fib))->fib_size =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_SIZE ) );			\
+		((struct _storage_fib *)(_fib))->fib_dtadr =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_DTADR ) );		\
+		((struct _storage_fib *)(_fib))->fib_exadr =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_EXADR ) );		\
+		((struct _storage_fib *)(_fib))->fib_cls =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_CLS ) );			\
+		memcpy(&((struct _storage_fib *)(_fib))->fib_sword_name[0], \
+		    ( (BYTE *)(_dent) + SOS_FIB_OFF_FNAME ), SOS_FNAME_LEN); \
+	}while(0)
+
 /*
  * Foward declaration
  */
@@ -105,7 +135,6 @@ struct _storage_fib{
 	WORD                      fib_exadr;  /**< File exec address */
 	WORD                        fib_cls;  /**< The first cluster on a disk */
 	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< SWORD file name (Not C string) */
-	unsigned char        *fib_unix_name;  /**< UNIX file name (might be NULL) */
 };
 
 /** Position information
