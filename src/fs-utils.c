@@ -86,7 +86,7 @@ fs_sword2unix(BYTE *swordname, unsigned char **destp){
 	if ( ext_len > 0 ) {
 
 		res[fname_len]='.';
-		memcpy(&res[fname_len + 1], &swordname[0], ext_len);
+		memcpy(&res[fname_len + 1], &swordname[SOS_FNAME_NAMELEN], ext_len);
 	}
 	res[bufsiz - 1] = '\0';  /* Terminate */
 
@@ -106,7 +106,7 @@ error_out:
     @retval     0         success
  */
 int
-fs_unix2sword(char *unixname, BYTE *dest, size_t size){
+fs_unix2sword(unsigned char *unixname, BYTE *dest, size_t size){
 	int                                i;
 	char                             *sp;
 	char                             *ep;
@@ -117,34 +117,41 @@ fs_unix2sword(char *unixname, BYTE *dest, size_t size){
 	/*
 	 * Skip drive letter
 	 */
-	sp = strchr(unixname,':');
-	while( *sp == ':' )
-		++sp;
-
+	sp = strchr(&unixname[0],':');
+	if ( sp != NULL )
+		while( *sp == ':' )
+			++sp;
+	else
+		sp = &unixname[0];
 	/* Fill spaces */
 	memset(&swd_name[0], SCR_SOS_SPC, SOS_FNAME_LEN);
-	swd_name[SOS_FNAME_LEN] = '\0'; /* just in case */
-
-	/* copy UNIX file name */
+	/*
+	 * Copy file name
+	 */
 	ep = strrchr(unixname,'.');
-	while( *ep == '.' )
-		++ep;  /* skip sequential dots */
+	if ( ep != NULL )
+		while( *ep == '.' )
+			++ep;  /* skip sequential dots */
 
 	if ( ep == NULL ) /* UNIX name has no extention. */
-		len = SOS_MIN(SOS_FNAME_NAMELEN, strlen(unixname) );
+		len = SOS_MIN(SOS_FNAME_NAMELEN, strlen(sp) );
 	else
-		len = SOS_MIN(SOS_FNAME_NAMELEN, ep - sp );
+		len = SOS_MIN(SOS_FNAME_NAMELEN, ep - sp - 1);
 	for( i = 0; len > i; ++i)
 		swd_name[i] = sp[i];  /* copy file name */
+
+	/*
+	 * Copy extention
+	 */
 	if ( ep != NULL ) { /* UNIX name has an extention. */
 
 		/* copy extention part */
 		len = SOS_MIN(SOS_FNAME_EXTLEN, strlen(ep) );
-		memcpy(&swd_name[SOS_FNAME_NAMELEN], ep + 1, len);
+		memcpy(&swd_name[SOS_FNAME_NAMELEN], ep, len);
 	}
 
 	/*
-	 * copy sword name
+	 * Copy sword name to the destination
 	 */
 	len = SOS_MIN(size, SOS_FNAME_LEN);
 	if ( dest != NULL )
@@ -161,11 +168,11 @@ fs_unix2sword(char *unixname, BYTE *dest, size_t size){
     @retval    positive   UNIX file name is grater than SWORD
  */
 int
-fs_compare_unix_and_sword(char *unixname, BYTE *sword, size_t len){
+fs_compare_unix_and_sword(unsigned char *unixname, BYTE *sword, size_t len){
 	size_t                    cmp_len;
 	BYTE  conv_name[SOS_FNAME_BUFSIZ];
 
-	cmp_len = SOS_MIN(SOS_FNAME_BUFSIZ, len);
+	cmp_len = SOS_MIN(SOS_FNAME_LEN, len);
 	fs_unix2sword(unixname, &conv_name[0], SOS_FNAME_BUFSIZ);
 
 	return memcmp(&conv_name[0], sword, cmp_len);

@@ -5,21 +5,46 @@
 #include "disk-2d.h"
 #include "sim-type.h"
 #include "misc.h"
+#include "fs-sword.h"
 
+void
+print_unix_filename(BYTE *name){
+	int rc;
+	unsigned char *unixname;
+
+	rc = fs_sword2unix(&name[0], &unixname);
+	printf("UNIX:%s\n", unixname);
+	free(unixname);
+}
+
+void
+print_sword_filename(BYTE *name){
+	int i;
+
+	printf("SWD :");
+	for(i=0;SOS_FNAME_LEN>i;++i)
+		putchar(name[i]);
+
+	puts("");
+
+	fflush(stdout);
+}
 int
 main(int argc, char *argv[]){
 	int                         rc;
 	int                          i;
 	BYTE              temp[BUFSIZ];
 	BYTE      rec[SOS_RECORD_SIZE];
+	BYTE swdname[SOS_FNAME_BUFSIZ];
 	WORD                       len;
+	unsigned char        *unixname;
 	struct _storage_disk_image img;
 	struct _storage_fib        fib;
 
 	storage_init();
 	storage_2dimg_init();
 
-	if ( 1 > argc )
+	if ( 2 > argc )
 		return 0;
 
 	rc = storage_mount_image('A', argv[1]);
@@ -59,5 +84,54 @@ main(int argc, char *argv[]){
 
 		sos_assert( len == 1 );
 	}
+
+	rc = fs_unix2sword("e-mate.obj", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("b:zeda.obj", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("q:readme", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("q:.git", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_compare_unix_and_sword(".git", &swdname[0], SOS_FNAME_BUFSIZ);
+	sos_assert( rc == 0 );
+
+	rc = fs_unix2sword("", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("q:", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("q:0123456789abcdef", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_compare_unix_and_sword("abcdef", &swdname[0], SOS_FNAME_BUFSIZ);
+	printf("abcdef vs 0123456789abcdef=%d\n", rc);
+	rc = fs_compare_unix_and_sword("q:0123456789abcdef",
+	    &swdname[0], SOS_FNAME_BUFSIZ);
+	printf("q:0123456789abcdef vs 0123456789abcdef=%d\n", rc);
+	rc = fs_compare_unix_and_sword("q:.0123456789abcdef",
+	    &swdname[0], SOS_FNAME_BUFSIZ);
+	printf("q:.0123456789abcdef vs 0123456789abcdef=%d\n", rc);
+
+	rc = fs_unix2sword("q:0123456789abcdef.", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
+	rc = fs_unix2sword("q:01 3 5 7 9 b.a z", &swdname[0], SOS_FNAME_BUFSIZ);
+	print_sword_filename(&swdname[0]);
+	print_unix_filename(&swdname[0]);
+
 	return 0;
 }
