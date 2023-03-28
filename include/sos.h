@@ -172,6 +172,10 @@
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
 
+#define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
+#define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
+
+
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number
     @return The first record number of the cluster
@@ -284,8 +288,8 @@
 #define	EM_MXTRK	(0x50)
 #define	EM_DTBUF	(0x2f00)
 #define	EM_FATBF	(0x2e00)
-#define	EM_DIRPS	(0x10)
-#define	EM_FATPOS	(0x0e)
+#define	EM_DIRPS	(SOS_DIRPS_DEFAULT)
+#define	EM_FATPOS	(SOS_FATPOS_DEFAULT)
 #define	EM_WIDTH	(0x50)
 #define	EM_MAXLN	(25)
 

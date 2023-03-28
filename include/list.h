@@ -18,6 +18,15 @@ struct _list{
 	struct _list *next;       /**<  The pointer to the next node   */
 };
 
+/** List initializer
+   @param[in] _que The pointer to the queue head.
+ */
+#define __LIST_INITIALIZER(_que)			\
+	{						\
+		(struct _list *)(_que),		\
+		(struct _list *)(_que),		\
+	}
+
 void list_del(struct _list *_node);
 void list_init(struct _list *_node);
 int list_not_linked(struct _list *_node);

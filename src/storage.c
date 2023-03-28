@@ -184,7 +184,7 @@ register_storage_operation(struct _storage_manager *ops){
 	struct _list            *itr;
 	struct _storage_manager *mgr;
 
-	if ( !list_not_linked(ops->sm_node) )
+	if ( !list_not_linked(&ops->sm_node) )
 		return EINVAL;
 
 	queue_for_each(itr, &diops_tbl.head){
@@ -200,7 +200,7 @@ register_storage_operation(struct _storage_manager *ops){
 	/*
 	 * Register the operation
 	 */
-	queue_add(&diops_tbl.head, ops->sm_node);
+	queue_add(&diops_tbl.head, &ops->sm_node);
 	ops->sm_use_cnt = 0;  /* Reset mount count */
 
 	return 0;
@@ -235,7 +235,7 @@ unregister_storage_operation(const char *name){
 		/*
 		 * Unregister the operation
 		 */
-		queue_del(&diops_tbl.head, mgr->sm_node);
+		queue_del(&diops_tbl.head, &mgr->sm_node);
 		rc = 0;
 		break;
 	}

@@ -82,3 +82,4 @@ sos
 confdefs.h
 *.log
 objs/
+tst-*.out

@@ -82,6 +82,14 @@ static struct _storage_di_ops diops_2dimg={
 
 static struct _disk2d_private disk_2d_private;  /* Private information */
 
+static struct _storage_manager disk_2d_manager = {
+	__LIST_INITIALIZER(&disk_2d_manager.sm_node),
+	0,
+	"2D",
+	&diops_2dimg,
+	&disk_2d_private
+};
+
 /*
  * Internal functions
  */
@@ -303,7 +311,7 @@ record_read_2dimg(const sos_devltr ch, BYTE *dest, const WORD rec,
 	/*
 	 * Seek record position
 	 */
-	pos = lseek(img->fd, SEEK_SET, rec * SOS_RECORD_SIZE);
+	pos = lseek(img->fd, rec * SOS_RECORD_SIZE, SEEK_SET);
 	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
 
 		rc = EIO;
@@ -413,4 +421,5 @@ void
 storage_2dimg_init(void){
 
 	init_private_info_2dimg();
+	register_storage_operation(&disk_2d_manager);
 }

@@ -115,16 +115,6 @@ struct _storage_disk_pos{
 	WORD                     dp_pos;   /**< File or device position           */
 };
 
-/** Storage manager
- */
-struct _storage_manager{
-	struct _list            *sm_node;   /**< list node pointer                  */
-	int                   sm_use_cnt;   /**< use count                          */
-	const char              *sm_name;   /**< Storage manager name               */
-	struct _storage_di_ops   *sm_ops;   /**< Pointer to disk image operations   */
-	void                 *sm_private;   /**< Private information for the device */
-};
-
 /** Disk Image File
  */
 struct _storage_disk_image{
@@ -161,13 +151,27 @@ struct _storage_di_ops{
 	    const WORD _count, WORD *_wrcntp);
 };
 
+/** Storage manager
+ */
+struct _storage_manager{
+	struct _list             sm_node;   /**< list node pointer                  */
+	int                   sm_use_cnt;   /**< use count                          */
+	const char              *sm_name;   /**< Storage manager name               */
+	struct _storage_di_ops   *sm_ops;   /**< Pointer to disk image operations   */
+	void                 *sm_private;   /**< Private information for the device */
+};
+
 /** Disk image operations
  */
 struct _storage_diops_table{
 	struct _queue head;   /**< Queue head */
 };
 
+
 void storage_init(void);
+int register_storage_operation(struct _storage_manager *_ops);
+int unregister_storage_operation(const char *_name);
+
 int storage_mount_image(const sos_devltr _ch, const char *_fname);
 int storage_unmount_image(const sos_devltr _ch);
 int storage_get_image_info(const sos_devltr _ch, struct _storage_disk_image *_resp);
@@ -180,5 +184,4 @@ int storage_record_read(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
     const WORD _count, WORD *_rdcntp);
 int storage_record_write(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
     const WORD _count, WORD *_wrcntp);
-
 #endif  /*  _STORAGE_H  */

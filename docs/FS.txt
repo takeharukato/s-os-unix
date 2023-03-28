@@ -11,6 +11,7 @@ int fs_getblk(WORD blkno, BYTE buf, BYTE len){
 }
 int fs_putblk(WORD blkno, BYTE buf, BYTE len){
 }
+
 [2] ディレクトリ操作(優先度低, ディレクトリエントリをread/writeすればいいので)
 struct _sword_dirent{
        sos_devltr ch;  /**< The device letter */
@@ -29,9 +30,9 @@ struct _sword_fd{
        sos_devltr ch;  /**< The device letter */
        WORD    dirps;  /**< The start record of the directory entry contains the file. */
        WORD      pos;  /**< current file position */
-}
+};
 int
 fs_openfile(const char *filepath, struct _sword_fd *ent )
 
 int
-fs_closefile
+fs_closefile()
