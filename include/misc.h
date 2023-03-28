@@ -53,7 +53,19 @@
  */
 #define CALC_NEXT_ALIGN_Z80_WORD(_val, _align)		\
 	SOS_CALC_ALIGN_Z80_WORD(( (_val) + ( (_align) - 1 ) ), _align)
+
+/** Return the smaller value of both a and b.
+    @return the smaller value of both a and b.
+ */
+#define SOS_MIN(_a, _b) ( ( _a) > ( _b) ? (_b) : (_a) )
+
+/** Return the lager value of both a and b.
+    @return the lager value of both a and b.
+ */
+#define SOS_MAX(_a, _b) ( ( _a) > ( _b) ? (_a) : (_b) )
+
 int check_file_exists(const char *_path, int _flags);
 int ascii_to_int(const char *_numstr, int *_vp);
 const char *refer_file_extention(const char *_fname);
+int is_little_endian(void);
 #endif  /*  _MISC_H_  */

@@ -99,12 +99,13 @@ struct _storage_fib{
 	sos_devltr                       ch;  /**< Device letter     */
 	BYTE                       fib_attr;  /**< File attribute    */
 	BYTE                   fib_dent_rec;  /**< Directory Entry Record No on a disk */
+	BYTE                      fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
 	WORD                      fib_exadr;  /**< File exec address */
 	WORD                        fib_cls;  /**< The first cluster on a disk */
-	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< the file name in Sword */
-	unsigned char        *fib_unix_name;  /**< unix file name    */
+	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< SWORD file name (Not C string) */
+	unsigned char        *fib_unix_name;  /**< UNIX file name (might be NULL) */
 };
 
 /** Position information

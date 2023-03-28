@@ -19,7 +19,7 @@
 #define SCR_SOS_LEFT    (0x1d)  /* left cursor code on S-OS */
 #define SCR_SOS_UP      (0x1e)  /* up cursor code on S-OS */
 #define SCR_SOS_DOWN    (0x1f)  /* down cursor code on S-OS */
-
+#define SCR_SOS_SPC     (0x20)  /* space character on S-OS */
 /*
  * Error codes
  */
@@ -156,6 +156,7 @@
 #define	SOS_MAXIMAGEDRIVES	(4)
 
 #define SOS_FNAME_BUFSIZ         ( SOS_FNAME_LEN + 1 )     /* name + ext + '\0' */
+#define SOS_FNAME_NAME_BUFSIZ    ( SOS_FNAME_NAMELEN + 1 )  /* name + '\0' */
 #define SOS_FNAME_EXT_BUFSIZ     ( SOS_FNAME_EXTLEN + 1 )  /* ext + '\0' */
 #define SOS_FNAME_PRNT_BUFSIZ    ( SOS_FNAME_BUFSIZ + 1 )  /* name + '.' + ext + '\0' */
 
@@ -174,7 +175,6 @@
 
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
-
 
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number

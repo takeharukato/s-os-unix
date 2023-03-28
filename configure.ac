@@ -20,7 +20,7 @@ PKG_CHECK_MODULES([NCURSES], [ncurses])
 AC_SUBST(NCURSES_CFLAGS)
 AC_SUBST(NCURSES_LIBS)
 
-AC_CHECK_HEADERS(termios.h term.h unistd.h curses.h)
+AC_CHECK_HEADERS(termios.h term.h unistd.h curses.h byteswap.h)
 AC_CHECK_HEADERS(float.h iso646.h limits.h stdarg.h stdbool.h stddef.h stdint.h)
 AC_CHECK_FUNCS(getcwd strdup strerror strtol strcasecmp)
 AC_CHECK_FUNCS(cfmakeraw memmove sigprocmask)

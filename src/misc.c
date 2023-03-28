@@ -71,3 +71,16 @@ refer_file_extention(const char *fname){
 
 	return ext;  /* if no '.' found, strrchr returns NULL */
 }
+
+/** Determine whether the environment is the little endian.
+    @retval TRUE This environment is the little endian.
+    @retval FALSE This environment is NOT the little endian.
+ */
+int
+is_little_endian(void){
+	int i;
+
+	i=1;
+
+	return *((char *)&i);
+}

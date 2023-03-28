@@ -1,0 +1,172 @@
+/* -*- mode: C; coding:utf-8 -*- */
+/**********************************************************************/
+/*  SWORD Emulator utilities for file system module                   */
+/*                                                                    */
+/*  Copyright 2023 Takeharu KATO                                      */
+/*                                                                    */
+/**********************************************************************/
+
+#include <string.h>
+#include <errno.h>
+
+#include "config.h"
+
+#include "freestanding.h"
+#include "bswapmac.h"
+#include "sim-type.h"
+#include "misc.h"
+#include "sos.h"
+
+/** convert from a SWORD file name to the UNIX file name
+    @param[in]  swordname The file name on SWORD
+    @param[in]  destp     The address of the pointer to point UNIX file name.
+    @retval     0         success
+    @retval     ENOMEM    out of memory
+    @remark *destp should be freed by the caller after use it.
+ */
+int
+fs_sword2unix(BYTE *swordname, unsigned char **destp){
+	int             rc;
+	int              i;
+	size_t   fname_len;
+	size_t     ext_len;
+	size_t      bufsiz;
+	BYTE           *sp;
+	unsigned char *res;
+
+	/*
+	 * Calculate the file name length
+	 */
+	fname_len = 0;
+	for(i = SOS_FNAME_NAMELEN - 1; i >= 0; --i) {
+
+		/*
+		 * Find the last non-space character in the file name.
+		 */
+		if ( swordname[i] != SCR_SOS_SPC ) {
+
+			fname_len = i + 1;
+			break;
+		}
+	}
+
+	/*
+	 * Calculate the extention length
+	 */
+	ext_len = 0;
+	for(i = SOS_FNAME_EXTLEN - 1; i >= 0; --i) {
+
+		/*
+		 * Find the last non-space character in the extention.
+		 */
+		if ( swordname[SOS_FNAME_NAMELEN + i] != SCR_SOS_SPC ) {
+
+			ext_len = i + 1;
+			break;
+		}
+	}
+	if ( ext_len > 0 )
+		bufsiz = fname_len + ext_len + 2; /* fname + '.' + ext + '\0' */
+	else
+		bufsiz = fname_len + 1;  /* fname + '\0' */
+
+	/*
+	 * copy file name
+	 */
+	res = malloc(bufsiz);
+	if ( res == NULL ) {
+
+		rc = ENOMEM;  /* Out of memory */
+		goto error_out;
+	}
+
+	memcpy(res, &swordname[0], fname_len);
+	res[fname_len]='\0';  /* Terminate */
+
+	if ( ext_len > 0 ) {
+
+		res[fname_len]='.';
+		memcpy(&res[fname_len + 1], &swordname[0], ext_len);
+	}
+	res[bufsiz - 1] = '\0';  /* Terminate */
+
+	if ( destp != NULL )
+		*destp = res;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** convert from a UNIX file name to the SWORD file name
+    @param[in]  unixname  The file name on UNIX
+    @param[out] dest      The destination address
+    @param[in]  size      The size of the buffer pointed by DEST
+    @retval     0         success
+ */
+int
+fs_unix2sword(char *unixname, BYTE *dest, size_t size){
+	int                                i;
+	char                             *sp;
+	char                             *ep;
+	const char                      *ext;
+	size_t                           len;
+	char      swd_name[SOS_FNAME_BUFSIZ];
+
+	/*
+	 * Skip drive letter
+	 */
+	sp = strchr(unixname,':');
+	while( *sp == ':' )
+		++sp;
+
+	/* Fill spaces */
+	memset(&swd_name[0], SCR_SOS_SPC, SOS_FNAME_LEN);
+	swd_name[SOS_FNAME_LEN] = '\0'; /* just in case */
+
+	/* copy UNIX file name */
+	ep = strrchr(unixname,'.');
+	while( *ep == '.' )
+		++ep;  /* skip sequential dots */
+
+	if ( ep == NULL ) /* UNIX name has no extention. */
+		len = SOS_MIN(SOS_FNAME_NAMELEN, strlen(unixname) );
+	else
+		len = SOS_MIN(SOS_FNAME_NAMELEN, ep - sp );
+	for( i = 0; len > i; ++i)
+		swd_name[i] = sp[i];  /* copy file name */
+	if ( ep != NULL ) { /* UNIX name has an extention. */
+
+		/* copy extention part */
+		len = SOS_MIN(SOS_FNAME_EXTLEN, strlen(ep) );
+		memcpy(&swd_name[SOS_FNAME_NAMELEN], ep + 1, len);
+	}
+
+	/*
+	 * copy sword name
+	 */
+	len = SOS_MIN(size, SOS_FNAME_LEN);
+	if ( dest != NULL )
+		memmove(dest, &swd_name[0], len);
+
+	return 0;
+}
+
+/** Compare UNIX file name and sword file name
+    @param[in] unix  The file name on UNIX
+    @param[in] sword The file name on SWORD
+    @retval    0          file names are matched.
+    @retval    negative   UNIX file name is lesser than SWORD
+    @retval    positive   UNIX file name is grater than SWORD
+ */
+int
+fs_compare_unix_and_sword(char *unixname, BYTE *sword, size_t len){
+	size_t                    cmp_len;
+	BYTE  conv_name[SOS_FNAME_BUFSIZ];
+
+	cmp_len = SOS_MIN(SOS_FNAME_BUFSIZ, len);
+	fs_unix2sword(unixname, &conv_name[0], SOS_FNAME_BUFSIZ);
+
+	return memcmp(&conv_name[0], sword, cmp_len);
+}
