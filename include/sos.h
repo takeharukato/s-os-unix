@@ -163,12 +163,13 @@
 /*
  * Disk I/O
  */
+#define SOS_MAX_FILE_SIZE       (0xffff)  /**< Max file size */
 #define SOS_RECORD_SIZE         (256) /**< Record (Sector) size in byte. */
 #define SOS_CLUSTER_SHIFT       (4)   /**< 16 records per cluster  */
 #define SOS_CLUSTER_SIZE        \
 	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /**< Cluster size in byte (4096). */
 #define SOS_CLUSTER_RECS        \
-	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xffff ) ) ) /**< 16 records */
+	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xffff ) )  /**< 16 records */
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
@@ -176,7 +177,7 @@
 #define SOS_DENTRY_NR          (SOS_CLUSTER_SIZE / SOS_DENTRY_SIZE)  /**< The maximum number of directory entries */
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
-
+#define SOS_FAT_CLSNUM_MASK    (0xff)   /**< cluster size in Sword is BYTE */
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number
     @return The first record number of the cluster
@@ -195,6 +196,10 @@
  * FAT Entries
  */
 #define SOS_FAT_SIZE            SOS_RECORD_SIZE  /**< FAT record size */
+#define SOS_FAT_LEN             (sizeof(BYTE))   /**< FAT length */
+/** The numbers of FAT entries */
+#define SOS_FAT_NR              (SOS_FAT_SIZE/SOS_FAT_LEN)
+
 #define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
 #define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
 

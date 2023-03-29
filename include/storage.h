@@ -122,7 +122,6 @@
     @param[in] _dent   The directory entry to copy the FIB from
  */
 #define STORAGE_FILL_FIB(_fib, _ch, _rec, _dirno, _dent) do{ \
-		((struct _storage_fib *)(_fib))->ch = (_ch);		\
 		((struct _storage_fib *)(_fib))->fib_attr =		\
 			*( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR );	\
 		((struct _storage_fib *)(_fib))->fib_dent_rec = (_rec);	\
@@ -151,7 +150,6 @@ struct _storage_di_ops;
 /** File Information Block of the file
  */
 struct _storage_fib{
-	sos_devltr                       ch;  /**< Device letter     */
 	BYTE                       fib_attr;  /**< File attribute    */
 	BYTE                   fib_dent_rec;  /**< Directory Entry Record No on a disk */
 	BYTE                      fib_dirno;  /**< DIRNO of the file */
@@ -165,6 +163,7 @@ struct _storage_fib{
 /** Position information
  */
 struct _storage_disk_pos{
+	sos_devltr            dp_devltr;   /**< Device letter                     */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
 	WORD                     dp_pos;   /**< File or device position           */
@@ -176,14 +175,6 @@ struct _storage_disk_image{
 	struct _storage_disk_pos     di_pos; /**< Position information               */
 	struct _storage_manager *di_manager; /**< Device manager                     */
 	void                    *di_private; /**< Private information for the device */
-};
-
-/** Directory entry structure
- */
-struct _sword_dirent{
-       sos_devltr ch;  /**< The device letter */
-       WORD    dirps;  /**< The start of the directory entry record */
-       WORD      cur;  /**< The number of current directory entry */
 };
 
 /** Disk image operations

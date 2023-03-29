@@ -91,6 +91,7 @@ static void
 init_storage_position(struct _storage_disk_pos *dpp){
 
 	sos_assert( dpp != NULL );
+	dpp->dp_devltr = 0;
 	dpp->dp_dirno = 0;
 	dpp->dp_retpoi = 0;
 	dpp->dp_pos = 0;
