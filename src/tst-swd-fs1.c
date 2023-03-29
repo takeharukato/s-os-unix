@@ -6,6 +6,7 @@
 #include "disk-2d.h"
 #include "sim-type.h"
 #include "misc.h"
+#include "fs-vfs.h"
 #include "fs-sword.h"
 
 void

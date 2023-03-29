@@ -12,16 +12,21 @@
 #include "config.h"
 
 #include "freestanding.h"
-#include "bswapmac.h"
+
 #include "sim-type.h"
 #include "misc.h"
+#include "compat.h"
+#include "sos.h"
 #include "storage.h"
+#include "fs-vfs.h"
+#include "fs-sword.h"
 
 /*
  * Macros
  */
 #define FS_SWD_GTBLK_RD_FLG   (0)   /* Get block to read */
 #define FS_SWD_GTBLK_WR_FLG   (1)   /* Get block to write */
+
 /** Determine the direction of getting block.
     @param[in] _mod  The direction flag
     FS_SWD_GTBLK_RD_FLG Get block to read
@@ -44,14 +49,8 @@
     @param[in]  ch  The device letter of the device
     @param[in]  rec The record number of the FAT
     @param[out] fatbuf Memory buffer for the FAT
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
  */
 static int
 read_fat_sword(sos_devltr ch, BYTE rec, void *fatbuf){
@@ -74,14 +73,8 @@ read_fat_sword(sos_devltr ch, BYTE rec, void *fatbuf){
     @param[in]  ch  The device letter of the device
     @param[in]  rec The record number of the FAT
     @param[in] fatbuf Memory buffer for the FAT
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
  */
 static int
 write_fat_sword(sos_devltr ch, BYTE rec, const void *fatbuf){
@@ -103,6 +96,8 @@ write_fat_sword(sos_devltr ch, BYTE rec, const void *fatbuf){
 /** Clear block
     @param[in]  ch       The drive letter
     @param[in]  blkno    The block number
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
  */
 static int
 clear_block_sword(sos_devltr ch, WORD blkno){
@@ -140,14 +135,9 @@ error_out:
     @param[in]  ch      The drive letter
     @param[in]  fatrec  The record number of FAT
     @param[out] blknop  The address to store the block number of the new block.
-    @retval     0       success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOSPC  Device full
   */
 static int
 alloc_newblock_sword(sos_devltr ch, BYTE fatrec, WORD *blknop){
@@ -202,14 +192,10 @@ error_out:
     @param[in] fatrec The record number of FAT
     @param[in] fib    The file information block of the file contains the block
     @param[in] pos    The file position where the block is placed at
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
 release_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos) {
@@ -281,14 +267,9 @@ error_out:
     @param[in] dirps The record number of the first directory entry on the disk.
     @param[in] swd_fname The file name in SWORD(NOT C String)
     @param[out] fib  The destination address of the file information block
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
  */
 static int
 write_dent_sword(sos_devltr ch, BYTE dirps, struct _storage_fib *fib){
@@ -345,6 +326,9 @@ error_out:
     @param[in] dirps The record number of the first directory entry on the disk
     @param[in] swd_fname The file name in SWORD(NOT C String)
     @param[out] fib  The destination address of the file information block
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
  */
 static int
 search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
@@ -416,14 +400,9 @@ error_out:
 /** Search a free directory entry on the disk.
     @param[in] ch    The drive letter
     @param[in] dirps The record number of the first directory entry on the disk
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
  */
 static int
 search_free_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname, BYTE  *dirnop){
@@ -489,42 +468,28 @@ error_out:
 	return rc;
 }
 
-/** Get the block in the file.
-    @param[in] ch     The drive letter
-    @param[in] fatrec The record number of FAT
-    @param[in] fib    The file information block of the file contains the block
-    @param[in] pos    The file position where the block is placed at
-    @param[in] bufsiz The size of the buffer to store the contents of the block
-    @param[in] mode
-    @param[out] dest   The destination address of the buffer to write the contents of
-    the block
-    @param[out] blkp  The address to store the cluster number of the block
-    FS_SWD_GTBLK_RD_FLG Get block to read
-    FS_SWD_GTBLK_WR_FLG Get block to write
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+/** Get the cluster number of the block from the file position of the file
+    @param[in]  ch     The drive letter
+    @param[in]  fatrec The record number of FAT
+    @param[in]  fib    The file information block of the file contains the block
+    @param[in]  pos    The file position where the block is placed at
+    @param[out] clsp   The address to store the cluster number.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
  */
-static int
-get_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
-    size_t bufsiz, int mode, BYTE *dest, WORD *blkp){
+int
+get_cluster_number_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib,
+    WORD pos, int mode, BYTE *clsp){
 	int                     rc;
-	int                      i;
 	BYTE                   cls;
-	WORD                 rwcnt;
-	WORD                recoff;
 	WORD                 blkno;
 	WORD           blk_remains;
-	size_t          rd_remains;
 	BYTE  fat[SOS_RECORD_SIZE];
-	BYTE  buf[SOS_RECORD_SIZE];
 
-	rc = read_fat_sword(ch, fatrec, &fat[0]);  /* read fat */
+	rc = read_fat_sword(ch, fatrec & SOS_FAT_CLSNUM_MASK, &fat[0]);  /* read fat */
 	if ( rc != 0 )
 		goto error_out;
 
@@ -560,6 +525,49 @@ get_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
 			continue;
 		}
 	}
+	if ( clsp != NULL )
+		*clsp = cls;
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Get the block in the file.
+    @param[in] ch     The drive letter
+    @param[in] fatrec The record number of FAT
+    @param[in] fib    The file information block of the file contains the block
+    @param[in] pos    The file position where the block is placed at
+    @param[in] bufsiz The size of the buffer to store the contents of the block
+    @param[in] mode   The number to specify the behavior.
+    FS_SWD_GTBLK_RD_FLG Get block to read
+    FS_SWD_GTBLK_WR_FLG Get block to write
+    @param[out] dest   The destination address of the buffer to write the contents of
+    the block
+    @param[out] blkp  The address to store the cluster number of the block
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  Block not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+ */
+static int
+get_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
+    size_t bufsiz, int mode, BYTE *dest, WORD *blkp){
+	int                     rc;
+	int                      i;
+	BYTE                   cls;
+	WORD                 rwcnt;
+	WORD                recoff;
+	size_t          rd_remains;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	/*
+	 * Get the cluster number of POS
+	 */
+	rc = get_cluster_number_sword(ch, fatrec, fib, pos, mode, &cls);
+	if ( rc != 0 )
+		goto error_out;
 
 	/*
 	 * read cluster
@@ -600,27 +608,32 @@ error_out:
 
 /** Put the block of the file.
     @param[in] ch     The drive letter
-    @param[in] cls    The cluster number of the block
+    @param[in] fatrec The record number of FAT
+    @param[in] fib    The file information block of the file contains the block
     @param[in] src    The destination address of the block buffer to write
     @param[in] bufsiz The size of the buffer to store the contents of the block
-    @retval      0  Success
-    @retval ENODEV  No such device
-    @retval EINVAL  The device letter is not supported.
-    @retval ENOENT  The device is not supported.
-    @retval ENXIO   The device has not been mounted.
-    @retval ENOSPC  File not found
-    @retval ENOTBLK Block device required
-    @retval EIO     I/O Error.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
  */
 static int
-put_block_sword(sos_devltr ch, WORD cls, const void *src, size_t bufsiz, int mode){
+put_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
+    const void *src, size_t bufsiz){
 	int                     rc;
 	WORD                   rec;
 	WORD                 rwcnt;
+	BYTE                   cls;
 	size_t              remain;
 	const void             *sp;
 	BYTE  buf[SOS_RECORD_SIZE];
 
+	/*
+	 * Get the cluster number of POS
+	 */
+	rc = get_cluster_number_sword(ch, fatrec, fib, pos, FS_SWD_GTBLK_WR_FLG, &cls);
+	if ( rc != 0 )
+		goto error_out;
 
 	for(sp = src, rec = SOS_CLS2REC(cls), remain = bufsiz; remain > 0;
 	    remain += SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
@@ -676,5 +689,204 @@ error_out:
 }
 
 /*
- * Interface functions
+ * File system operations
  */
+
+/** Open a file
+    @param[in] ch       The drive letter
+    @param[in] fname    The filename to open
+    @param[out] fib      The pointer to the file information block
+    @param[out] privatep The pointer to the pointer variable to store
+    the private information
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
+    @remark store first directory entry record to fibp->fib_dent_rec before
+    calling this function.
+ */
+int
+fops_open_sword(sos_devltr ch, const char *fname, struct _storage_fib *fibp, void **privatep){
+	int                           rc;
+	BYTE swd_fname[SOS_FNAME_BUFSIZ];
+	struct _storage_fib          fib;
+
+	/*
+	 * conver the filename which was inputted from the cosole to
+	 * the sword filename format.
+	 */
+	rc = fs_unix2sword(fname, &swd_fname[0], SOS_FNAME_BUFSIZ);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Search file from directory entry.
+	 */
+	rc = search_dent_sword(ch, fibp->fib_dent_rec, &swd_fname[0], &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * return file information block
+	 */
+	if ( fibp != NULL )
+		memcpy(fibp, &fib, sizeof(struct _storage_fib));
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Close the file
+    @param[in] fdp  The file descriptor to close
+    @retval      0  Success
+ */
+int
+fops_close_sword(struct _sword_file_descriptor *fdp){
+
+	return 0;
+}
+
+/** Read from the file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] dest   The buffer to store read data.
+    @param[in]  count  The counter how many bytes to read from the
+    file.
+    @param[out] rdsizp  The adress to store read bytes.
+    @remark store current fat record number to fdp->fd_private before
+    calling this function.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  Block not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
+    size_t *rdsizp){
+	int                        rc;
+	void                      *dp;
+	struct _storage_disk_pos *pos;
+	size_t                 remain;
+	fs_off_t                  off;
+	BYTE clsbuf[SOS_CLUSTER_SIZE];
+	BYTE                   fatrec;
+
+	sos_assert(fdp != NULL);
+	pos = &fdp->fd_pos;
+	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
+
+	for(dp = dest, off = pos->dp_pos, remain = count; remain > 0; ) {
+
+		rc = get_block_sword(pos->dp_devltr, fatrec,
+		    &fdp->fd_fib, off, SOS_CLUSTER_SIZE,
+		    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], NULL);
+		if ( rc != 0 )
+			goto error_out;
+
+		/*
+		 * Copy data
+		 */
+		if ( SOS_CLUSTER_SIZE > remain ) {
+
+			/* read and copy the record */
+			memcpy(dp, &clsbuf[0], SOS_CLUSTER_SIZE);
+			off += SOS_CLUSTER_SIZE;
+			dp += SOS_CLUSTER_SIZE;
+			remain -= SOS_CLUSTER_SIZE;
+		} else {
+
+			/* read the record and copy the remaining bytes. */
+			memcpy(dp, &clsbuf[0], remain);
+			off += remain;
+			dp += remain;
+			remain = 0;
+		}
+	}
+
+	rc = 0;
+
+error_out:
+	if ( rdsizp != NULL )
+		*rdsizp = count - remain;
+
+	return rc;
+}
+
+/** Write to the file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] src    The buffer to store read data.
+    @param[in]  count  The counter how many bytes to read from the
+    file.
+    @param[out] wrsizp  The adress to store written bytes.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  Block not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+    @remark store current fat record number to fdp->fd_private before
+    calling this function.
+ */
+int
+fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
+    size_t count, size_t *wrsizp){
+	int                        rc;
+	const void                *sp;
+	BYTE                   fatrec;
+	struct _storage_disk_pos *pos;
+	fs_off_t                  off;
+	size_t                 remain;
+	BYTE clsbuf[SOS_CLUSTER_SIZE];
+
+	sos_assert(fdp != NULL);
+	pos = &fdp->fd_pos;
+	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
+
+	for(sp = src, off = pos->dp_pos, remain = count; remain > 0; ) {
+
+		/*
+		 * Copy data
+		 */
+		if ( SOS_CLUSTER_SIZE > remain ) {
+
+			/* write the record */
+			rc = put_block_sword(pos->dp_devltr,
+			    fatrec, &fdp->fd_fib, off, sp, SOS_CLUSTER_SIZE);
+			if ( rc != 0 )
+				goto error_out;
+
+			sp += SOS_CLUSTER_SIZE;
+			off += SOS_CLUSTER_SIZE;
+			remain -= SOS_CLUSTER_SIZE;
+		} else {
+
+
+			/* read the record and copy the remaining bytes. */
+			rc = get_block_sword(pos->dp_devltr,
+			    fatrec, &fdp->fd_fib, pos->dp_pos, SOS_CLUSTER_SIZE,
+			    FS_SWD_GTBLK_WR_FLG, &clsbuf[0], NULL);
+			if ( rc != 0 )
+				goto error_out;
+
+			memcpy(&clsbuf[0], sp, remain);
+
+			/* write the record */
+			rc = put_block_sword(pos->dp_devltr,
+			    fatrec, &fdp->fd_fib, pos->dp_pos,
+			    &clsbuf[0], SOS_CLUSTER_SIZE);
+			if ( rc != 0 )
+				goto error_out;
+
+			sp += remain;
+			off += remain;
+			remain = 0;
+		}
+	}
+
+	rc = 0;
+
+error_out:
+	if ( wrsizp != NULL )
+		*wrsizp = count - remain;
+
+	return rc;
+}

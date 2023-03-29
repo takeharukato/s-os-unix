@@ -25,7 +25,7 @@
     @remark *destp should be freed by the caller after use it.
  */
 int
-fs_sword2unix(BYTE *swordname, unsigned char **destp){
+fs_sword2unix(const BYTE *swordname, unsigned char **destp){
 	int             rc;
 	int              i;
 	size_t   fname_len;
@@ -106,9 +106,9 @@ error_out:
     @retval     0         success
  */
 int
-fs_unix2sword(unsigned char *unixname, BYTE *dest, size_t size){
+fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
 	int                                i;
-	char                             *sp;
+	const char                       *sp;
 	char                             *ep;
 	const char                      *ext;
 	size_t                           len;
@@ -168,7 +168,7 @@ fs_unix2sword(unsigned char *unixname, BYTE *dest, size_t size){
     @retval    positive   UNIX file name is grater than SWORD
  */
 int
-fs_compare_unix_and_sword(unsigned char *unixname, BYTE *sword, size_t len){
+fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size_t len){
 	size_t                    cmp_len;
 	BYTE  conv_name[SOS_FNAME_BUFSIZ];
 

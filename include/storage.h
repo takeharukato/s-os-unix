@@ -9,8 +9,11 @@
 #if !defined(_STORAGE_H)
 #define _STORAGE_H
 
+#include "config.h"
+
 #include "sim-type.h"
 #include "sos.h"
+#include "bswapmac.h"
 #include "queue.h"
 
 /*
@@ -166,7 +169,7 @@ struct _storage_disk_pos{
 	sos_devltr            dp_devltr;   /**< Device letter                     */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
-	WORD                     dp_pos;   /**< File or device position           */
+	fs_off_t                 dp_pos;   /**< File or device position           */
 };
 
 /** Disk Image File
@@ -200,8 +203,8 @@ struct _storage_di_ops{
 /** Storage manager
  */
 struct _storage_manager{
-	struct _list             sm_node;   /**< list node pointer                  */
-	int                   sm_use_cnt;   /**< use count                          */
+	struct _list             sm_node;   /**< List node                          */
+	int                   sm_use_cnt;   /**< Use count                          */
 	const char              *sm_name;   /**< Storage manager name               */
 	struct _storage_di_ops   *sm_ops;   /**< Pointer to disk image operations   */
 	void                 *sm_private;   /**< Private information for the device */

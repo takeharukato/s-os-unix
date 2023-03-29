@@ -7,12 +7,13 @@
 #define FS_SWORD_BLK_SIZ  (SOS_CLUSTER_SIZE)
 
 [1] クラスタ単位での読み書き
-int fs_getblk(WORD blkno, BYTE buf, BYTE len){
+int fs_getblk(WORD blkno, BYTE buf, BYTE bufsiz){
 }
-int fs_putblk(WORD blkno, BYTE buf, BYTE len){
+int fs_putblk(WORD blkno, BYTE buf, BYTE bufsiz){
 }
 
-[2] ディレクトリ操作(優先度低, ディレクトリエントリをread/writeすればいいので)
+[2] ディレクトリ操作
+
 struct _sword_dirent{
        sos_devltr ch;  /**< The device letter */
        WORD    dirps;  /**< The start of the directory entry record */
@@ -20,19 +21,49 @@ struct _sword_dirent{
 };
 
 int
-fs_opendir(const sos_devltr _ch, const struct _sword_dirent *ent)
+fs_opendir(const sos_devltr _ch, const struct _sword_dirent *dent)
 
 int
-fs_closedir(struct _sword_dirent *ent)
+fs_closedir(struct _sword_dirent *dent)
 
 [3] ファイル操作
-struct _sword_fd{
-       sos_devltr ch;  /**< The device letter */
-       WORD    dirps;  /**< The start record of the directory entry contains the file. */
-       WORD      pos;  /**< current file position */
+struct _sword_file_descriptor{
+       int                    sfd_flags;  /**< Open flags */
+       struct _storage_disk_pos sfd_pos; /**< Position */
+       struct _storage_fib      sfd_fib;  /**< File Information Block */
 };
-int
-fs_openfile(const char *filepath, struct _sword_fd *ent )
 
 int
-fs_closefile()
+fs_open(sos_devltr ch, const char *filepath, int flags, struct _sword_file_descriptor *fdp)
+
+int
+fs_close(struct _sword_file_descriptor *fdp)
+
+int
+fs_read(struct _sword_file_descriptor *fdp, void *buf, size_t count)
+
+int
+fs_write(struct _sword_file_descriptor *fdp, void *buf, size_t count)
+
+int
+fs_stat(struct _sword_file_descriptor *fdp, struct _storage_fib *fibp)
+
+int
+fs_seek(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence)
+
+[4] ファイルシステム操作
+struct _fs_fops{
+	struct _list           fops_node;   /**< List node                          */
+	int                 fops_use_cnt;   /**< Use count                          */
+	const char            *fops_name;   /**< File system name                   */
+       int (*fops_open)(sos_devltr _ch, const char *_filepath, struct _sword_file_descriptor *_fdp);
+       int (*fops_close)(struct _sword_file_descriptor *_fdp);
+       int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_buf, size_t _count);
+       int (*fops_write)(struct _sword_file_descriptor *_fdp, void *_buf, size_t _count);
+       int (*fops_stat)(struct _sword_file_descriptor *_fdp, struct _storage_fib *_fibp);
+       int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset, int _whence);
+       int (*fops_opendir)(const sos_devltr _ch, const struct _sword_dirent *_dent);
+       int (*fops_closedir)(struct _sword_dirent *_dent);
+};
+int
+fs_register_filesystem(

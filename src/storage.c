@@ -15,8 +15,11 @@
 
 #include "config.h"
 
+#include "freestanding.h"
+
 #include "sim-type.h"
 #include "misc.h"
+#include "compat.h"
 #include "sos.h"
 #include "storage.h"
 #include "list.h"

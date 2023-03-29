@@ -301,9 +301,14 @@
 
 #define	EM_DFDV		(SOS_DL_QD)
 
-#define	EM_VER		(0x1620)	/* XXX: SWORD version */
+/** S-OS Version
+ * EM_VER means S-OS version 2.0 on the 7th machine in the MZ-80B/2000/2500 series.
+ * @remark The machine type is started from 0.
+ */
+#define	EM_VER		(0x1620)
 
 #if !defined(_ASM)
-typedef BYTE            sos_devltr;  /**< device letter */
+typedef BYTE            sos_devltr;  /**< Device Letter */
+typedef WORD              fs_off_t;  /**< File Offset */
 #endif  /*  _ASM  */
 #endif
