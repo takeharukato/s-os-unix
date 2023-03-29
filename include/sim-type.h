@@ -17,6 +17,16 @@ typedef unsigned short	WORD;
 #error Need to find an 16-bit type for WORD
 #endif
 
+#if INT_MAX == 2147483647
+typedef int	        SIGNED_DWORD;
+#else
+#if LONG_MAX == 2147483647L
+#else
+typedef long	        SIGNED_DWORD;
+#error Need to find an 32-bit type for SIGNED_DWORD
+#endif  /*  LONG_MAX == 2147483647L  */
+#endif  /*  INT_MAX == 2147483647  */
+
 /* FASTREG needs to be at least 16 bits wide and efficient for the
    host architecture */
 #if UINT_MAX >= 65535

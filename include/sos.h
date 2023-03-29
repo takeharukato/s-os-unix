@@ -309,6 +309,6 @@
 
 #if !defined(_ASM)
 typedef BYTE            sos_devltr;  /**< Device Letter */
-typedef WORD              fs_off_t;  /**< File Offset */
+typedef SIGNED_DWORD      fs_off_t;  /**< File Offset */
 #endif  /*  _ASM  */
 #endif

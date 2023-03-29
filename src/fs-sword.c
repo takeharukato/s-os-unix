@@ -753,12 +753,12 @@ fops_close_sword(struct _sword_file_descriptor *fdp){
     @param[in]  count  The counter how many bytes to read from the
     file.
     @param[out] rdsizp  The adress to store read bytes.
-    @remark store current fat record number to fdp->fd_private before
-    calling this function.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_NOENT  Block not found
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @remark store current fat record number to fdp->fd_private before
+    calling this function.
  */
 int
 fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
@@ -771,7 +771,6 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 	BYTE                   fatrec;
 
-	sos_assert(fdp != NULL);
 	pos = &fdp->fd_pos;
 	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
 
@@ -837,18 +836,17 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	size_t                 remain;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
-	sos_assert(fdp != NULL);
 	pos = &fdp->fd_pos;
 	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
 
 	for(sp = src, off = pos->dp_pos, remain = count; remain > 0; ) {
 
 		/*
-		 * Copy data
+		 * Write data to a block
 		 */
 		if ( SOS_CLUSTER_SIZE > remain ) {
 
-			/* write the record */
+			/* Write the whole record. */
 			rc = put_block_sword(pos->dp_devltr,
 			    fatrec, &fdp->fd_fib, off, sp, SOS_CLUSTER_SIZE);
 			if ( rc != 0 )
@@ -859,8 +857,11 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 			remain -= SOS_CLUSTER_SIZE;
 		} else {
 
+			/* Read the record and write the remaining
+			 * bytes from the beginning of the cluster.
+			 */
 
-			/* read the record and copy the remaining bytes. */
+			/* Read the contents of the last cluster. */
 			rc = get_block_sword(pos->dp_devltr,
 			    fatrec, &fdp->fd_fib, pos->dp_pos, SOS_CLUSTER_SIZE,
 			    FS_SWD_GTBLK_WR_FLG, &clsbuf[0], NULL);
@@ -869,7 +870,9 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 
 			memcpy(&clsbuf[0], sp, remain);
 
-			/* write the record */
+			/* Write the remaining data from
+			 * the beginning of the cluster.
+			 */
 			rc = put_block_sword(pos->dp_devltr,
 			    fatrec, &fdp->fd_fib, pos->dp_pos,
 			    &clsbuf[0], SOS_CLUSTER_SIZE);
@@ -889,4 +892,84 @@ error_out:
 		*wrsizp = count - remain;
 
 	return rc;
+}
+
+/** Stat the file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] fib    The buffer to store the file information block of the file.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  Block not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+ */
+int
+fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib){
+
+	/* Copy the file infomation block */
+	memmove(fib, &fdp->fd_fib, sizeof(struct _storage_fib));
+}
+
+/** Reposition read/write file offset
+    @param[in]  fdp     The file descriptor to the file.
+    @param[in]  offset  The offset to reposition according to WHENCE.
+    @param[in]  whence  The directive to reposition:
+     FS_VFS_SEEK_SET The file offset is set to offset bytes.
+     FS_VFS_SEEK_CUR The file offset is set to its current location plus offset bytes.
+     FS_VFS_SEEK_END The file offset is set to the size of the file plus offset bytes.
+    @param[out] new_pos
+    @retval     0                Success
+    @retval     EINVAL           Invalid whence
+    @retval     ENXIO            The new position exceeded the file size
+ */
+int
+fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
+    fs_off_t *new_pos ){
+	fs_off_t                  new;
+	fs_off_t                  cur;
+	fs_off_t                  off;
+	struct _storage_disk_pos *pos;
+	struct _storage_fib      *fib;
+
+	pos = &fdp->fd_pos;  /* Position information */
+	fib = &fdp->fd_fib;  /* File information block */
+
+	/* Adjust offset */
+	if ( offset > 0 )
+		off = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+	else if ( 0 > offset )
+		off = SOS_MAX(offset, (fs_off_t)-1 * SOS_MAX_FILE_SIZE);
+
+	/*
+	 * Calculate the start position
+	 */
+	switch( whence ) {
+
+	case FS_VFS_SEEK_SET:
+		cur = 0;
+		break;
+
+	case FS_VFS_SEEK_CUR:
+		cur = SOS_MIN(pos->dp_pos, SOS_MAX_FILE_SIZE);
+		break;
+
+	case FS_VFS_SEEK_END:
+		cur = SOS_MIN(fib->fib_size, SOS_MAX_FILE_SIZE);
+		break;
+
+	default:
+		return EINVAL;
+	}
+
+	if ( 0 > ( cur + offset ) )
+		new = 0;
+	else if ( offset > ( SOS_MAX_FILE_SIZE - cur ) )
+		new = SOS_MAX_FILE_SIZE;
+	else
+		new = cur + offset;
+
+	if ( new_pos != NULL )
+		*new_pos = new;
+
+	return 0;
 }
