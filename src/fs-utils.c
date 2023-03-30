@@ -112,7 +112,7 @@ fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
 	char                             *ep;
 	const char                      *ext;
 	size_t                           len;
-	char      swd_name[SOS_FNAME_BUFSIZ];
+	char         swd_name[SOS_FNAME_LEN];
 
 	/*
 	 * Skip drive letter
@@ -169,11 +169,11 @@ fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
  */
 int
 fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size_t len){
-	size_t                    cmp_len;
-	BYTE  conv_name[SOS_FNAME_BUFSIZ];
+	size_t                 cmp_len;
+	BYTE  conv_name[SOS_FNAME_LEN];
 
 	cmp_len = SOS_MIN(SOS_FNAME_LEN, len);
-	fs_unix2sword(unixname, &conv_name[0], SOS_FNAME_BUFSIZ);
+	fs_unix2sword(unixname, &conv_name[0], SOS_FNAME_LEN);
 
 	return memcmp(&conv_name[0], sword, cmp_len);
 }

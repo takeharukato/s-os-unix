@@ -186,7 +186,6 @@ error_out:
 	return rc;
 }
 
-
 /** Release the block in the file.
     @param[in] ch     The drive letter
     @param[in] fatrec The record number of FAT
@@ -265,8 +264,7 @@ error_out:
 /** Write the directory entry to the disk.
     @param[in] ch    The drive letter
     @param[in] dirps The record number of the first directory entry on the disk.
-    @param[in] swd_fname The file name in SWORD(NOT C String)
-    @param[out] fib  The destination address of the file information block
+    @param[in] fib   The address of the file information block
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
     @retval    SOS_ERROR_NOENT File not found
@@ -314,40 +312,40 @@ write_dent_sword(sos_devltr ch, BYTE dirps, struct _storage_fib *fib){
 		goto error_out;  /* I/O Error */
 	}
 
-
 	return 0;
 
 error_out:
 	return rc;
 }
-
-/** Search a file in the directory entry on the disk.
-    @param[in] ch    The drive letter
-    @param[in] dirps The record number of the first directory entry on the disk
-    @param[in] swd_fname The file name in SWORD(NOT C String)
-    @param[out] fib  The destination address of the file information block
-    @retval    0               Success
-    @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOENT File not found
+/** Read the directory entry by #DIRNO
+    @param[in]   ch        The drive letter
+    @param[in]   dirps     The record number of the first directory entry on the disk
+    @param[in]   dirno     The #DIRNO number of the directory entry to read.
+    @param[out]  recp      The address to store the record number of the directory entry.
+    @param[out]  dentp     The address to store the directory entry.
+    @param[in]   bufsiz    The size of the buffer pointed by DENTP.
+    @retval     0               Success
+    @retval     SOS_ERROR_IO    I/O Error
+    @retval     SOS_ERROR_NOENT File not found
  */
 static int
-search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
-    struct _storage_fib *fib){
-	int                     rc;
+read_dent_sword(sos_devltr ch, BYTE dirps, BYTE dirno, BYTE *recp, BYTE *dentp, size_t bufsiz){
 	int                      i;
+	int                     rc;
+	BYTE                   cur;
 	BYTE                   rec;
-	BYTE                 dirno;
 	BYTE                  attr;
-	BYTE                *fname;
 	WORD                 rdcnt;
 	BYTE                 *dent;
 	BYTE  buf[SOS_RECORD_SIZE];
 
-	for(rec = dirps, dirno = 0; SOS_DENTRY_NR > dirno; ++rec) {
+	for(rec = dirps, cur = 0; SOS_DENTRY_NR > cur; ++rec) {
 
 		/*
-		 * Read a directory entry
+		 * Read each directory entry
 		 */
+
+		/* Read a directory entry record */
 		rc = storage_record_read(ch, &buf[0], rec, 1, &rdcnt);
 		if ( rc != 0 )
 			goto error_out;  /* Error */
@@ -358,12 +356,13 @@ search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
 			goto error_out;  /* I/O Error */
 		}
 
-
+		/*
+		 * Search for the directory entry specified by #DIRNO
+		 */
 		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
-		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
+		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
 
 			attr = *( dent + SOS_FIB_OFF_ATTR );
-			fname = ( dent + SOS_FIB_OFF_FNAME );
 
 			if ( attr == SOS_FATTR_FREE )
 				continue; /* Free entry */
@@ -374,22 +373,69 @@ search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
 				goto error_out;
 			}
 
-			if ( memcmp(fname, swd_fname, SOS_FNAME_NAMELEN) == 0 )
+			if ( cur == dirno ) {
+
+				if ( recp != NULL )
+					*recp = rec;
+
+				if ( dentp != NULL )
+					memcpy(dentp, dent,
+					    SOS_MIN(bufsiz, SOS_DENTRY_SIZE));
+
 				goto found;
+			}
 		}
 	}
 
 	/*
 	 * The end of directory entry was not found.
 	 */
-	rc = SOS_ERROR_NOENT; /* File not found */
-	goto error_out;
+	return SOS_ERROR_NOENT; /* File not found */
+
+found:
+	return  0;
+
+error_out:
+	return rc;
+
+}
+/** Search a file in the directory entry on the disk.
+    @param[in] ch     The drive letter
+    @param[in] dirps  The record number of the first directory entry on the disk
+    @param[in] swd_fname The file name in SWORD(NOT C String)
+    @param[out] fib  The destination address of the file information block
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
+ */
+static int
+search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
+    struct _storage_fib *fib){
+	int                         rc;
+	BYTE                       rec;
+	BYTE                     dirno;
+	BYTE     dent[SOS_DENTRY_SIZE];
+
+	for(dirno = 0; SOS_DENTRY_NR > dirno; ++dirno) {
+
+		/* Read each directory entry. */
+		rc = read_dent_sword(ch, dirps, dirno, &rec, &dent[0], SOS_DENTRY_SIZE);
+		if ( rc != 0 )
+			goto error_out; /* File not found */
+
+		if ( memcmp(&dent[0] + SOS_FIB_OFF_FNAME, &swd_fname[0],
+			SOS_FNAME_NAMELEN) == 0 )
+			goto found;  /* Found */
+	}
+
+	sos_assert_no_reach();  /* This function never comes here */
 
 found:
 	/*
 	 * Fill the file information block
 	 */
-	STORAGE_FILL_FIB(fib,ch,rec,dirno,dent);
+	if ( fib != NULL )
+		STORAGE_FILL_FIB(fib, ch, dirno, &dent[0]);
 
 	return 0;
 
@@ -480,7 +526,7 @@ error_out:
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
     @retval    SOS_ERROR_NOSPC  Device full
  */
-int
+static int
 get_cluster_number_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib,
     WORD pos, int mode, BYTE *clsp){
 	int                     rc;
@@ -695,33 +741,37 @@ error_out:
 /** Open a file
     @param[in] ch       The drive letter
     @param[in] fname    The filename to open
-    @param[out] fib      The pointer to the file information block
+    @param[out] fibp     The address to store the file information block
     @param[out] privatep The pointer to the pointer variable to store
     the private information
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
     @retval    SOS_ERROR_NOENT File not found
-    @remark store first directory entry record to fibp->fib_dent_rec before
-    calling this function.
  */
 int
 fops_open_sword(sos_devltr ch, const char *fname, struct _storage_fib *fibp, void **privatep){
 	int                           rc;
-	BYTE swd_fname[SOS_FNAME_BUFSIZ];
+	fs_dirps                   dirps;
 	struct _storage_fib          fib;
+	BYTE    swd_fname[SOS_FNAME_LEN];
 
 	/*
-	 * conver the filename which was inputted from the cosole to
+	 * conver the filename which was inputted from the console to
 	 * the sword filename format.
 	 */
-	rc = fs_unix2sword(fname, &swd_fname[0], SOS_FNAME_BUFSIZ);
+	rc = fs_unix2sword(fname, &swd_fname[0], SOS_FNAME_LEN);
 	if ( rc != 0 )
 		goto error_out;
 
 	/*
 	 * Search file from directory entry.
 	 */
-	rc = search_dent_sword(ch, fibp->fib_dent_rec, &swd_fname[0], &fib);
+
+	rc = storage_get_dirps(ch, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = search_dent_sword(ch, dirps, &swd_fname[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -757,8 +807,6 @@ fops_close_sword(struct _sword_file_descriptor *fdp){
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_NOENT  Block not found
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
-    @remark store current fat record number to fdp->fd_private before
-    calling this function.
  */
 int
 fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
@@ -772,7 +820,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	BYTE                   fatrec;
 
 	pos = &fdp->fd_pos;
-	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
+	fatrec =(BYTE)( pos->dp_fatpos & 0xff );
 
 	for(dp = dest, off = pos->dp_pos, remain = count; remain > 0; ) {
 
@@ -822,8 +870,6 @@ error_out:
     @retval    SOS_ERROR_NOENT  Block not found
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
     @retval    SOS_ERROR_NOSPC  Device full
-    @remark store current fat record number to fdp->fd_private before
-    calling this function.
  */
 int
 fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
@@ -837,7 +883,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
 	pos = &fdp->fd_pos;
-	fatrec =(BYTE)( (uintptr_t)fdp->fd_private & 0xff );
+	fatrec =(BYTE)( pos->dp_fatpos & 0xff );
 
 	for(sp = src, off = pos->dp_pos, remain = count; remain > 0; ) {
 
@@ -972,4 +1018,227 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
 		*new_pos = new;
 
 	return 0;
+}
+
+/** Open directory
+    @param[out] dir     The pointer to the DIR structure (directory stream).
+    @retval     0       Success
+    @retval     EINVAL  Invalid whence
+    @retval     ENXIO   The new position exceeded the file size
+    @remark     DIRP has been initialized by the caller and this function is
+    responsible for setting the dir_pos member of the dir_pos structured
+    variable in DIR  and the private information.
+ */
+int
+fops_opendir_sword(struct _sword_dir *dir){
+	struct _storage_disk_pos *pos;
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	pos->dp_pos = 0;  /* Set to the first directory entry */
+	pos->dp_private = NULL; /* Init private information */
+
+	return 0;
+}
+
+/** Read the directory
+    @param[in]  dir  The pointer to the DIR structure (directory stream).
+    @param[out] fib  The pointer to the file information block.
+    @retval     0      Success
+    @retval     EINVAL Invalid whence
+    @retval     ENXIO  The new position exceeded the file size
+    @remark     This function is responsible for setting the dir_pos member of
+    the dir_pos structured variable in DIR and filling the FIB.
+    Other members in the dir_pos should be set by the caller.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+    The function returns the file information block at the current position
+    indicated by the dir_pos member of the dir_pos structured variable in DIR.
+ */
+int
+fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib){
+	int                        rc;
+	struct _storage_disk_pos *pos;
+	BYTE                    dirno;
+	BYTE                      rec;
+	BYTE    dent[SOS_DENTRY_SIZE];
+	fs_dirps                dirps;
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	/*
+	 * read current entry
+	 */
+	dirno = pos->dp_pos / SOS_DENTRY_SIZE;  /* Set #DIRNO up */
+
+	rc = storage_get_dirps(pos->dp_devltr, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
+
+	dirps &= 0xff; /* The size of #DIRPS in the SWORD is BYTE. */
+	rc = read_dent_sword(pos->dp_devltr, dirps,
+	    dirno, &rec, &dent[0], SOS_DENTRY_SIZE);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Fill the file information block
+	 */
+	if ( fib != NULL )
+		STORAGE_FILL_FIB(fib, pos->dp_devltr, dirno, &dent[0]);
+
+	/*
+	 * Update positions
+	 *
+	 * @remark This function regards a directory as a binary file containing
+	 * an array of directory entries, it sets dir_pos only.
+	 */
+	pos->dp_pos = ( dirno + 1 ) * SOS_DENTRY_SIZE;  /* file position */
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Set the position of the next fs_readdir() call in the directory stream.
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[in]  dirno  The position of the next fs_readdir() call
+    It should be a value returned by a previous call to fs_telldir.
+    @retval     0      Success
+    @retval     EINVAL Invalid dirno
+    @retval     ENXIO  The new position exceeded the SOS_DENTRY_NR.
+    @remark     This function is responsible for setting the dir_pos member of
+    the dir_pos structured variable in DIR and filling the FIB.
+    Other members in the dir_pos should be set by the caller.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno){
+	struct _storage_disk_pos *pos;
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	if ( 0 > dirno )
+		return EINVAL;  /* Invalid #DIRNO */
+
+	if ( dirno > SOS_DENTRY_NR )
+		return ENXIO;   /* #DIRNO is out of range. */
+
+	pos->dp_pos = dirno * SOS_DENTRY_SIZE;  /* set seek position */
+
+	return 0;
+}
+
+/** Return current location in directory stream
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[in]  dirno  The position of the next fs_readdir() call
+    @param[out] dirnop The address to store current location in directory stream.
+    It should be a value returned by a previous call to fs_telldir.
+    @retval     0      Success
+    @retval     EINVAL Invalid dirno
+    @retval     ENXIO  The new position exceeded the SOS_DENTRY_NR.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fops_telldir_sword(const struct _sword_dir *dir, fs_dirno *dirnop){
+	const struct _storage_disk_pos *pos;
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	if ( dirnop == NULL )
+		goto out;
+
+	*dirnop = pos->dp_pos / SOS_DENTRY_SIZE;  /* current position */
+
+out:
+	return 0;
+}
+
+/** close the directory
+    @param[in]  dir  The pointer to the DIR structure (directory stream).
+    @retval     0      Success
+    @retval     EINVAL Invalid whence
+    @retval     ENXIO  The new position exceeded the file size
+ */
+int
+fops_closedir_sword(struct _sword_dir *dir){
+	struct _storage_disk_pos *pos;
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	pos->dp_pos = 0;        /* Reset position */
+	pos->dp_private = NULL; /* Clear private information */
+}
+
+/** change the name of a file
+    @param[in]  dir     The pointer to the DIR structure (directory stream).
+    @param[in]  oldpath The filename to be changed
+    @param[in]  newpath The filename to change to.
+    @retval     0               Success
+    @retval     SOS_ERROR_EXIST Newpath already exists
+    @retval     SOS_ERROR_NOENT Oldpath is not Found.
+ */
+int
+fops_rename(struct _sword_dir *dir, const unsigned char *oldpath,
+    const unsigned char *newpath){
+	int                             rc;
+	fs_dirps                     dirps;
+	struct _storage_disk_pos      *pos;
+	struct _storage_fib        old_fib;
+	struct _storage_fib        new_fib;
+	BYTE    old_swdname[SOS_FNAME_LEN];
+	BYTE    new_swdname[SOS_FNAME_LEN];
+	BYTE         dent[SOS_DENTRY_SIZE];
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	rc = storage_get_dirps(pos->dp_devltr, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get the filename of oldpath in SWORD representation. */
+	rc = fs_unix2sword(oldpath, &old_swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Obtain a directory entry for the file to be renamed. */
+	rc = search_dent_sword(pos->dp_devltr, dirps, &old_swdname[0], &old_fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get the filename of newpath in SWORD representation. */
+	rc = fs_unix2sword(newpath, &new_swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Confirm the new filename doesn't exist.
+	 */
+	rc = search_dent_sword(pos->dp_devltr, dirps, &new_swdname[0], &new_fib);
+	if ( rc == 0 ) {
+
+		rc = SOS_ERROR_EXIST;
+		goto error_out;
+	}
+
+	/* Change the file name */
+	memcpy(&old_fib.fib_sword_name[0],&new_swdname[0],SOS_FNAME_LEN);
+
+	/* Update the directory entry. */
+	rc = write_dent_sword(pos->dp_devltr, dirps, &old_fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	return 0;
+
+error_out:
+	return rc;
 }

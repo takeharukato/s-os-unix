@@ -38,11 +38,11 @@ struct _sword_file_descriptor{
 	void                *fd_private;  /**< Private Information */
 };
 
-/** dir structure for fs_opendir
+/** Directory stream
  */
 struct _sword_dir{
-	struct _storage_disk_pos dent_pos;   /**< Position Information               */
-	void                *dent_private;   /**< Private Information                */
+	struct _storage_disk_pos dir_pos;   /**< Position Information               */
+	void                *dir_private;   /**< Private Information                */
 };
 
 /** File system operations
@@ -63,9 +63,16 @@ struct _fs_fops{
 	    struct _storage_fib *_fibp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
 	    int _whence);
-	int (*fops_open)(const sos_devltr _ch, struct _sword_dir *_dirp);
-	int (*fops_readdir)(const struct _sword_dir *_dir, struct _storage_fib *_fibp);
+	int (*fops_opendir)(struct _sword_dir *_dir);
+	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp);
+	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno);
+	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop);
 	int (*fops_closedir)(struct _sword_dir *_dir);
+	int (*fops_rename)(struct _sword_dir *_dir, const unsigned char *_oldpath,
+	    const unsigned char *_newpath);
+	int (*fops_truncate)(struct _sword_dir *_dir, const unsigned char *_path,
+	    fs_off_t _offset);
+	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path);
 };
 
 #endif  /*  _FS_VFS_H  */

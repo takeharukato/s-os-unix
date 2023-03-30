@@ -45,7 +45,6 @@
  */
 static int mount_2dimg(const sos_devltr _ch, const char *_fname, void **_ref_priv);
 static int umount_2dimg(const sos_devltr _ch);
-
 static int get_image_info_2dimg(const sos_devltr _ch, struct _storage_disk_pos *_posp);
 static int fib_read_2dimg(const sos_devltr _ch, const BYTE _dirno,
     struct _storage_fib *_fib, struct _storage_disk_pos *_pos);

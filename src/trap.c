@@ -35,9 +35,6 @@
 /*
  * Buffer sizes
  */
-#define TRAP_FNAME_BUFSIZ         ( SOS_FNAME_LEN + 1 )     /* name + ext + '\0' */
-#define TRAP_FNAME_EXT_BUFSIZ     ( SOS_FNAME_EXTLEN + 1 )  /* ext + '\0' */
-#define TRAP_FNAME_PRNT_BUFSIZ    ( TRAP_FNAME_BUFSIZ + 1 ) /* name + '.' + ext + '\0' */
 #define TRAP_ADRSTR_LEN           (4) /* File start, end, exec addr in string */
 
 /* Format string length for directory listing of 'Q'
@@ -889,7 +886,7 @@ trap_fname(unsigned char *buf, unsigned char *dsk, unsigned char defdsk){
 int sos_file(void){
     WORD	wi;
     BYTE	attr;
-    unsigned char	buf[TRAP_FNAME_BUFSIZ];
+    unsigned char	buf[SOS_FNAME_BUFSIZ];
     unsigned char	dsk;
     int		r;
 
@@ -916,7 +913,7 @@ int sos_file(void){
 }
 
 int sos_fsame(void){
-    unsigned char	buf[TRAP_FNAME_BUFSIZ];
+    unsigned char	buf[SOS_FNAME_BUFSIZ];
     unsigned char	dsk;
     WORD           saved_de;
     int	r;
@@ -975,7 +972,7 @@ out:
 
 int sos_fprnt(void){
     WORD	namep;
-    char	buf[TRAP_FNAME_PRNT_BUFSIZ], *p;
+    char	buf[SOS_FNAME_PRNT_BUFSIZ], *p;
     int		i;
     int	c;
 
@@ -1445,8 +1442,8 @@ int sos_trdd(void){
 
 int sos_tdir(void){
     int	dirno;
-    char	name[TRAP_FNAME_BUFSIZ];
-    char	ext[TRAP_FNAME_EXT_BUFSIZ];
+    char	name[SOS_FNAME_BUFSIZ];
+    char	ext[SOS_FNAME_EXT_BUFSIZ];
     int	        len, attr, addr, exaddr;
     char	buf[TRAP_HOSTDRV_DIRFMT_BUFSIZ];
     char	*type;

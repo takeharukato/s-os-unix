@@ -87,19 +87,6 @@ static struct _storage_diops_table diops_tbl = __QUEUE_INITIALIZER(&diops_tbl.he
  * Internal functions
  */
 
-/** Initialize storage position information
-    @param[in] dpp The pointer to storage position information
- */
-static void
-init_storage_position(struct _storage_disk_pos *dpp){
-
-	sos_assert( dpp != NULL );
-	dpp->dp_devltr = 0;
-	dpp->dp_dirno = 0;
-	dpp->dp_retpoi = 0;
-	dpp->dp_pos = 0;
-}
-
 /** Determine whether a device letter is valid.
     @param[in] ch    the device letter of a device on SWORD
     @param[in] idxp  the address to store a device index.
@@ -141,13 +128,31 @@ out:
 	return rc;
 }
 
+/** Clear storage position information (internal function)
+    @param[in] dpp The pointer to storage position information
+ */
+static void
+clear_position_info(struct _storage_disk_pos *dpp){
+
+	if ( dpp == NULL )
+		return;
+
+	dpp->dp_devltr = 0;
+	dpp->dp_dirps = 0;
+	dpp->dp_fatpos = 0;
+	dpp->dp_dirno = 0;
+	dpp->dp_retpoi = 0;
+	dpp->dp_pos = 0;
+	dpp->dp_private = NULL;
+}
+
 /** Reset storage disk image information
     @param[out] inf storage disk image information
  */
 static void
 init_storage_disk_image_info(struct _storage_disk_image *inf){
 
-	init_storage_position(&inf->di_pos);
+	clear_position_info(&inf->di_pos);  /* clear position info */
 	inf->di_manager = NULL;
 	inf->di_private = NULL;
 }
@@ -156,22 +161,20 @@ init_storage_disk_image_info(struct _storage_disk_image *inf){
  * Interface functions
  */
 
-/** Initialize storages
+/** Initialize storage position information (interface function)
+    @param[in] dpp The pointer to storage position information
+    @remark dp_devltr, dp_dirps, dp_fatpos are initialized by clear_position_info.
  */
 void
-storage_init(void){
-	int i;
-	struct _storage_disk_image *inf;
+storage_init_position(struct _storage_disk_pos *dpp){
 
-	for(i = 0; STORAGE_NR > i; ++i) {
+	if ( dpp == NULL )
+		return;
 
-		/*
-		 * Make all of the devices unmounted.
-		 */
-		inf = &storage[i];
-		init_storage_disk_image_info(inf);
-	}
-
+	dpp->dp_dirno = 0;
+	dpp->dp_retpoi = 0;
+	dpp->dp_pos = 0;
+	dpp->dp_private = NULL;
 }
 
 /** Register a storage operation
@@ -295,6 +298,8 @@ storage_mount_image(const sos_devltr ch, const char *const fname){
 		if ( rc != 0 )
 			continue;
 		++mgr->sm_use_cnt;     /* Inc use count */
+		clear_position_info(&inf->di_pos);  /* clear position info */
+		inf->di_pos.dp_devltr = ch;  /* set device letter */
 		inf->di_manager = mgr; /* Set manager */
 		inf->di_private = private;
 		rc = 0;
@@ -635,4 +640,148 @@ storage_record_write(const sos_devltr ch, const BYTE *src, const WORD rec,
 
 out:
 	return rc;
+}
+
+/** Set the directory entry position on the device
+    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  dirps The #DIRPS to set
+    @retval  0 success
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+ */
+int
+storage_set_dirps(const sos_devltr ch, const fs_dirps dirps){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_disk_pos   *pos;
+
+	/* Get device index */
+	rc = check_device_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+
+	pos = &inf->di_pos;  /* position information */
+
+	pos->dp_dirps = dirps & 0xff; /* set dirps */
+
+	return 0;
+}
+
+/** Set the file allocation table position on the device
+    @param[in]  ch     The device letter of a device on SWORD
+    @param[in]  fatpos The #FATPOS to set
+    @retval  0 success
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+ */
+int
+storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_disk_pos   *pos;
+
+	/* Get device index */
+	rc = check_device_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+
+	pos = &inf->di_pos;  /* position information */
+
+	pos->dp_fatpos = fatpos & 0xff;
+
+	return 0;
+}
+
+/** Get the directory entry position on the device
+    @param[in]  ch    The device letter of a device on SWORD
+    @param[out] dirpsp The address to store #DIRPS
+    @retval  0 success
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+ */
+int
+storage_get_dirps(const sos_devltr ch, fs_dirps *dirpsp){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_disk_pos   *pos;
+
+	/* Get device index */
+	rc = check_device_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+
+	pos = &inf->di_pos;  /* position information */
+
+	if ( dirpsp != NULL )
+		*dirpsp = pos->dp_dirps;  /* return dirps */
+
+	return 0;
+}
+
+/** Get the file allocation table position on the device
+    @param[in]   ch    The device letter of a device on SWORD
+    @param[out]  fatposp The address to store #FATPOS
+    @retval  0 success
+    @retval EINVAL The device letter is not supported.
+    @retval ENOENT The device is not supported.
+    @retval ENXIO  The device has not been mounted.
+ */
+int
+storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_disk_pos   *pos;
+
+	/* Get device index */
+	rc = check_device_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+
+	pos = &inf->di_pos;  /* position information */
+
+	if ( fatposp != NULL )
+		*fatposp = pos->dp_fatpos;  /* return fatpos */
+
+	return 0;
+}
+
+/** Initialize storages
+ */
+void
+storage_init(void){
+	int                           i;
+	struct _storage_disk_image *inf;
+
+	for(i = 0; STORAGE_NR > i; ++i) {
+
+		/*
+		 * Make all of the devices unmounted.
+		 */
+		inf = &storage[i];
+		init_storage_disk_image_info(inf);
+	}
+
 }

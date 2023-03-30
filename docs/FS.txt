@@ -21,7 +21,7 @@ struct _sword_dirent{
 };
 
 int
-fs_opendir(const sos_devltr _ch, const struct _sword_dirent *dent)
+fs_opendir(const struct _sword_dirent *dent)
 
 int
 fs_closedir(struct _sword_dirent *dent)
@@ -62,7 +62,7 @@ struct _fs_fops{
        int (*fops_write)(struct _sword_file_descriptor *_fdp, void *_buf, size_t _count);
        int (*fops_stat)(struct _sword_file_descriptor *_fdp, struct _storage_fib *_fibp);
        int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset, int _whence);
-       int (*fops_opendir)(const sos_devltr _ch, const struct _sword_dirent *_dent);
+       int (*fops_opendir)(struct _sword_dirent *_dent);
        int (*fops_closedir)(struct _sword_dirent *_dent);
 };
 int

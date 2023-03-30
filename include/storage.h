@@ -120,14 +120,13 @@
 /** Fill the file information block
     @param[in] _fib    The pointer to the file information block
     @param[in] _ch     The device letter
-    @param[in] _rec    The record number contains the file information block
     @param[in] _dirno  The #DIRNO of the file from the beginning of the directory entry
     @param[in] _dent   The directory entry to copy the FIB from
  */
-#define STORAGE_FILL_FIB(_fib, _ch, _rec, _dirno, _dent) do{ \
+#define STORAGE_FILL_FIB(_fib, _ch, _dirno, _dent) do{		\
+		((struct _storage_fib *)(_fib))->fib_devltr = (_ch);	\
 		((struct _storage_fib *)(_fib))->fib_attr =		\
 			*( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR );	\
-		((struct _storage_fib *)(_fib))->fib_dent_rec = (_rec);	\
 		((struct _storage_fib *)(_fib))->fib_dirno = (_dirno);	\
 		((struct _storage_fib *)(_fib))->fib_size =		\
 			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
@@ -153,8 +152,8 @@ struct _storage_di_ops;
 /** File Information Block of the file
  */
 struct _storage_fib{
+	sos_devltr               fib_devltr;  /**< Device letter     */
 	BYTE                       fib_attr;  /**< File attribute    */
-	BYTE                   fib_dent_rec;  /**< Directory Entry Record No on a disk */
 	BYTE                      fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
@@ -167,9 +166,12 @@ struct _storage_fib{
  */
 struct _storage_disk_pos{
 	sos_devltr            dp_devltr;   /**< Device letter                     */
+	WORD                   dp_dirps;   /**< First directory entry record      */
+	WORD                  dp_fatpos;   /**< File allocation table record      */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
 	fs_off_t                 dp_pos;   /**< File or device position           */
+	void                *dp_private;   /**< Private information  */
 };
 
 /** Disk Image File
@@ -220,7 +222,7 @@ struct _storage_diops_table{
 void storage_init(void);
 int register_storage_operation(struct _storage_manager *_ops);
 int unregister_storage_operation(const char *_name);
-
+void storage_init_position(struct _storage_disk_pos *_dpp);
 int storage_mount_image(const sos_devltr _ch, const char *_fname);
 int storage_unmount_image(const sos_devltr _ch);
 int storage_get_image_info(const sos_devltr _ch, struct _storage_disk_image *_resp);
@@ -233,4 +235,8 @@ int storage_record_read(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
     const WORD _count, WORD *_rdcntp);
 int storage_record_write(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
     const WORD _count, WORD *_wrcntp);
+int storage_set_dirps(const sos_devltr _ch, const fs_dirps _dirps);
+int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
+int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
+int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
 #endif  /*  _STORAGE_H  */
