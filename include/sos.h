@@ -313,5 +313,6 @@ typedef SIGNED_DWORD      fs_off_t;  /**< File Offset */
 typedef long              fs_dirno;  /**< DIRNO for vfs */
 typedef WORD              fs_dirps;  /**< DIRPS for vfs */
 typedef WORD             fs_fatpos;  /**< FATPOS for vfs */
+typedef WORD            fs_blk_num;  /**< block numbers for vfs */
 #endif  /*  _ASM  */
 #endif

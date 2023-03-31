@@ -11,32 +11,54 @@ TODO list
 
 (*) DOS 部分のライセンスのクリアについては, PDS宣言があるので問題は無し
 加藤TODO
-* zedaでQ:のファイルを読めない原因の調査[済]
 * DOSへの依存の排除
+* 垂直同期の時間間隔の計測
+* クロックティックに応じてCPUの命令を処理
+
+[Console Command Processor]
+* CCPを独立化
+* マウントコマンドにイメージファイル種別を指定可能にする
+* マウントコマンドにファイルシステム種別を指定可能にする
+* マウントコマンドにリードオンリーマウントを指定可能にする
+
+[エミュレーション環境]
+
+* テープデバイスの共通化
+  - テープデバイスドライバ部作成
+  - ホストファイルシステムドライバ(QD)を作成
+  - Sをホストドライブにすべきか検討
 * trap.cのテープ関連処理をテープデバイス処理部に移動
   sos_trdd, sos_rdi, sos_wri, sos_twrd, sos_tdir, の実処理をtape.cに
   移動し, 'T', 'S', 'Q'を区別可能にする
-* テープデバイスの共通化
 * mztへの対応
-* 垂直同期の時間間隔の計測
-* クロックティックに応じてCPUの命令を処理
 * D88フォーマット対応
-* strrchrのOS依存の排除[済]
-* strtokをstrtok_rに置換え
-* strncasecmpのOS依存の排除[対応済み]
-* memmove, memcpy, memset, memrchrのOS依存の排除
-* stdint.hのOS依存の排除
-* ストレージ単位での読み書き禁止処理
-* WA_DIRPS, WA_FATPOSの更新を見張って, swordファイルシステムをマウントしている
-  ボリュームのDIRPS, FATPOSを更新
-* src/trap.cの以下をsos.hに移動[済]
-  TRAP_FNAME_BUFSIZ, TRAP_FNAME_EXT_BUFSIZ, TRAP_FNAME_PRNT_BUFSIZ
+
+[fs]
+* fatpos, dirpsをスーパブロック情報から取得するように修正
+* set/resetの為にchmodオペレーションが必要
+* ファイルシステム共通部(fs-vfs)作成
+* ファイルシステムマウント処理作成
+* WA_DIRPS, WA_FATPOSの更新を見張って, スーパーブロックの
+  fatpos, dirpsをスーパブロック情報を更新
+  (やりすぎか, システムコールで更新するべき)
+
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
+* read/write/seekでヘッダを読み飛ばす処理が必要
+  ヘッダの書込みはwopen時(open flagsがwriteの場合にのみfdのfibの内容に従って実施)
+
+
+[storage]
+* マウント処理でファイルシステムを指定できるようにする
+* マウント処理でファイルシステムストレージ単位での書込み禁止を指定できるようにする
 * fib_read/fib_writeは, シーケンシャルデバイスからの読み書きを使用すれば実現できるが
   テープの内部ポジションを知っている必要があるのでstorageオペレーションに入っている
-* read/writeでヘッダを読み飛ばす処理が必要
-  ヘッダの書込みはwopen時(open flagsがwriteの場合にのみfdのfibの内容に従って実施)
-* set/resetの為にchmodが必要
+
+[セキュリティ]
+* strtokをstrtok_rに置換え
+
+[移植性]
+* memmove, memcpy, memset, memrchrのOS依存の排除
+* stdint.hのOS依存の排除
 
 DOS依存システムコール
 1. HOT
@@ -84,3 +106,8 @@ DOS依存システムコール
   2. storage-ifにdirps, fatposを参照・更新するIFを追加する[済]
   3. DIR構造体のディレクトリエントリレコードの先頭(dirps)エントリを削除[済]
   4. fibディレクトリエントリは, 使用用途がないので削除[済]
+* src/trap.cの以下をsos.hに移動[済]
+  TRAP_FNAME_BUFSIZ, TRAP_FNAME_EXT_BUFSIZ, TRAP_FNAME_PRNT_BUFSIZ
+* strrchrのOS依存の排除[済]
+* strncasecmpのOS依存の排除[済]
+* zedaでQ:のファイルを読めない原因の調査[済]

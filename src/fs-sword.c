@@ -770,6 +770,85 @@ error_out:
 	return rc;
 }
 
+/** Truncate a file to a specified length
+    @param[in]  fib    The file information block of the file.
+    @param[in]  pos    The file position information
+    @param[in]  offset The file length of the file to be truncated.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+static int
+change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
+    fs_off_t offset){
+	int                        rc;
+	BYTE clsbuf[SOS_CLUSTER_SIZE];
+	WORD                   newsiz;
+	WORD                  remains;
+	BYTE                   recoff;
+
+	if ( ( offset > 0 ) || ( offset > SOS_MAX_FILE_SIZE ) )
+		return SOS_ERROR_SYNTAX;
+
+	newsiz = offset;
+	if ( fib->fib_size > newsiz ) {
+
+		/*
+		 * Release file blocks
+		 */
+		rc = release_block_sword(fib->fib_devltr, pos->dp_fatpos, fib, newsiz);
+		if ( rc != 0 )
+			goto error_out;
+
+	} else {
+
+		remains = newsiz - fib->fib_size;
+		if ( SOS_CLUSTER_SIZE > remains ) {
+
+			/*
+			 * extend records at the last cluster
+			 */
+
+			/* Read block */
+			rc = get_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
+			memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
+			    0x0,
+			    remains);  /* Clear newly allocated buffer. */
+			/* update culster */
+			rc = put_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, fib->fib_size,
+			    &clsbuf[0], SOS_CLUSTER_SIZE);
+			if ( rc != 0 )
+				goto error_out;
+		} else {
+
+			/* alloc new blocks to the newsize. */
+			rc = get_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, newsiz, FS_SWD_GTBLK_WR_FLG,
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
+		}
+	}
+
+	/*
+	 * update file information block
+	 */
+	fib->fib_size = newsiz;  /* update size */
+	rc = write_dent_sword(pos->dp_devltr, pos->dp_dirps, fib); /* write back */
+	if ( rc != 0 )
+		goto error_out;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /*
  * File system operations
  */
@@ -1056,6 +1135,24 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
 	return 0;
 }
 
+/** Truncate a file to a specified length
+    @param[in]  fdp    The file descriptor to the file.
+    @param[in]  offset The file length of the file to be truncated.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset){
+	struct _storage_fib      *fib;
+	struct _storage_disk_pos *pos;
+
+	fib = &fdp->fd_fib;  /* file information block */
+	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
+
+	return change_filesize_sword(fib, pos, offset);
+}
+
 /** Open directory
     @param[out] dir     The pointer to the DIR structure (directory stream).
     @retval     0       Success
@@ -1279,79 +1376,54 @@ error_out:
 	return rc;
 }
 
-/** Truncate a file to a specified length
-    @param[in]  fdp    The file descriptor to the file.
-    @param[in]  offset The file length of the file to be truncated.
+/** Unlink a file
+    @param[in]  dir  The pointer to the DIR structure (directory stream).
+    @param[in]  path The filename to unlink
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset){
-	int                        rc;
-	struct _storage_fib      *fib;
-	struct _storage_disk_pos *pos;
-	BYTE clsbuf[SOS_CLUSTER_SIZE];
-	WORD                   newsiz;
-	WORD                  remains;
-	BYTE                   recoff;
+fops_unlink(struct _sword_dir *dir, const unsigned char *path){
+	int                             rc;
+	fs_dirps                     dirps;
+	struct _storage_disk_pos      *pos;
+	struct _storage_fib            fib;
+	BYTE        swdname[SOS_FNAME_LEN];
 
-	fib = &fdp->fd_fib;
-	pos = &fdp->fd_pos;
+	pos = &dir->dir_pos;  /* Position information */
 
-	if ( ( offset > 0 ) || ( offset > SOS_MAX_FILE_SIZE ) )
-		return SOS_ERROR_SYNTAX;
+	rc = storage_get_dirps(pos->dp_devltr, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
 
-	newsiz = offset;
-	if ( fib->fib_size > newsiz ) {
+	/* Get the filename of path in SWORD representation. */
+	rc = fs_unix2sword(path, &swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
 
-		/*
-		 * Release file blocks
-		 */
-		rc = release_block_sword(fib->fib_devltr, pos->dp_fatpos, fib, newsiz);
-		if ( rc != 0 )
-			goto error_out;
-
-	} else {
-
-		remains = newsiz - fib->fib_size;
-		if ( SOS_CLUSTER_SIZE > remains ) {
-
-			/*
-			 * extend records at the last cluster
-			 */
-
-			/* Read block */
-			rc = get_block_sword(pos->dp_devltr,
-			    pos->dp_fatpos, fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
-			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-			if ( rc != 0 )
-				goto error_out;
-			memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
-			    0x0,
-			    remains);  /* Clear newly allocated buffer. */
-			/* update culster */
-			rc = put_block_sword(pos->dp_devltr,
-			    pos->dp_fatpos, fib, fib->fib_size,
-			    &clsbuf[0], SOS_CLUSTER_SIZE);
-			if ( rc != 0 )
-				goto error_out;
-		} else {
-
-			/* alloc new blocks to the newsize. */
-			rc = get_block_sword(pos->dp_devltr,
-			    pos->dp_fatpos, fib, newsiz, FS_SWD_GTBLK_WR_FLG,
-			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-			if ( rc != 0 )
-				goto error_out;
-		}
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
 	}
 
-	/*
-	 * update file information block
+	/* Obtain a directory entry for the file to unlink. */
+	rc = search_dent_sword(pos->dp_devltr, dirps, &swdname[0], &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Change the file attribute to free */
+	fib.fib_attr = SOS_FATTR_FREE;
+
+	/* Update the directory entry. */
+	rc = write_dent_sword(pos->dp_devltr, dirps, &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Release the file allocation table for the file.
+	 * @remark The file might have a bad allocation table.
+	 * We should free the file allocation table after modifying the directory entry
+	 * because we should make the file invisible in such a situation.
 	 */
-	fib->fib_size = newsiz;  /* update size */
-	rc = write_dent_sword(pos->dp_devltr, pos->dp_dirps, fib); /* write back */
+	rc = change_filesize_sword(&fib, &dir->dir_pos, 0);
 	if ( rc != 0 )
 		goto error_out;
 
