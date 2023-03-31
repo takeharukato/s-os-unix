@@ -45,12 +45,9 @@ struct _sword_dir{
 	void                *dir_private;   /**< Private Information                */
 };
 
-/** File system operations
+/** File operations
  */
 struct _fs_fops{
-	struct _list           fops_node;   /**< List node                          */
-	int                 fops_use_cnt;   /**< Use count                          */
-	const char            *fops_name;   /**< File system name                   */
 	void               *fops_private;   /**< Private Information                */
 	int (*fops_open)(sos_devltr _ch, const char *_filepath,
 	    struct _storage_fib *_fib, void **_privatep);
@@ -63,6 +60,7 @@ struct _fs_fops{
 	    struct _storage_fib *_fibp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
 	    int _whence);
+	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset);
 	int (*fops_opendir)(struct _sword_dir *_dir);
 	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp);
 	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno);
@@ -70,9 +68,17 @@ struct _fs_fops{
 	int (*fops_closedir)(struct _sword_dir *_dir);
 	int (*fops_rename)(struct _sword_dir *_dir, const unsigned char *_oldpath,
 	    const unsigned char *_newpath);
-	int (*fops_truncate)(struct _sword_dir *_dir, const unsigned char *_path,
-	    fs_off_t _offset);
 	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path);
+};
+
+/** File system manager
+ */
+struct _fs_fs_manager{
+	struct _list             fsm_node;   /**< List node                    */
+	int                   fsm_use_cnt;   /**< Use count                    */
+	const char              *fsm_name;   /**< File system name             */
+	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
+	void                 *fsm_private;   /**< Private information          */
 };
 
 #endif  /*  _FS_VFS_H  */

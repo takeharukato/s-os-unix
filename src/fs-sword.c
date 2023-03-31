@@ -133,14 +133,16 @@ error_out:
 
 /** Allocate new block on the disk.
     @param[in]  ch      The drive letter
+    @param[in]  pos     The file offset position
     @param[in]  fatrec  The record number of FAT
+    @param[in]  use_recs The used record numbers at the last cluster
     @param[out] blknop  The address to store the block number of the new block.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static int
-alloc_newblock_sword(sos_devltr ch, BYTE fatrec, WORD *blknop){
+alloc_newblock_sword(sos_devltr ch, BYTE fatrec, BYTE use_recs, WORD *blknop){
 	int                     rc;
 	int                      i;
 	BYTE                   rec;
@@ -158,8 +160,11 @@ alloc_newblock_sword(sos_devltr ch, BYTE fatrec, WORD *blknop){
 
 		if ( *clsp == SOS_FAT_ENT_FREE ) {
 
-			/* alloc new cluster and use the all records in the culster */
-			*clsp = SOS_FAT_ENT_EOF_MASK|0xf;
+			/* alloc new cluster and fill used records */
+			if ( use_recs > 0 )
+				*clsp = SOS_FAT_ENT_EOF_MASK|(use_recs - 1);
+			else
+				*clsp = SOS_FAT_ENT_EOF_MASK|0xf;
 			goto found;
 		}
 	}
@@ -172,6 +177,8 @@ found:
 	sos_assert( &fat[i] == clsp );
 
 	clear_block_sword(ch, i);  /* clear new block */
+
+
 
 	rc = write_fat_sword(ch, fatrec, &fat[0]);  /* write fat */
 	if ( rc != 0 )
@@ -190,45 +197,51 @@ error_out:
     @param[in] ch     The drive letter
     @param[in] fatrec The record number of FAT
     @param[in] fib    The file information block of the file contains the block
-    @param[in] pos    The file position where the block is placed at
+    @param[in] newsiz The file length of the file to be truncated.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_NOENT  File not found
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-release_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos) {
+release_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD newsiz) {
 	int                     rc;
 	int                      i;
-	BYTE               remains;
+	int                 relcnt;
+	BYTE                clsoff;
 	BYTE              prev_cls;
+	BYTE              next_cls;
+	BYTE          last_cls_ptr;
 	WORD                   cls;
+	WORD               rel_cls;
 	WORD                   rec;
+	BYTE              used_rec;
 	BYTE  fat[SOS_RECORD_SIZE];
 
 	rc = read_fat_sword(ch, fatrec, &fat[0]);  /* read fat */
 	if ( rc != 0 )
 		goto error_out;
 	/*
-	 * Find the block to release
+	 * Find the start block to release
 	 */
 
 	/* How many clusters to search */
-	remains = SOS_CALC_ALIGN_Z80_WORD(pos % SOS_MAX_FILE_SIZE, SOS_CLUSTER_SIZE);
+	clsoff = SOS_CALC_ALIGN_Z80_WORD(newsiz % SOS_MAX_FILE_SIZE, SOS_CLUSTER_SIZE);
 
 	/*
 	 * Search the cluster to free.
 	 */
-	for( cls = fib->fib_cls & SOS_FAT_CLSNUM_MASK, prev_cls = cls;
-	     remains > 0; prev_cls = cls, cls = fat[cls], --remains) {
+	for( cls = fib->fib_cls & SOS_FAT_CLSNUM_MASK, prev_cls = cls, next_cls=fat[cls];
+	     clsoff > 0; prev_cls = cls, cls = next_cls, next_cls = fat[next_cls],
+		     --clsoff) {
 
-		if ( fat[cls] == SOS_FAT_ENT_FREE ) {
+		if ( cls == SOS_FAT_ENT_FREE ) {
 
 			rc = SOS_ERROR_BADFAT;  /* Invalid cluster chain */
 			goto error_out;
 		}
 
-		if ( SOS_IS_END_CLS(fat[cls]) ) {
+		if ( SOS_IS_END_CLS(cls) ) {
 
 			/* return the block not found error  */
 			rc = SOS_ERROR_NOENT;
@@ -237,20 +250,36 @@ release_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD p
 	}
 
 	/*
-	 * update cluster chain and the size of the file
+	 * Handle the last cluster of the file
 	 */
-	if ( !SOS_IS_END_CLS( fat[cls] ) ) {
+	sos_assert( !SOS_IS_END_CLS(prev_cls) );
+	last_cls_ptr = fat[prev_cls];
+	used_rec = newsiz / SOS_RECORD_SIZE;  /* Calculate used records */
+	if ( newsiz == 0 )
+		fib->fib_cls = SOS_FAT_ENT_EOF_MASK;
+	else
+		fat[prev_cls] = SOS_FAT_ENT_EOF_MASK|used_rec;
 
-		fat[prev_cls] = fat[cls]; /* maintain the cluster chain */
-		fib->fib_size -= SOS_CLUSTER_SIZE; /* update file size */
-	} else
-		fib->fib_size -= fib->fib_size % SOS_CLUSTER_SIZE; /* update file size */
-
-	fat[cls] = SOS_FAT_ENT_FREE;  /* Free the cluster */
 
 	/*
-	 * Write back the FAT
+	 * Release blocks
 	 */
+	if ( ( fib->fib_size - newsiz ) > SOS_CLUSTER_SIZE ) {
+
+		for(rel_cls = last_cls_ptr,
+			    relcnt= CALC_NEXT_ALIGN_Z80_WORD(fib->fib_size - newsiz,
+				SOS_CLUSTER_SIZE);
+		    relcnt > 0; --relcnt, rel_cls = next_cls){
+
+			next_cls = fat[rel_cls];  /* remind next cluster */
+			sos_assert( next_cls != SOS_FAT_ENT_FREE );
+
+			fat[rel_cls] = SOS_FAT_ENT_FREE; /* free cluster */
+			if ( SOS_IS_END_CLS(next_cls) )
+				break;
+		}
+	}
+
 	rc = write_fat_sword(ch, fatrec, &fat[0]);  /* write fat */
 	if ( rc != 0 )
 		goto error_out;
@@ -533,6 +562,7 @@ get_cluster_number_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib,
 	BYTE                   cls;
 	WORD                 blkno;
 	WORD           blk_remains;
+	BYTE              use_recs;
 	BYTE  fat[SOS_RECORD_SIZE];
 
 	rc = read_fat_sword(ch, fatrec & SOS_FAT_CLSNUM_MASK, &fat[0]);  /* read fat */
@@ -564,7 +594,13 @@ get_cluster_number_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib,
 			/*
 			 * allocate new block
 			 */
-			rc = alloc_newblock_sword(ch, fatrec, &blkno);
+			if ( blk_remains > 1 ) /* use all cluster */
+				use_recs = SOS_CLUSTER_RECS & 0xff;
+			else
+				use_recs = (BYTE)( ( pos % SOS_CLUSTER_SIZE )
+				    / SOS_RECORD_SIZE ) & 0xff;
+
+			rc = alloc_newblock_sword(ch, fatrec, use_recs, &blkno);
 			if ( rc != 0 )
 				goto error_out;
 			fat[cls] = blkno & SOS_FAT_CLSNUM_MASK; /* make cluster chain */
@@ -584,12 +620,12 @@ error_out:
     @param[in] fatrec The record number of FAT
     @param[in] fib    The file information block of the file contains the block
     @param[in] pos    The file position where the block is placed at
-    @param[in] bufsiz The size of the buffer to store the contents of the block
     @param[in] mode   The number to specify the behavior.
     FS_SWD_GTBLK_RD_FLG Get block to read
     FS_SWD_GTBLK_WR_FLG Get block to write
     @param[out] dest   The destination address of the buffer to write the contents of
     the block
+    @param[in] bufsiz The size of the buffer to store the contents of the block
     @param[out] blkp  The address to store the cluster number of the block
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
@@ -599,7 +635,7 @@ error_out:
  */
 static int
 get_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
-    size_t bufsiz, int mode, BYTE *dest, WORD *blkp){
+    int mode, BYTE *dest, size_t bufsiz, WORD *blkp){
 	int                     rc;
 	int                      i;
 	BYTE                   cls;
@@ -670,7 +706,7 @@ put_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
 	WORD                   rec;
 	WORD                 rwcnt;
 	BYTE                   cls;
-	size_t              remain;
+	size_t             remains;
 	const void             *sp;
 	BYTE  buf[SOS_RECORD_SIZE];
 
@@ -681,10 +717,10 @@ put_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
 	if ( rc != 0 )
 		goto error_out;
 
-	for(sp = src, rec = SOS_CLS2REC(cls), remain = bufsiz; remain > 0;
-	    remain += SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
+	for(sp = src, rec = SOS_CLS2REC(cls), remains = bufsiz; remains > 0;
+	    remains += SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
 
-		if ( SOS_RECORD_SIZE > remain ) {
+		if ( SOS_RECORD_SIZE > remains ) {
 
 			/*
 			 * Modify the beginning of the buffer at the end of file
@@ -698,7 +734,7 @@ put_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
 				goto error_out;  /* I/O Error */
 			}
 
-			memcpy(&buf[0], sp, remain);  /* Modify */
+			memcpy(&buf[0], sp, remains);  /* Modify */
 
 			/*
 			 * Write back
@@ -711,7 +747,7 @@ put_block_sword(sos_devltr ch, BYTE fatrec, struct _storage_fib *fib, WORD pos,
 				rc = SOS_ERROR_IO;
 				goto error_out;  /* I/O Error */
 			}
-			remain = 0;
+			remains = 0;
 		} else {
 
 			/*
@@ -814,7 +850,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	int                        rc;
 	void                      *dp;
 	struct _storage_disk_pos *pos;
-	size_t                 remain;
+	size_t                remains;
 	fs_off_t                  off;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 	BYTE                   fatrec;
@@ -822,31 +858,31 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	pos = &fdp->fd_pos;
 	fatrec =(BYTE)( pos->dp_fatpos & 0xff );
 
-	for(dp = dest, off = pos->dp_pos, remain = count; remain > 0; ) {
+	for(dp = dest, off = pos->dp_pos, remains = count; remains > 0; ) {
 
 		rc = get_block_sword(pos->dp_devltr, fatrec,
-		    &fdp->fd_fib, off, SOS_CLUSTER_SIZE,
-		    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], NULL);
+		    &fdp->fd_fib, off, FS_SWD_GTBLK_RD_FLG,
+		    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 		if ( rc != 0 )
 			goto error_out;
 
 		/*
 		 * Copy data
 		 */
-		if ( SOS_CLUSTER_SIZE > remain ) {
+		if ( SOS_CLUSTER_SIZE > remains ) {
 
 			/* read and copy the record */
 			memcpy(dp, &clsbuf[0], SOS_CLUSTER_SIZE);
 			off += SOS_CLUSTER_SIZE;
 			dp += SOS_CLUSTER_SIZE;
-			remain -= SOS_CLUSTER_SIZE;
+			remains -= SOS_CLUSTER_SIZE;
 		} else {
 
 			/* read the record and copy the remaining bytes. */
-			memcpy(dp, &clsbuf[0], remain);
-			off += remain;
-			dp += remain;
-			remain = 0;
+			memcpy(dp, &clsbuf[0], remains);
+			off += remains;
+			dp += remains;
+			remains = 0;
 		}
 	}
 
@@ -854,7 +890,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 
 error_out:
 	if ( rdsizp != NULL )
-		*rdsizp = count - remain;
+		*rdsizp = count - remains;
 
 	return rc;
 }
@@ -879,18 +915,18 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	BYTE                   fatrec;
 	struct _storage_disk_pos *pos;
 	fs_off_t                  off;
-	size_t                 remain;
+	size_t                remains;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
 	pos = &fdp->fd_pos;
 	fatrec =(BYTE)( pos->dp_fatpos & 0xff );
 
-	for(sp = src, off = pos->dp_pos, remain = count; remain > 0; ) {
+	for(sp = src, off = pos->dp_pos, remains = count; remains > 0; ) {
 
 		/*
 		 * Write data to a block
 		 */
-		if ( SOS_CLUSTER_SIZE > remain ) {
+		if ( SOS_CLUSTER_SIZE > remains ) {
 
 			/* Write the whole record. */
 			rc = put_block_sword(pos->dp_devltr,
@@ -900,7 +936,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 
 			sp += SOS_CLUSTER_SIZE;
 			off += SOS_CLUSTER_SIZE;
-			remain -= SOS_CLUSTER_SIZE;
+			remains -= SOS_CLUSTER_SIZE;
 		} else {
 
 			/* Read the record and write the remaining
@@ -909,12 +945,12 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 
 			/* Read the contents of the last cluster. */
 			rc = get_block_sword(pos->dp_devltr,
-			    fatrec, &fdp->fd_fib, pos->dp_pos, SOS_CLUSTER_SIZE,
-			    FS_SWD_GTBLK_WR_FLG, &clsbuf[0], NULL);
+			    fatrec, &fdp->fd_fib, pos->dp_pos, FS_SWD_GTBLK_WR_FLG,
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
 				goto error_out;
 
-			memcpy(&clsbuf[0], sp, remain);
+			memcpy(&clsbuf[0], sp, remains);
 
 			/* Write the remaining data from
 			 * the beginning of the cluster.
@@ -925,9 +961,9 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 			if ( rc != 0 )
 				goto error_out;
 
-			sp += remain;
-			off += remain;
-			remain = 0;
+			sp += remains;
+			off += remains;
+			remains = 0;
 		}
 	}
 
@@ -935,7 +971,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 
 error_out:
 	if ( wrsizp != NULL )
-		*wrsizp = count - remain;
+		*wrsizp = count - remains;
 
 	return rc;
 }
@@ -1173,7 +1209,7 @@ fops_closedir_sword(struct _sword_dir *dir){
 	pos->dp_private = NULL; /* Clear private information */
 }
 
-/** change the name of a file
+/** Change the name of a file
     @param[in]  dir     The pointer to the DIR structure (directory stream).
     @param[in]  oldpath The filename to be changed
     @param[in]  newpath The filename to change to.
@@ -1182,7 +1218,7 @@ fops_closedir_sword(struct _sword_dir *dir){
     @retval     SOS_ERROR_NOENT Oldpath is not Found.
  */
 int
-fops_rename(struct _sword_dir *dir, const unsigned char *oldpath,
+fops_rename_sword(struct _sword_dir *dir, const unsigned char *oldpath,
     const unsigned char *newpath){
 	int                             rc;
 	fs_dirps                     dirps;
@@ -1234,6 +1270,88 @@ fops_rename(struct _sword_dir *dir, const unsigned char *oldpath,
 
 	/* Update the directory entry. */
 	rc = write_dent_sword(pos->dp_devltr, dirps, &old_fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Truncate a file to a specified length
+    @param[in]  fdp    The file descriptor to the file.
+    @param[in]  offset The file length of the file to be truncated.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset){
+	int                        rc;
+	struct _storage_fib      *fib;
+	struct _storage_disk_pos *pos;
+	BYTE clsbuf[SOS_CLUSTER_SIZE];
+	WORD                   newsiz;
+	WORD                  remains;
+	BYTE                   recoff;
+
+	fib = &fdp->fd_fib;
+	pos = &fdp->fd_pos;
+
+	if ( ( offset > 0 ) || ( offset > SOS_MAX_FILE_SIZE ) )
+		return SOS_ERROR_SYNTAX;
+
+	newsiz = offset;
+	if ( fib->fib_size > newsiz ) {
+
+		/*
+		 * Release file blocks
+		 */
+		rc = release_block_sword(fib->fib_devltr, pos->dp_fatpos, fib, newsiz);
+		if ( rc != 0 )
+			goto error_out;
+
+	} else {
+
+		remains = newsiz - fib->fib_size;
+		if ( SOS_CLUSTER_SIZE > remains ) {
+
+			/*
+			 * extend records at the last cluster
+			 */
+
+			/* Read block */
+			rc = get_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
+			memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
+			    0x0,
+			    remains);  /* Clear newly allocated buffer. */
+			/* update culster */
+			rc = put_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, fib->fib_size,
+			    &clsbuf[0], SOS_CLUSTER_SIZE);
+			if ( rc != 0 )
+				goto error_out;
+		} else {
+
+			/* alloc new blocks to the newsize. */
+			rc = get_block_sword(pos->dp_devltr,
+			    pos->dp_fatpos, fib, newsiz, FS_SWD_GTBLK_WR_FLG,
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
+		}
+	}
+
+	/*
+	 * update file information block
+	 */
+	fib->fib_size = newsiz;  /* update size */
+	rc = write_dent_sword(pos->dp_devltr, pos->dp_dirps, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
 
