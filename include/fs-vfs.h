@@ -24,9 +24,17 @@
 
 /** seek
  */
-#define FS_VFS_SEEK_SET	(0)	/* Seek from beginning of file.  */
-#define FS_VFS_SEEK_CUR	(1)	/* Seek from current position.   */
-#define FS_VFS_SEEK_END	(2)	/* Seek from end of file.        */
+#define FS_VFS_SEEK_SET	(0)	/**< Seek from beginning of file.  */
+#define FS_VFS_SEEK_CUR	(1)	/**< Seek from current position.   */
+#define FS_VFS_SEEK_END	(2)	/**< Seek from end of file.        */
+
+/** Permission
+ */
+#define FS_PERM_RD    (1)    /**< readable */
+#define FS_PERM_WR    (2)    /**< writable */
+#define FS_PERM_EX    (4)    /**< execute */
+
+typedef WORD fs_perm;   /** permission bit map */
 
 /** File descriptor
  */
@@ -67,6 +75,8 @@ struct _fs_fops{
 	int (*fops_closedir)(struct _sword_dir *_dir);
 	int (*fops_rename)(struct _sword_dir *_dir, const unsigned char *_oldpath,
 	    const unsigned char *_newpath);
+	int (*fops_chmod)(struct _sword_dir *_dir, const unsigned char *_path,
+	    const fs_perm _perm);
 	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path);
 };
 /** Superblock

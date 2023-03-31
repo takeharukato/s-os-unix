@@ -34,18 +34,18 @@ TODO list
 * D88フォーマット対応
 
 [fs]
-* fatpos, dirpsをスーパブロック情報から取得するように修正
-* set/resetの為にchmodオペレーションが必要
+* read/write/seekでヘッダを読み飛ばす処理が必要
+  ヘッダの書込みはwopen時(open flagsがwriteの場合にのみfdのfibの内容に従って実施)
 * ファイルシステム共通部(fs-vfs)作成
 * ファイルシステムマウント処理作成
+* fatpos, dirpsをスーパブロック情報から取得するように修正
 * WA_DIRPS, WA_FATPOSの更新を見張って, スーパーブロックの
   fatpos, dirpsをスーパブロック情報を更新
   (やりすぎか, システムコールで更新するべき)
-
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
-* read/write/seekでヘッダを読み飛ばす処理が必要
-  ヘッダの書込みはwopen時(open flagsがwriteの場合にのみfdのfibの内容に従って実施)
 
+[fs済]
+* set/resetの為にchmodオペレーションが必要[済]
 
 [storage]
 * マウント処理でファイルシステムを指定できるようにする

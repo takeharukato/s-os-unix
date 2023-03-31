@@ -1376,6 +1376,58 @@ error_out:
 	return rc;
 }
 
+/** Change permission of a file
+    @param[in]  dir     The pointer to the DIR structure (directory stream).
+    @param[in]  path    The filename of changing the permission of the file
+    @param[in]  perm    The new permission
+    @retval     0               Success
+    @retval     SOS_ERROR_NOENT path is not Found.
+ */
+int
+fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path, const fs_perm perm){
+	int                             rc;
+	fs_dirps                     dirps;
+	struct _storage_disk_pos      *pos;
+	struct _storage_fib            fib;
+	BYTE        swdname[SOS_FNAME_LEN];
+
+	pos = &dir->dir_pos;  /* Position information */
+
+	rc = storage_get_dirps(pos->dp_devltr, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get the filename of oldpath in SWORD representation. */
+	rc = fs_unix2sword(path, &swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Obtain a directory entry for the file to be renamed. */
+	rc = search_dent_sword(pos->dp_devltr, dirps, &swdname[0], &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+
+	/* Change the file permission */
+	if ( perm & FS_PERM_WR )
+		fib.fib_attr &= ~SOS_FATTR_RONLY;  /* clear readonly bit */
+	else
+		fib.fib_attr |= SOS_FATTR_RONLY;  /* set readonly bit */
+
+	/* Update the directory entry. */
+	rc = write_dent_sword(pos->dp_devltr, dirps, &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Unlink a file
     @param[in]  dir  The pointer to the DIR structure (directory stream).
     @param[in]  path The filename to unlink
