@@ -16,11 +16,20 @@
 
 /** file decriptor flags
  */
-#define FS_VFS_FD_FLAG_O_RDONLY   (0)  /**< ReadOnly   */
-#define FS_VFS_FD_FLAG_O_WRONLY   (1)  /**< WriteOnly  */
-#define FS_VFS_FD_FLAG_O_RDWR     (2)  /**< Read/Write */
+#define FS_VFS_FD_FLAG_O_RDONLY   (0x0)     /**< ReadOnly   */
+#define FS_VFS_FD_FLAG_O_WRONLY   (0x1)     /**< WriteOnly  */
+#define FS_VFS_FD_FLAG_O_RDWR     (0x2)     /**< Read/Write */
+#define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create  */
+#define FS_VFS_FD_FLAG_O_ASC    (0x100)  /**< ASCII  file  */
+#define FS_VFS_FD_FLAG_O_BIN    (0x200)  /**< Binary file  */
+#define FS_VFS_FD_FLAG_SYS_OPENED  (1)  /**< The file is opened */
+#define FS_VFS_FD_FLAG_FTYPE_MSK \
+	( FS_VFS_FD_FLAG_O_ASC|FS_VFS_FD_FLAG_O_BIN ) /**< S-OS file type */
+/** Write flags
+ */
+#define FS_VFS_FD_FLAG_MAY_WRITE					\
+	( FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT )
 
-#define FS_VFS_FD_FLAG_SYS_OPENED (1)  /**< The file is opened */
 
 /** seek
  */
@@ -57,8 +66,10 @@ struct _sword_dir{
  */
 struct _fs_fops{
 	void               *fops_private;   /**< Private Information                */
-	int (*fops_open)(sos_devltr _ch, const char *_filepath,
-	    struct _storage_fib *_fib, void **_privatep);
+	int (*fops_creat)(sos_devltr _ch, const char *_filepath, WORD flags,
+	    struct _storage_fib *_fibp);
+	int (*fops_open)(sos_devltr _ch, const char *_filepath, WORD flags,
+	    struct _storage_fib *_fibp, void **_privatep);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_dest,
 	    size_t _count, size_t *_rdsizp);

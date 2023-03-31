@@ -36,6 +36,17 @@
  */
 #define FS_SWD_GETBLK_TO_WRITE(_mod) ( (_mod) & FS_SWD_GTBLK_WR_FLG )
 
+/** Determine whether the open flags is invalid
+   @param[in] _f The open flags
+   @retval TRUE  The open flags is invalid
+   @retval FALSE The open flags is valid
+ */
+#define FS_IS_OPEN_FLAGS_INVALID(_f)					\
+	( ( ( (_f) & FS_VFS_FD_FLAG_FTYPE_MSK ) == FS_VFS_FD_FLAG_FTYPE_MSK ) || \
+	( ( (_f) & FS_VFS_FD_FLAG_FTYPE_MSK ) == 0 ) ||			\
+        ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT )  )
+
+
 /*
  * Foward declarations
  */
@@ -431,14 +442,14 @@ error_out:
 /** Search a file in the directory entry on the disk.
     @param[in] ch     The drive letter
     @param[in] dirps  The record number of the first directory entry on the disk
-    @param[in] swd_fname The file name in SWORD(NOT C String)
+    @param[in] swd_name The file name in SWORD(NOT C String)
     @param[out] fib  The destination address of the file information block
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
     @retval    SOS_ERROR_NOENT File not found
  */
 static int
-search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
+search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_name,
     struct _storage_fib *fib){
 	int                         rc;
 	BYTE                       rec;
@@ -452,7 +463,7 @@ search_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname,
 		if ( rc != 0 )
 			goto error_out; /* File not found */
 
-		if ( memcmp(&dent[0] + SOS_FIB_OFF_FNAME, &swd_fname[0],
+		if ( memcmp(&dent[0] + SOS_FIB_OFF_FNAME, &swd_name[0],
 			SOS_FNAME_NAMELEN) == 0 )
 			goto found;  /* Found */
 	}
@@ -477,10 +488,10 @@ error_out:
     @param[in] dirps The record number of the first directory entry on the disk
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOENT File not found
+    @retval    SOS_ERROR_NOSPC Free entry not found
  */
 static int
-search_free_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname, BYTE  *dirnop){
+search_free_dent_sword(sos_devltr ch, BYTE dirps, BYTE  *dirnop){
 	int                     rc;
 	int                      i;
 	BYTE                   rec;
@@ -518,7 +529,7 @@ search_free_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname, BYTE  *
 
 			if ( attr == SOS_FATTR_EODENT ) {
 
-				rc = SOS_ERROR_NOENT; /* File not found */
+				rc = SOS_ERROR_NOSPC; /* Device Full */
 				goto error_out;
 			}
 		}
@@ -527,7 +538,7 @@ search_free_dent_sword(sos_devltr ch, BYTE dirps, const BYTE *swd_fname, BYTE  *
 	/*
 	 * The end of directory entry not found.
 	 */
-	rc = SOS_ERROR_NOENT; /* File not found */
+	rc = SOS_ERROR_NOSPC; /* Device Full */
 	goto error_out;
 
 found:
@@ -852,41 +863,91 @@ error_out:
 /*
  * File system operations
  */
-
-/** Open a file
+/** Create a file
     @param[in] ch       The drive letter
     @param[in] fname    The filename to open
+    @param[in] flags    The open flags
+    FS_VFS_FD_FLAG_O_RDONLY  Read only open
+    FS_VFS_FD_FLAG_O_WRONLY  Write only open
+    FS_VFS_FD_FLAG_O_RDWR    Read/Write open
+    FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
+    FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
+    FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
     @param[out] fibp     The address to store the file information block
-    @param[out] privatep The pointer to the pointer variable to store
-    the private information
-    @retval    0               Success
-    @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOENT File not found
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_EXIST  File Already Exists
+    @retval    SOS_ERROR_NOSPC  Device Full (No free directory entry)
+    @retval    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch, const char *fname, struct _storage_fib *fibp, void **privatep){
+fops_creat_sword(sos_devltr ch, const char *fname, WORD flags,
+    struct _storage_fib *fibp){
 	int                           rc;
 	fs_dirps                   dirps;
+	BYTE                       dirno;
 	struct _storage_fib          fib;
-	BYTE    swd_fname[SOS_FNAME_LEN];
+	BYTE     swd_name[SOS_FNAME_LEN];
+	BYTE       dent[SOS_RECORD_SIZE];
+
+	if ( FS_IS_OPEN_FLAGS_INVALID(flags) )
+		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
 	/*
-	 * conver the filename which was inputted from the console to
+	 * convert the filename which was inputted from the console to
 	 * the sword filename format.
 	 */
-	rc = fs_unix2sword(fname, &swd_fname[0], SOS_FNAME_LEN);
+	rc = fs_unix2sword(fname, &swd_name[0], SOS_FNAME_LEN);
 	if ( rc != 0 )
 		goto error_out;
 
 	/*
 	 * Search file from directory entry.
 	 */
-
 	rc = storage_get_dirps(ch, &dirps);  /* Get current #DIRPS */
 	if ( rc != 0 )
 		goto error_out;
 
-	rc = search_dent_sword(ch, dirps, &swd_fname[0], &fib);
+	rc = search_dent_sword(ch, dirps, &swd_name[0], &fib);
+	if ( rc == 0 ) {
+
+		rc = SOS_ERROR_EXIST;
+		goto error_out;
+	}
+
+	/*
+	 * Search a free entry
+	 */
+	rc = search_free_dent_sword(ch, dirps, &dirno);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOSPC;
+		goto error_out;
+	}
+
+
+	/*
+	 * create the new file
+	 */
+	memset(&dent[0], 0x0, SOS_RECORD_SIZE); /* zero fill */
+
+	/*
+	 * Set file type
+	 */
+	if ( flags & FS_VFS_FD_FLAG_O_BIN )
+		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_BIN;
+	else
+		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_ASC;
+
+	/* No FAT alloced */
+	*((BYTE *)&dent[0] + SOS_FIB_OFF_CLS ) = SOS_FAT_ENT_EOF_MASK;
+	/* Set file name */
+	memcpy(&fib.fib_sword_name[0],&swd_name[0],SOS_FNAME_LEN);
+
+	STORAGE_FILL_FIB(&fib, ch, dirno, &dent[0]); /* Fill Information block */
+
+	/* Update the directory entry. */
+	rc = write_dent_sword(ch, dirps, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -897,6 +958,103 @@ fops_open_sword(sos_devltr ch, const char *fname, struct _storage_fib *fibp, voi
 		memcpy(fibp, &fib, sizeof(struct _storage_fib));
 
 	return 0;
+
+error_out:
+	return rc;
+}
+/** Open a file
+    @param[in] ch       The drive letter
+    @param[in] fname    The filename to open
+    @param[in] flags    The open flags
+    FS_VFS_FD_FLAG_O_RDONLY  Read only open
+    FS_VFS_FD_FLAG_O_WRONLY  Write only open
+    FS_VFS_FD_FLAG_O_RDWR    Read/Write open
+    FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
+    FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
+    FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
+    @param[out] fibp     The address to store the file information block
+    @param[out] privatep The pointer to the pointer variable to store
+    the private information
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_EXIST  File Already Exists
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_NOSPC  Device Full (No free directory entry)
+    @retval    SOS_ERROR_RDONLY Write proteced file
+    @retval    SOS_ERROR_SYNTAX Invalid flags
+ */
+int
+fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
+	    struct _storage_fib *fibp, void **privatep){
+	int                           rc;
+	fs_dirps                   dirps;
+	struct _storage_fib          fib;
+	BYTE     swd_name[SOS_FNAME_LEN];
+
+	if ( FS_IS_OPEN_FLAGS_INVALID(flags) )
+		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
+
+	if ( flags & FS_VFS_FD_FLAG_MAY_WRITE ) {
+
+		/*
+		 * TODO: Handle READ ONLY device case
+		 */
+	}
+
+	/*
+	 * Create a file
+	 */
+	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
+
+		rc = fops_creat_sword(ch, fname, flags, fibp);
+		goto set_private_out;
+	}
+
+	/*
+	 * convert the filename which was inputted from the console to
+	 * the sword filename format.
+	 */
+	rc = fs_unix2sword(fname, &swd_name[0], SOS_FNAME_LEN);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Search file from directory entry.
+	 */
+	rc = storage_get_dirps(ch, &dirps);  /* Get current #DIRPS */
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = search_dent_sword(ch, dirps, &swd_name[0], &fib);
+	if ( rc != 0 )
+		goto error_out;
+	/*
+	 * Check file attribute
+	 */
+	if ( ( ( flags & FS_VFS_FD_FLAG_O_BIN ) && ( fib.fib_attr != SOS_FATTR_BIN ) ) ||
+	    ( ( flags & FS_VFS_FD_FLAG_O_ASC ) && ( fib.fib_attr != SOS_FATTR_ASC ) ) ) {
+
+		rc = SOS_ERROR_NOENT;  /* File attribute was not matched. */
+		goto error_out;
+	}
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
+	    && ( fib.fib_attr & SOS_FATTR_RDONLY ) ) {
+
+		rc = SOS_ERROR_RDONLY;  /* Permission denied */
+		goto error_out;
+	}
+
+	/*
+	 * return file information block
+	 */
+	if ( fibp != NULL )
+		memcpy(fibp, &fib, sizeof(struct _storage_fib));
+
+	rc = 0;
+
+set_private_out:
+	if ( privatep != NULL )
+		*privatep = NULL;
 
 error_out:
 	return rc;
@@ -1413,9 +1571,9 @@ fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path, const fs_per
 
 	/* Change the file permission */
 	if ( perm & FS_PERM_WR )
-		fib.fib_attr &= ~SOS_FATTR_RONLY;  /* clear readonly bit */
+		fib.fib_attr &= ~SOS_FATTR_RDONLY;  /* clear readonly bit */
 	else
-		fib.fib_attr |= SOS_FATTR_RONLY;  /* set readonly bit */
+		fib.fib_attr |= SOS_FATTR_RDONLY;  /* set readonly bit */
 
 	/* Update the directory entry. */
 	rc = write_dent_sword(pos->dp_devltr, dirps, &fib);

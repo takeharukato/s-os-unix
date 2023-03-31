@@ -239,4 +239,5 @@ int storage_set_dirps(const sos_devltr _ch, const fs_dirps _dirps);
 int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
 int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
 int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
+int storage_check_status(const sos_devltr _ch);
 #endif  /*  _STORAGE_H  */

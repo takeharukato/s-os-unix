@@ -767,6 +767,32 @@ storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
 
 	return 0;
 }
+/** Determine whether the device is online
+    @param[in]   ch    The device letter of a device on SWORD
+    @retval 0      success
+    @retval ENODEV No such device
+    @retval EINVAL The device letter is not supported.
+    @retval ENXIO  The device has not been mounted(offline).
+ */
+int
+storage_check_status(const sos_devltr ch){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+
+	/* Get device index */
+	rc = check_device_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+	if ( inf->di_manager == NULL )
+		return ENXIO;  /* not mounted */
+
+	return 0;
+}
 
 /** Initialize storages
  */

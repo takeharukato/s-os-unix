@@ -50,10 +50,16 @@
 #define SOS_FATTR_RSV     (0x8)   /* Reserved */
 #define SOS_FATTR_HIDDEN  (0x10)  /* Hidden file */
 #define SOS_FATTR_RAW     (0x20)  /* Read after write (RAW) */
-#define SOS_FATTR_RONLY   (0x40)  /* Read only */
+#define SOS_FATTR_RDONLY  (0x40)  /* Read only */
 #define SOS_FATTR_DIR     (0x80)  /* Sub directory */
 #define SOS_FATTR_EODENT  (0xFF)  /* End of directory entry */
 #define SOS_FATTR_MASK    (0x87)  /* File type mask and clear Hidden/RAW/ReadOnly bits */
+
+/** S-OS support Binary and Ascii file */
+#define SOS_FATTR_VALID_TYPES (SOS_FATTR_BIN|SOS_FATTR_ASC)
+/** S-OS can make a file readonly */
+#define SOS_FATTR_VALID_FLAGS (SOS_FATTR_VALID_TYPES|SOS_FATTR_RONLY)
+
 /*
    S-OS IOCS call in Z80 memory
 */
@@ -178,6 +184,7 @@
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
 #define SOS_FAT_CLSNUM_MASK    (0xff)   /**< cluster size in Sword is BYTE */
+
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number
     @return The first record number of the cluster
@@ -191,6 +198,11 @@
  */
 #define SOS_REC2CLS(_recno) \
 	((BYTE)( ( ( _recno ) >> SOS_CLUSTER_SHIFT ) & 0xff ) )
+
+/** File Header
+ */
+#define	SOS_HEADERPAT	"_SOS %02x %04x %04x\n"  /**< _SOS ATTR DTADR EXADR\n */
+#define	SOS_HEADERLEN	(18)                     /**< Header length  */
 
 /*
  * FAT Entries
