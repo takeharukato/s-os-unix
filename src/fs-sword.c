@@ -1301,15 +1301,17 @@ error_out:
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
     @param[in]  pkt      The S-OS header operation packet.
     @param[out] fibp     The address to store the file information block
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_EXIST  File Already Exists
-    @retval    SOS_ERROR_NOSPC  Device Full (No free directory entry)
-    @retval    SOS_ERROR_SYNTAX Invalid flags
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    *    SOS_ERROR_IO     I/O Error
+    *    SOS_ERROR_EXIST  File Already Exists
+    *    SOS_ERROR_NOSPC  Device Full (No free directory entry)
+    *    SOS_ERROR_SYNTAX Invalid flags
  */
 int
 fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
-    const struct _sword_header_packet *pkt, struct _storage_fib *fibp){
+    const struct _sword_header_packet *pkt, struct _storage_fib *fibp, BYTE *resp){
 	int                           rc;
 	BYTE                       dirno;
 	struct _storage_fib          fib;
@@ -1388,7 +1390,10 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 /** Open a file
     @param[in] ch       The drive letter
@@ -1404,18 +1409,21 @@ error_out:
     @param[out] fibp     The address to store the file information block
     @param[out] privatep The pointer to the pointer variable to store
     the private information
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_EXIST  File Already Exists
-    @retval    SOS_ERROR_NOENT  File not found
-    @retval    SOS_ERROR_NOSPC  Device Full (No free directory entry)
-    @retval    SOS_ERROR_RDONLY Write proteced file
-    @retval    SOS_ERROR_SYNTAX Invalid flags
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_EXIST  File Already Exists
+    * SOS_ERROR_NOENT  File not found
+    * SOS_ERROR_NOSPC  Device Full (No free directory entry)
+    * SOS_ERROR_RDONLY Write proteced file
+    * SOS_ERROR_SYNTAX Invalid flags
  */
 int
 fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
     const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
-    void **privatep){
+    void **privatep, BYTE *resp){
 	int                           rc;
 	struct _storage_fib          fib;
 	BYTE     swd_name[SOS_FNAME_LEN];
@@ -1435,7 +1443,7 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
 
-		rc = fops_creat_sword(ch, fname, flags, pkt, fibp);
+		rc = fops_creat_sword(ch, fname, flags, pkt, fibp, resp);
 		goto set_private_out;
 	}
 
@@ -1504,15 +1512,22 @@ set_private_out:
 		*privatep = NULL;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
 }
 
 /** Close the file
     @param[in] fdp  The file descriptor to close
+    @param[out] resp     The address to store the return code for S-OS.
     @retval      0  Success
  */
 int
-fops_close_sword(struct _sword_file_descriptor *fdp){
+fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp){
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
 
 	return 0;
 }
@@ -1523,14 +1538,17 @@ fops_close_sword(struct _sword_file_descriptor *fdp){
     @param[in]  count  The counter how many bytes to read from the
     file.
     @param[out] rdsizp  The adress to store read bytes.
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_NOENT  Block not found
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -1                Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
 fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
-    size_t *rdsizp){
+    size_t *rdsizp, BYTE *resp){
 	int                        rc;
 	struct _storage_disk_pos *pos;
 
@@ -1541,10 +1559,16 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	if ( rc != 0 )
 		goto error_out;
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Write to the file
@@ -1552,16 +1576,19 @@ error_out:
     @param[out] src    The buffer to store read data.
     @param[in]  count  The counter how many bytes to read from the
     file.
-    @param[out] wrsizp  The adress to store written bytes.
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_NOENT  Block not found
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
-    @retval    SOS_ERROR_NOSPC  Device full
+    @param[out] wrsizp The adress to store written bytes.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+    * SOS_ERROR_NOSPC  Device full
  */
 int
 fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
-    size_t count, size_t *wrsizp){
+    size_t count, size_t *wrsizp, BYTE *resp){
 	int                        rc;
 	struct _storage_disk_pos *pos;
 
@@ -1576,27 +1603,39 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	 * @remark We do not need to update the S-OS header because it does not
 	 * contain the file size information.
 	 */
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
 
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Stat the file
     @param[in]  fdp    The file descriptor to the file.
     @param[out] fib    The buffer to store the file information block of the file.
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_NOENT  Block not found
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
-    @retval    SOS_ERROR_NOSPC  Device full
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+    * SOS_ERROR_NOSPC  Device full
  */
 int
-fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib){
+fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib,
+    BYTE *resp){
 
 	/* Copy the file infomation block */
 	memmove(fib, &fdp->fd_fib, sizeof(struct _storage_fib));
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
 
 	return 0;
 }
@@ -1611,13 +1650,13 @@ fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib){
      FS_VFS_SEEK_END The file offset is set to the size of the file plus offset bytes.
     @param[out] new_posp The address to store the new position excluding the size
     of the S-OS header.
+    @param[out] resp     The address to store the return code for S-OS.
     @retval     0                Success
-    @retval     EINVAL           Invalid whence
-    @retval     ENXIO            The new position exceeded the file size
+    @retval    -EINVAL           Invalid whence
  */
 int
 fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
-    fs_off_t *new_posp ){
+    fs_off_t *new_posp, BYTE *resp){
 	fs_off_t                  new;
 	fs_off_t                  cur;
 	fs_off_t                  off;
@@ -1653,7 +1692,10 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
 		break;
 
 	default:
-		return EINVAL;
+
+		if ( resp != NULL )
+			*resp = SOS_ERROR_SYNTAX;  /* return code */
+		return -EINVAL;
 	}
 
 	if ( SOS_HEADER_LEN > ( cur + off ) )
@@ -1666,30 +1708,53 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
 	if ( new_posp != NULL )
 		*new_posp = new - SOS_HEADER_LEN;  /* return the new position */
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 }
 
 /** Truncate a file to a specified length
     @param[in]  fdp    The file descriptor to the file.
     @param[in]  offset The file length of the file to be truncated.
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset){
+fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset,
+    BYTE *resp){
+	int                        rc;
 	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
 
 	fib = &fdp->fd_fib;  /* file information block */
 	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
 
-	return change_filesize_raw(fib, pos + SOS_HEADER_LEN, offset);
+	rc = change_filesize_raw(fib, pos + SOS_HEADER_LEN, offset);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Open directory
     @param[out] dir     The pointer to the DIR structure (directory stream).
-    @retval     0       Success
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -1      Error
     @retval     EINVAL  Invalid whence
     @retval     ENXIO   The new position exceeded the file size
     @remark     DIRP has been initialized by the caller and this function is
@@ -1697,7 +1762,7 @@ fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset){
     variable in DIR  and the private information.
  */
 int
-fops_opendir_sword(struct _sword_dir *dir){
+fops_opendir_sword(struct _sword_dir *dir, BYTE *resp){
 	struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
@@ -1705,13 +1770,18 @@ fops_opendir_sword(struct _sword_dir *dir){
 	pos->dp_pos = 0;  /* Set to the first directory entry */
 	pos->dp_private = NULL; /* Init private information */
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 }
 
 /** Read the directory
-    @param[in]  dir  The pointer to the DIR structure (directory stream).
-    @param[out] fib  The pointer to the file information block.
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] fib    The pointer to the file information block.
+    @param[out] resp   The address to store the return code for S-OS.
     @retval     0      Success
+    @retval    -1      Error
     @retval     EINVAL Invalid whence
     @retval     ENXIO  The new position exceeded the file size
     @remark     This function is responsible for setting the dir_pos member of
@@ -1723,7 +1793,7 @@ fops_opendir_sword(struct _sword_dir *dir){
     indicated by the dir_pos member of the dir_pos structured variable in DIR.
  */
 int
-fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib){
+fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp){
 	int                        rc;
 	struct _storage_disk_pos *pos;
 	BYTE                    dirno;
@@ -1756,19 +1826,26 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib){
 	 */
 	pos->dp_pos = ( dirno + 1 ) * SOS_DENTRY_SIZE;  /* file position */
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Set the position of the next fs_readdir() call in the directory stream.
     @param[in]  dir    The pointer to the DIR structure (directory stream).
     @param[in]  dirno  The position of the next fs_readdir() call
     It should be a value returned by a previous call to fs_telldir.
-    @retval     0      Success
-    @retval     EINVAL Invalid dirno
-    @retval     ENXIO  The new position exceeded the SOS_DENTRY_NR.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -EINVAL Invalid dirno
+    @retval     -ENXIO  The new position exceeded the SOS_DENTRY_NR.
     @remark     This function is responsible for setting the dir_pos member of
     the dir_pos structured variable in DIR and filling the FIB.
     Other members in the dir_pos should be set by the caller.
@@ -1776,18 +1853,21 @@ error_out:
     an array of directory entries.
  */
 int
-fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno){
+fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno, BYTE *resp){
 	struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
 
 	if ( 0 > dirno )
-		return EINVAL;  /* Invalid #DIRNO */
+		return -EINVAL;  /* Invalid #DIRNO */
 
 	if ( dirno > SOS_DENTRY_NR )
-		return ENXIO;   /* #DIRNO is out of range. */
+		return -ENXIO;   /* #DIRNO is out of range. */
 
 	pos->dp_pos = dirno * SOS_DENTRY_SIZE;  /* set seek position */
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
 
 	return 0;
 }
@@ -1797,35 +1877,44 @@ fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno){
     @param[in]  dirno  The position of the next fs_readdir() call
     @param[out] dirnop The address to store current location in directory stream.
     It should be a value returned by a previous call to fs_telldir.
+    @param[out] resp   The address to store the return code for S-OS.
     @retval     0      Success
-    @retval     EINVAL Invalid dirno
-    @retval     ENXIO  The new position exceeded the SOS_DENTRY_NR.
+    @retval    -1      Error
+    The responses from the function:
+    * SOS_ERROR_INVAL  The current position does not point the position in the file.
     @details    This function regards a directory as a binary file containing
     an array of directory entries.
  */
 int
-fops_telldir_sword(const struct _sword_dir *dir, fs_dirno *dirnop){
+fops_telldir_sword(const struct _sword_dir *dir, fs_dirno *dirnop, BYTE *resp){
 	const struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
 
 	if ( dirnop == NULL )
-		goto out;
+		goto error_out;
 
 	*dirnop = pos->dp_pos / SOS_DENTRY_SIZE;  /* current position */
 
-out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ERROR_INVAL;  /* return code */
+
+	return -1;
 }
 
 /** close the directory
-    @param[in]  dir  The pointer to the DIR structure (directory stream).
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] resp   The address to store the return code for S-OS.
     @retval     0      Success
-    @retval     EINVAL Invalid whence
-    @retval     ENXIO  The new position exceeded the file size
  */
 int
-fops_closedir_sword(struct _sword_dir *dir){
+fops_closedir_sword(struct _sword_dir *dir, BYTE *resp){
 	struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
@@ -1833,20 +1922,26 @@ fops_closedir_sword(struct _sword_dir *dir){
 	pos->dp_pos = 0;        /* Reset position */
 	pos->dp_private = NULL; /* Clear private information */
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 }
 
 /** Change the name of a file
-    @param[in]  dir     The pointer to the DIR structure (directory stream).
-    @param[in]  oldpath The filename to be changed
-    @param[in]  newpath The filename to change to.
-    @retval     0               Success
-    @retval     SOS_ERROR_EXIST Newpath already exists
-    @retval     SOS_ERROR_NOENT Oldpath is not Found.
+    @param[in]  dir      The pointer to the DIR structure (directory stream).
+    @param[in]  oldpath  The filename to be changed
+    @param[in]  newpath  The filename to change to.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+    The responses from the function:
+    * SOS_ERROR_EXIST Newpath already exists
+    * SOS_ERROR_NOENT Oldpath is not Found.
  */
 int
 fops_rename_sword(struct _sword_dir *dir, const unsigned char *oldpath,
-    const unsigned char *newpath){
+    const unsigned char *newpath, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib        old_fib;
@@ -1894,21 +1989,31 @@ fops_rename_sword(struct _sword_dir *dir, const unsigned char *oldpath,
 	if ( rc != 0 )
 		goto error_out;
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Change permission of a file
     @param[in]  dir     The pointer to the DIR structure (directory stream).
     @param[in]  path    The filename of changing the permission of the file
     @param[in]  perm    The new permission
-    @retval     0               Success
-    @retval     SOS_ERROR_NOENT path is not Found.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval     0       Success
+    @retval    -1       Error
+    The responses from the function:
+    * SOS_ERROR_NOENT path is not Found.
  */
 int
-fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path, const fs_perm perm){
+fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path,
+    const fs_perm perm, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
@@ -1929,7 +2034,6 @@ fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path, const fs_per
 	if ( rc != 0 )
 		goto error_out;
 
-
 	/* Change the file permission */
 	if ( perm & FS_PERM_WR )
 		fib.fib_attr &= ~SOS_FATTR_RDONLY;  /* clear readonly bit */
@@ -1941,21 +2045,31 @@ fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path, const fs_per
 	if ( rc != 0 )
 		goto error_out;
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }
 
 /** Unlink a file
     @param[in]  dir  The pointer to the DIR structure (directory stream).
     @param[in]  path The filename to unlink
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @param[out] resp The address to store the return code for S-OS.
+    @retval     0    Success
+    @retval    -1    Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_unlink(struct _sword_dir *dir, const unsigned char *path){
+fops_unlink(struct _sword_dir *dir, const unsigned char *path,
+    BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
@@ -2002,8 +2116,14 @@ fops_unlink(struct _sword_dir *dir, const unsigned char *path){
 	if ( rc != 0 )
 		goto error_out;
 
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
 	return 0;
 
 error_out:
-	return rc;
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
 }

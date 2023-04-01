@@ -11,8 +11,8 @@
 
 int fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
     const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
-    void **privatep);
-int fops_close_sword(struct _sword_file_descriptor *fdp);
+    void **privatep, BYTE *resp);
+int fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp);
 
 void
 print_unix_filename(BYTE *name){
@@ -69,6 +69,7 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
     const struct _sword_header_packet *pkt, struct _sword_file_descriptor *fdp){
 	int                                   rc;
 	struct _sword_file_descriptor fd, *fdref;
+	BYTE                                 res;
 
 	rc = storage_check_status(ch);
 	if ( rc == ENXIO )
@@ -82,8 +83,8 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	fdref = &fd;
 
 	rc = fops_open_sword(ch, filepath, flags, pkt,
-	    &fdref->fd_fib, &fdref->fd_private);
-	if ( rc != 0 )
+	    &fdref->fd_fib, &fdref->fd_private, &res);
+	if ( res != 0 )
 		goto error_out;
 
 	memcpy(fdp, fdref, sizeof(struct _sword_file_descriptor));
@@ -94,12 +95,13 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	return 0;
 
 error_out:
-	return rc;
+	return res;
 }
 
 static int
 fs_vfs_close(struct _sword_file_descriptor *fdp){
-	int rc;
+	int   rc;
+	BYTE res;
 
 	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
 
@@ -107,8 +109,8 @@ fs_vfs_close(struct _sword_file_descriptor *fdp){
 		goto error_out;
 	}
 
-	rc = fops_close_sword(fdp);
-	if ( rc != 0 )
+	rc = fops_close_sword(fdp, &res);
+	if ( res != 0 )
 		goto error_out;
 
 	fd_init(0, fdp);  /* Clear file descriptor status */
@@ -116,7 +118,8 @@ fs_vfs_close(struct _sword_file_descriptor *fdp){
 	return 0;
 
 error_out:
-	return rc;
+
+	return res;
 }
 
 int

@@ -226,6 +226,10 @@
 #define SOS_REC2CLS(_recno) \
 	((BYTE)( ( ( _recno ) >> SOS_CLUSTER_SHIFT ) & 0xff ) )
 
+/*
+ * Value mask
+ */
+
 /** Get the record value on S-OS
     @param[in] _v  The value to convert
     @return The record value on S-OS
@@ -234,19 +238,19 @@
 
 /** Get #DIRPS value on S-OS
     @param[in] _v  The value to convert
-    @return #DIRPS value on S-OS
+    @return The #DIRPS value on S-OS
  */
 #define SOS_DIRPS_VAL(_v) ( SOS_REC_VAL( (_v) ) )
 
 /** Get #FATPOS value on S-OS
     @param[in] _v  The value to convert
-    @return #FATPOS value on S-OS
+    @return The #FATPOS value on S-OS
  */
 #define SOS_FATPOS_VAL(_v) ( SOS_REC_VAL( (_v) ) )
 
 /** Get FAT value on S-OS
     @param[in] _v  The value to convert
-    @return FAT value on S-OS
+    @return The FAT value on S-OS
  */
 #define SOS_FAT_VAL(_v) ( (_v) & 0xff )
 
@@ -260,15 +264,21 @@
  */
 /** Get the memory address value on S-OS
     @param[in] _v  The value to convert
-    @return the memory address value on S-OS
+    @return The memory address value on S-OS
  */
 #define SOS_Z80MEM_VAL(_v) ( (_v) & 0xffff )
 
 /** Get the file size value on S-OS
     @param[in] _v  The value to convert
-    @return the file size value on S-OS
+    @return The file size value on S-OS
  */
 #define SOS_FSIZE_VAL(_v) ( (_v) & 0xffff )
+
+/** Get the error code value on S-OS
+    @param[in] _v  The value to convert
+    @return The error code value on S-OS
+ */
+#define SOS_ECODE_VAL(_v) ( (_v) & 0xff )
 
 /** File Header
  */

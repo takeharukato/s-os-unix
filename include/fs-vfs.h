@@ -72,30 +72,34 @@ struct _fs_fops{
 	void *fops_private;   /**< Private Information */
 	int (*fops_creat)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
 	    const struct _sword_header_packet *_pkt,
-	    struct _storage_fib *_fibp);
+	    struct _storage_fib *_fibp, BYTE *_resp);
 	int (*fops_open)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
 	    const struct _sword_header_packet *_pkt,
-	    struct _storage_fib *_fibp, void **_privatep);
-	int (*fops_close)(struct _sword_file_descriptor *_fdp);
+	    struct _storage_fib *_fibp, void **_privatep, BYTE *_resp);
+	int (*fops_close)(struct _sword_file_descriptor *_fdp, BYTE *_resp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_dest,
-	    size_t _count, size_t *_rdsizp);
+	    size_t _count, size_t *_rdsizp, BYTE *_resp);
 	int (*fops_write)(struct _sword_file_descriptor *_fdp, const void *_src,
-	    size_t _count, size_t *_wrsizp);
+	    size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
-	    struct _storage_fib *_fibp);
+	    struct _storage_fib *_fibp, BYTE *_resp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
-	    int _whence, fs_off_t *_newposp);
-	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset);
-	int (*fops_opendir)(struct _sword_dir *_dir);
-	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp);
-	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno);
-	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop);
-	int (*fops_closedir)(struct _sword_dir *_dir);
+	    int _whence, fs_off_t *_newposp, BYTE *_resp);
+	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
+	    BYTE *_resp);
+	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
+	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp,
+	    BYTE *_resp);
+	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno, BYTE *_resp);
+	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop,
+	    BYTE *_resp);
+	int (*fops_closedir)(struct _sword_dir *_dir, BYTE *_resp);
 	int (*fops_rename)(struct _sword_dir *_dir, const unsigned char *_oldpath,
-	    const unsigned char *_newpath);
+	    const unsigned char *_newpath, BYTE *_resp);
 	int (*fops_chmod)(struct _sword_dir *_dir, const unsigned char *_path,
-	    const fs_perm _perm);
-	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path);
+	    const fs_perm _perm, BYTE *_resp);
+	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path,
+	    BYTE *_resp);
 };
 
 /** Superblock
