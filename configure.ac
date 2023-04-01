@@ -86,5 +86,6 @@ AC_HEADER_TIOCGWINSZ
 AC_CONFIG_FILES([Makefile
 	        include/Makefile
                 src/Makefile
-		share/Makefile])
+		share/Makefile
+		test/Makefile])
 AC_OUTPUT
