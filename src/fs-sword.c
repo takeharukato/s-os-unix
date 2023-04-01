@@ -1007,32 +1007,6 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	/*
 	 * Set file type
 	 */
-	if ( pkt->hdr_attr & SOS_FATTR_ASC ) {
-
-		/*
-		 * Write NULL Character if the file is an ASCII file.
-		 */
-
-		/* Read the contents of the first cluster. */
-		rc = get_block_sword(fib.fib_devltr,
-		    &fib, 1, FS_SWD_GTBLK_WR_FLG,
-		    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);  /* write size 1 */
-		if ( rc != 0 )
-			goto error_out;
-
-		clsbuf[0]=SCR_SOS_NUL; /* Write NULL */
-
-		/* Write back the first cluster */
-		rc = put_block_sword(fib.fib_devltr,
-		    &fib, 0, &clsbuf[0], SOS_CLUSTER_SIZE);
-		if ( rc != 0 ) {
-
-			rc = release_block_sword(fib.fib_devltr, &fib, 0);
-			goto error_out;
-		}
-
-		fib.fib_size = 1;  /* set file length to 1. */
-	}
 
 	/* Update the directory entry. */
 	rc = write_dent_sword(ch, &fib);
@@ -1515,8 +1489,8 @@ fops_opendir_sword(struct _sword_dir *dir, BYTE *resp){
     @param[out] resp   The address to store the return code for S-OS.
     @retval     0      Success
     @retval    -1      Error
-    @retval     EINVAL Invalid whence
-    @retval     ENXIO  The new position exceeded the file size
+    @retval     SOS_ERROR_IO    I/O Error
+    @retval     SOS_ERROR_NOENT File not found (the end of the directory entry table )
     @remark     This function is responsible for setting the dir_pos member of
     the dir_pos structured variable in DIR and filling the FIB.
     Other members in the dir_pos should be set by the caller.
