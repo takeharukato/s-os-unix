@@ -91,7 +91,7 @@
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
-/** Fill the file information block
+/** Fill the file information block on the directory entry
     @param[in] _fib    The pointer to the file information block
     @param[in] _dent   The directory entry to copy the FIB to
  */
@@ -114,7 +114,7 @@
 		    &((struct _storage_fib *)(_fib))->fib_sword_name[0], \
 		    SOS_FNAME_LEN);					\
 		memset((BYTE *)( (BYTE *)(_dent) + SOS_FIB_OFF_DATE ), 0x0, \
-		    SOS_FIB_SIZE - SOS_FIB_OFF_DATE);			\
+		    SOS_FIB_SIZE - SOS_FIB_OFF_DATE - sizeof(WORD));	\
 	}while(0)
 
 /** Fill the file information block

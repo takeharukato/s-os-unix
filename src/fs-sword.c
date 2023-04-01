@@ -160,7 +160,7 @@ error_out:
 static int
 clear_block_sword(sos_devltr ch, WORD blkno){
 	int                     rc;
-	BYTE                   rec;
+	WORD                   rec;
 	WORD                 rwcnt;
 	WORD               remains;
 	BYTE  buf[SOS_RECORD_SIZE];
@@ -288,7 +288,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD newsiz) {
 	/*
 	 * Search the cluster to free.
 	 */
-	for( cls = fib->fib_cls & SOS_FAT_CLSNUM_MASK, prev_cls = cls, next_cls=fat[cls];
+	for( cls = SOS_CLS_VAL(fib->fib_cls), prev_cls = cls, next_cls=fat[cls];
 	     clsoff > 0; prev_cls = cls, cls = next_cls, next_cls = fat[next_cls],
 		     --clsoff) {
 
@@ -386,8 +386,8 @@ write_dent_sword(sos_devltr ch, struct _storage_fib *fib){
 	dirno_offset = fib->fib_dirno % SOS_DENTRIES_PER_REC;
 	/* refer the directory entry to modify */
 	dent = (BYTE *)&buf[0] + dirno_offset * SOS_DENTRY_SIZE;
-	/* Modify the entry */
-	STORAGE_FIB2DENT(fib, dent);
+
+	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */
 
 	/*
 	 * Write directory entry
@@ -640,8 +640,8 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	blk_remains = CALC_NEXT_ALIGN_Z80_WORD(pos % SOS_MAX_FILE_SIZE,
 	    SOS_CLUSTER_SIZE) / SOS_CLUSTER_SIZE;
 
-	for(cls = fib->fib_cls & SOS_FAT_CLSNUM_MASK; blk_remains > 0;
-	    --blk_remains, cls = fat[cls]) {
+	for(cls = SOS_CLS_VAL(fib->fib_cls); blk_remains > 0;
+	    --blk_remains) {
 
 		if ( cls == SOS_FAT_ENT_FREE ) {  /* Free entry */
 
@@ -666,14 +666,23 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 			else
 				use_recs =
 					(BYTE)SOS_REC_VAL( ( pos % SOS_CLUSTER_SIZE )
-					    / SOS_RECORD_SIZE );
+					    / SOS_RECORD_SIZE ) + 1;
 
 			rc = alloc_newblock_sword(ch, use_recs, &blkno);
 			if ( rc != 0 )
 				goto error_out;
-			fat[cls] = blkno & SOS_FAT_CLSNUM_MASK; /* make cluster chain */
+			if ( SOS_IS_END_CLS(fib->fib_cls) ) {
+
+				fib->fib_cls = SOS_CLS_VAL(blkno); /* first cluster */
+				cls = fib->fib_cls;
+			} else {
+
+				fat[cls] = SOS_CLS_VAL(blkno); /* make cluster chain */
+				cls = fat[cls];
+			}
 			continue;
 		}
+		cls = fat[cls];
 	}
 	if ( clsp != NULL )
 		*clsp = cls;
@@ -783,7 +792,7 @@ put_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD pos,
 		goto error_out;
 
 	for(sp = src, rec = SOS_CLS2REC(cls), remains = bufsiz; remains > 0;
-	    remains += SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
+	    remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
 
 		if ( SOS_RECORD_SIZE > remains ) {
 
@@ -946,7 +955,7 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	BYTE                       dirno;
 	struct _storage_fib          fib;
 	BYTE     swd_name[SOS_FNAME_LEN];
-	BYTE       dent[SOS_RECORD_SIZE];
+	BYTE    clsbuf[SOS_CLUSTER_SIZE];
 
 	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
@@ -982,24 +991,48 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	/*
 	 * create the new file
 	 */
-	memset(&dent[0], 0x0, SOS_RECORD_SIZE); /* zero fill */
+
+	/*
+	 * Set the file information block up
+	 */
+	fib.fib_devltr = ch;
+	fib.fib_attr = SOS_FATTR_GET_FTYPE(pkt->hdr_attr);
+	fib.fib_dirno = dirno;
+	fib.fib_size = 0;
+	fib.fib_dtadr = pkt->hdr_dtadr;
+	fib.fib_exadr = pkt->hdr_exadr;
+	fib.fib_cls = SOS_FAT_ENT_EOF_MASK; /* No FAT alloced */
+	memcpy(&fib.fib_sword_name[0],&swd_name[0],SOS_FNAME_LEN);
 
 	/*
 	 * Set file type
 	 */
+	if ( pkt->hdr_attr & SOS_FATTR_ASC ) {
 
-	if ( pkt->hdr_attr & SOS_FATTR_BIN )
-		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_BIN;
-	else
-		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_ASC;
+		/*
+		 * Write NULL Character if the file is an ASCII file.
+		 */
 
-	/* No FAT alloced */
-	*((BYTE *)&dent[0] + SOS_FIB_OFF_CLS ) = SOS_FAT_ENT_EOF_MASK;
+		/* Read the contents of the first cluster. */
+		rc = get_block_sword(fib.fib_devltr,
+		    &fib, 1, FS_SWD_GTBLK_WR_FLG,
+		    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);  /* write size 1 */
+		if ( rc != 0 )
+			goto error_out;
 
-	/* Set file name */
-	memcpy(&fib.fib_sword_name[0],&swd_name[0],SOS_FNAME_LEN);
+		clsbuf[0]=SCR_SOS_NUL; /* Write NULL */
 
-	STORAGE_FILL_FIB(&fib, ch, dirno, &dent[0]); /* Fill Information block */
+		/* Write back the first cluster */
+		rc = put_block_sword(fib.fib_devltr,
+		    &fib, 0, &clsbuf[0], SOS_CLUSTER_SIZE);
+		if ( rc != 0 ) {
+
+			rc = release_block_sword(fib.fib_devltr, &fib, 0);
+			goto error_out;
+		}
+
+		fib.fib_size = 1;  /* set file length to 1. */
+	}
 
 	/* Update the directory entry. */
 	rc = write_dent_sword(ch, &fib);
@@ -1051,10 +1084,14 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
     void **privatep, BYTE *resp){
 	int                           rc;
 	struct _storage_fib          fib;
+	BYTE                         res;
 	BYTE     swd_name[SOS_FNAME_LEN];
 
-	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
-		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
+	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) ) {
+
+		rc = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
+		goto error_out;
+	}
 
 	if ( flags & FS_VFS_FD_FLAG_MAY_WRITE ) {
 
@@ -1068,7 +1105,12 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
 
-		rc = fops_creat_sword(ch, fname, flags, pkt, fibp, resp);
+		rc = fops_creat_sword(ch, fname, flags, pkt, fibp, &res);
+		if ( rc != 0 ) {
+
+			rc = res;
+			goto error_out;
+		}
 		goto set_private_out;
 	}
 
@@ -1202,6 +1244,7 @@ error_out:
 
 	return ( rc == 0 ) ? (0) : (-1);
 }
+
 /** Write to the file
     @param[in]  fdp    The file descriptor to the file.
     @param[out] src    The buffer to store read data.
@@ -1758,7 +1801,7 @@ error_out:
     * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_unlink(struct _sword_dir *dir, const unsigned char *path,
+fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path,
     BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;

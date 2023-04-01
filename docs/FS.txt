@@ -67,3 +67,6 @@ struct _fs_fops{
 };
 int
 fs_register_filesystem(
+
+メモ
+アスキーファイルのディレクトリエントリは, ファイルサイズ+1になっている(末尾にNULLを書いている模様)。

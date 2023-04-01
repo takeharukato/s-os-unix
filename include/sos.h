@@ -230,6 +230,12 @@
  * Value mask
  */
 
+/** Get the cluster number on S-OS
+    @param[in] _v  The value to convert
+    @return The cluster number on S-OS
+ */
+#define SOS_CLS_VAL(_v) ( (_v) & SOS_FAT_CLSNUM_MASK )
+
 /** Get the record value on S-OS
     @param[in] _v  The value to convert
     @return The record value on S-OS

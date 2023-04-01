@@ -13,6 +13,9 @@ int fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
     const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
     void **privatep, BYTE *resp);
 int fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp);
+int fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path, BYTE *resp);
+int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
+int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 
 void
 print_unix_filename(BYTE *name){
@@ -39,7 +42,6 @@ print_sword_filename(BYTE *name){
 
 void
 fd_init(sos_devltr ch, struct _sword_file_descriptor *fdp){
-	int rc;
 	BYTE dent[SOS_DENTRY_SIZE];
 	struct _storage_disk_pos *pos;
 
@@ -65,6 +67,86 @@ fd_init(sos_devltr ch, struct _sword_file_descriptor *fdp){
 }
 
 static int
+init_dir_stream(sos_devltr ch, struct _sword_dir *dir){
+	struct _storage_disk_pos *pos;
+
+	pos = &dir->dir_pos;
+
+	storage_init_position(pos);
+
+	pos->dp_devltr = ch;
+	storage_get_dirps(ch, &pos->dp_dirps);
+	storage_get_fatpos(ch, &pos->dp_fatpos);
+	dir->dir_sysflags = 0;
+	dir->dir_private = NULL;
+}
+
+static int
+fs_vfs_opendir(sos_devltr ch, struct _sword_dir *dirp,
+    BYTE *resp){
+	int                rc;
+	struct _sword_dir dir;
+	BYTE              res;
+
+	rc = storage_check_status(ch);
+	if ( rc == ENXIO ) {
+
+		res = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+	if ( rc != 0 ) {
+
+		res = SOS_ERROR_BADF;
+		goto error_out;
+	}
+
+	init_dir_stream(ch, &dir);
+
+	rc = fops_opendir_sword(&dir, &res);
+	if ( rc != 0 )
+		goto error_out;
+
+	memcpy(dirp, &dir, sizeof(struct _sword_dir));
+
+	if ( resp != NULL )
+		*resp = 0;
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	return -1;
+}
+
+static int
+fs_vfs_closedir(struct _sword_dir *dirp, BYTE *resp){
+	int   rc;
+	BYTE res;
+
+	if ( dirp->dir_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) {
+
+		res = SOS_ERROR_BADF;
+		goto error_out;
+	}
+
+	rc = fops_closedir_sword(dirp, &res);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( resp != NULL )
+		*resp = 0;
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+	return -1;
+}
+
+static int
 fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
     const struct _sword_header_packet *pkt, struct _sword_file_descriptor *fdp,
     BYTE *resp){
@@ -73,12 +155,16 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	BYTE                                 res;
 
 	rc = storage_check_status(ch);
-	if ( rc == ENXIO )
-		return SOS_ERROR_OFFLINE;
+	if ( rc == ENXIO ) {
 
-	/* fd is not closed. */
-	sos_assert( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) );
+		res = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+	if ( rc != 0 ) {
 
+		res = SOS_ERROR_BADF;
+		goto error_out;
+	}
 
 	fd_init(ch, &fd);  /* Initialize file descriptor */
 	fdref = &fd;
@@ -108,7 +194,7 @@ fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
 
 	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
 
-		rc = SOS_ERROR_NOTOPEN;
+		res = SOS_ERROR_NOTOPEN;
 		goto error_out;
 	}
 
@@ -123,6 +209,7 @@ fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
 error_out:
 	if ( resp != NULL )
 		*resp = res;
+
 	return -1;
 }
 
@@ -132,6 +219,7 @@ main(int argc, char *argv[]){
 	WORD flags;
 	struct _sword_file_descriptor fd, *fdp;
 	struct _sword_header_packet *pkt, hdr_pkt;
+	struct _sword_dir dir;
 	BYTE res;
 
 	storage_init();
@@ -179,16 +267,7 @@ main(int argc, char *argv[]){
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', "NOEXISTS.ASM",
 	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( rc == SOS_ERROR_NOENT );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* invalid flags  */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_SYNTAX );
+	sos_assert( res == SOS_ERROR_NOENT );
 
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res != 0 );
@@ -220,9 +299,22 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res != 0 );
 
+	rc = fs_vfs_opendir('A', &dir, &res);
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_closedir(&dir, &res);
+	sos_assert( res == 0 );
+
 	/*
 	 * Create test
 	 */
-
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', "NOEXISTS.ASM",
+	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
+	sos_assert( res == 0 );
+#if 0
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
+#endif
 	return 0;
 }

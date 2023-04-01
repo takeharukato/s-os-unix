@@ -54,8 +54,9 @@ struct _sword_file_descriptor{
 /** Directory stream
  */
 struct _sword_dir{
-	struct _storage_disk_pos dir_pos;   /**< Position Information               */
-	void                *dir_private;   /**< Private Information                */
+	struct _storage_disk_pos dir_pos;  /**< Position Information */
+	WORD                dir_sysflags;  /**< Internal flags       */
+	void                *dir_private;  /**< Private Information  */
 };
 
 /** Information packet relevant to the S-OS header operations.
