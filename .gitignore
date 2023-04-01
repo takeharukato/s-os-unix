@@ -76,6 +76,7 @@ depcomp
 aclocal.m4
 missing
 install-sh
+ar-lib
 # S-OS
 sos
 *.2d
