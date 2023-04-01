@@ -65,7 +65,7 @@ struct _sword_dir{
 /** File operations
  */
 struct _fs_fops{
-	void               *fops_private;   /**< Private Information                */
+	void *fops_private;   /**< Private Information */
 	int (*fops_creat)(sos_devltr _ch, const char *_filepath, WORD flags,
 	    struct _storage_fib *_fibp);
 	int (*fops_open)(sos_devltr _ch, const char *_filepath, WORD flags,
@@ -75,7 +75,8 @@ struct _fs_fops{
 	    size_t _count, size_t *_rdsizp);
 	int (*fops_write)(struct _sword_file_descriptor *_fdp, const void *_src,
 	    size_t _count, size_t *_wrsizp);
-	int (*fops_stat)(struct _sword_file_descriptor *_fdp, struct _storage_fib *_fibp);
+	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
+	    struct _storage_fib *_fibp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
 	    int _whence, fs_off_t *_newposp);
 	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset);
@@ -90,14 +91,16 @@ struct _fs_fops{
 	    const fs_perm _perm);
 	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path);
 };
+
 /** Superblock
  */
-struct _fs_super{
-	fs_blk_num     fss_blk_nr;  /**< The block numbers which the device contains */
-	fs_blk_num   fss_freeblks;  /**< The block numbers of free blocks */
-	WORD            fss_dirps;  /**< The the first directory entry record */
-	WORD           fss_fatpos;  /**< The allocation table record */
+struct _fs_super_block{
+	fs_blk_num     sb_blk_nr;  /**< The block numbers which the device contains */
+	fs_blk_num   sb_freeblks;  /**< The block numbers of free blocks */
+	WORD            sb_dirps;  /**< The the first directory entry record */
+	WORD           sb_fatpos;  /**< The allocation table record */
 };
+
 /** File system manager
  */
 struct _fs_fs_manager{
@@ -106,7 +109,7 @@ struct _fs_fs_manager{
 	const char              *fsm_name;   /**< File system name             */
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
 	void                 *fsm_private;   /**< Private information          */
-	int (*fsm_fill_super)(struct _fs_super *super); /**< fill super block  */
+	int (*fsm_fill_super)(struct _fs_super_block *_super); /**< fill super block  */
 };
 
 #endif  /*  _FS_VFS_H  */
