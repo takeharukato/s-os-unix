@@ -309,14 +309,19 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD newsiz) {
 	/*
 	 * Handle the last cluster of the file
 	 */
-	sos_assert( !SOS_IS_END_CLS(prev_cls) );
-	last_cls_ptr = fat[prev_cls];
 	used_rec = newsiz / SOS_RECORD_SIZE;  /* Calculate used records */
 	if ( newsiz == 0 )
 		fib->fib_cls = SOS_FAT_ENT_EOF_MASK;
-	else
-		fat[prev_cls] = SOS_FAT_ENT_EOF_MASK|used_rec;
 
+	/* @remark We have not checked whether prev_cls is SOS_FAT_ENT_FREE yet
+	 * when clsoff == 0. So we should check ( prev_cls == SOS_FAT_ENT_FREE ) with
+	 * the following if clause.
+	 */
+	if ( SOS_IS_END_CLS(prev_cls) || ( prev_cls == SOS_FAT_ENT_FREE ) )
+		goto no_need_release;  /* no cluster allocated or invalid chain */
+
+	last_cls_ptr = fat[prev_cls]; /* save the first cluster number to release */
+	fat[prev_cls] = SOS_FAT_ENT_EOF_MASK|used_rec;
 
 	/*
 	 * Release blocks
@@ -337,6 +342,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD newsiz) {
 		}
 	}
 
+no_need_release:
 	rc = write_fat_sword(ch, &fat[0]);  /* write fat */
 	if ( rc != 0 )
 		goto error_out;
@@ -858,15 +864,16 @@ change_filesize(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	int                        rc;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 	WORD                   newsiz;
-	WORD                  realsiz;
-	WORD                  remains;
+	ssize_t               extends;
 
 	if ( ( off > 0 ) || ( off > SOS_MAX_FILE_SIZE ) )
 		return SOS_ERROR_SYNTAX;
 
 	newsiz = off;
-	realsiz = fib->fib_size;
-	if (  realsiz > newsiz ) {
+
+	extends = newsiz - fib->fib_size;
+
+	if ( 0 >= extends ) {
 
 		/*
 		 * Release file blocks
@@ -874,11 +881,9 @@ change_filesize(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		rc = release_block_sword(fib->fib_devltr, fib, newsiz);
 		if ( rc != 0 )
 			goto error_out;
-
 	} else {
 
-		remains = newsiz - realsiz;
-		if ( SOS_CLUSTER_SIZE > remains ) {
+		if ( SOS_CLUSTER_SIZE > extends ) {
 
 			/*
 			 * extend records at the last cluster
@@ -886,16 +891,16 @@ change_filesize(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 
 			/* Read block */
 			rc = get_block_sword(pos->dp_devltr,
-			    fib, realsiz, FS_SWD_GTBLK_RD_FLG,
+			    fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
 			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
 				goto error_out;
-			memset(&clsbuf[0] + realsiz % SOS_CLUSTER_SIZE,
+			memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
 			    0x0,
-			    remains);  /* Clear newly allocated buffer. */
+			    extends);  /* Clear newly allocated buffer. */
 			/* update culster */
 			rc = put_block_sword(pos->dp_devltr,
-			    fib, realsiz,
+			    fib, fib->fib_size,
 			    &clsbuf[0], SOS_CLUSTER_SIZE);
 			if ( rc != 0 )
 				goto error_out;

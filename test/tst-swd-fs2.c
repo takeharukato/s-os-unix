@@ -17,6 +17,7 @@ int fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path, BYTE *r
 int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
 int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 int fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp);
+int fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path, BYTE *resp);
 
 const unsigned char *ftype_name_tbl[]={
 	"???",
@@ -44,6 +45,7 @@ get_ftype_idx(BYTE attr){
 
 	return SOS_DIR_FSTRIDX_UNKNOWN;
 }
+
 void
 print_unix_filename(BYTE *name){
 	int rc;
@@ -268,6 +270,33 @@ error_out:
 
 	return -1;
 }
+
+static int
+fs_vfs_unlink(struct _sword_dir *dir, const unsigned char *path, BYTE *resp){
+	int   rc;
+	BYTE res;
+
+	if ( dir->dir_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) {
+
+		res = SOS_ERROR_BADF;
+		goto error_out;
+	}
+
+	rc = fops_unlink_sword(dir, path, &res);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( resp != NULL )
+		*resp = 0;
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+	return -1;
+}
+
 static int
 show_dir(sos_devltr ch){
 	int   rc;
@@ -420,6 +449,19 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res == 0 );
 
+	printf("After create\n");
+	show_dir('A');
+
+	rc = fs_vfs_opendir('A', &dir, &res);
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_unlink(&dir, "NOEXISTS.ASM", &res);
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_closedir(&dir, &res);
+	sos_assert( res == 0 );
+
+	printf("After unlink\n");
 	show_dir('A');
 
 	return 0;
