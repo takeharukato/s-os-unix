@@ -66,7 +66,8 @@ fd_init(sos_devltr ch, struct _sword_file_descriptor *fdp){
 
 static int
 fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
-    const struct _sword_header_packet *pkt, struct _sword_file_descriptor *fdp){
+    const struct _sword_header_packet *pkt, struct _sword_file_descriptor *fdp,
+    BYTE *resp){
 	int                                   rc;
 	struct _sword_file_descriptor fd, *fdref;
 	BYTE                                 res;
@@ -95,11 +96,13 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	return 0;
 
 error_out:
-	return res;
+	if ( resp != NULL )
+		*resp = res;
+	return -1;
 }
 
 static int
-fs_vfs_close(struct _sword_file_descriptor *fdp){
+fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
 	int   rc;
 	BYTE res;
 
@@ -118,8 +121,9 @@ fs_vfs_close(struct _sword_file_descriptor *fdp){
 	return 0;
 
 error_out:
-
-	return res;
+	if ( resp != NULL )
+		*resp = res;
+	return -1;
 }
 
 int
@@ -128,6 +132,7 @@ main(int argc, char *argv[]){
 	WORD flags;
 	struct _sword_file_descriptor fd, *fdp;
 	struct _sword_header_packet *pkt, hdr_pkt;
+	BYTE res;
 
 	storage_init();
 	storage_2dimg_init();
@@ -151,69 +156,69 @@ main(int argc, char *argv[]){
 	 */
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd);
-	sos_assert( rc == 0 );
+	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
+	sos_assert( res == 0 );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc == 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res == 0 );
 
 	/* close error (double close) */
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc == SOS_ERROR_NOTOPEN );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res == SOS_ERROR_NOTOPEN );
 
 	/* Invalid file attribute */
 	pkt->hdr_attr = SOS_FATTR_BIN;
 	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd);
-	sos_assert( rc == SOS_ERROR_NOENT );
+	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
+	sos_assert( res == SOS_ERROR_NOENT );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/* file not found */
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd);
+	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
 	sos_assert( rc == SOS_ERROR_NOENT );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/* invalid flags  */
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd);
-	sos_assert( rc == SOS_ERROR_SYNTAX );
+	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
+	sos_assert( res == SOS_ERROR_SYNTAX );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/* file exists */
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd);
-	sos_assert( rc == SOS_ERROR_SYNTAX );
+	    FS_VFS_FD_FLAG_O_RDONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
+	sos_assert( res == SOS_ERROR_SYNTAX );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/* file name exists */
 	pkt->hdr_attr = SOS_FATTR_BIN;
 	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd);
-	sos_assert( rc == SOS_ERROR_EXIST );
+	    FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
+	sos_assert( res == SOS_ERROR_EXIST );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/* offline device */
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('B', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd);
-	sos_assert( rc == SOS_ERROR_OFFLINE );
+	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
+	sos_assert( res == SOS_ERROR_OFFLINE );
 
-	rc = fs_vfs_close(&fd);
-	sos_assert( rc != 0 );
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res != 0 );
 
 	/*
 	 * Create test
