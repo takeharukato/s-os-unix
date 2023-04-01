@@ -20,11 +20,7 @@
 #define FS_VFS_FD_FLAG_O_WRONLY   (0x1)     /**< WriteOnly  */
 #define FS_VFS_FD_FLAG_O_RDWR     (0x2)     /**< Read/Write */
 #define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create  */
-#define FS_VFS_FD_FLAG_O_ASC    (0x100)  /**< ASCII  file  */
-#define FS_VFS_FD_FLAG_O_BIN    (0x200)  /**< Binary file  */
 #define FS_VFS_FD_FLAG_SYS_OPENED  (1)  /**< The file is opened */
-#define FS_VFS_FD_FLAG_FTYPE_MSK \
-	( FS_VFS_FD_FLAG_O_ASC|FS_VFS_FD_FLAG_O_BIN ) /**< S-OS file type */
 /** Write flags
  */
 #define FS_VFS_FD_FLAG_MAY_WRITE					\
@@ -62,13 +58,23 @@ struct _sword_dir{
 	void                *dir_private;   /**< Private Information                */
 };
 
+/** Information packet relevant to the S-OS header operations.
+ */
+struct _sword_header_packet{
+	BYTE  hdr_attr; /**< File attribute    */
+	WORD hdr_dtadr; /**< File load address */
+	WORD hdr_exadr; /**< File exec address */
+};
+
 /** File operations
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
-	int (*fops_creat)(sos_devltr _ch, const char *_filepath, WORD flags,
+	int (*fops_creat)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
+	    const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp);
-	int (*fops_open)(sos_devltr _ch, const char *_filepath, WORD flags,
+	int (*fops_open)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
+	    const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, void **_privatep);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_dest,

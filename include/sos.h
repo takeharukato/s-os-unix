@@ -53,12 +53,39 @@
 #define SOS_FATTR_RDONLY  (0x40)  /* Read only */
 #define SOS_FATTR_DIR     (0x80)  /* Sub directory */
 #define SOS_FATTR_EODENT  (0xFF)  /* End of directory entry */
-#define SOS_FATTR_MASK    (0x87)  /* File type mask and clear Hidden/RAW/ReadOnly bits */
 
-/** S-OS support Binary and Ascii file */
+/** S-OS supports Binary and Ascii file */
 #define SOS_FATTR_VALID_TYPES (SOS_FATTR_BIN|SOS_FATTR_ASC)
+
+/** S-OS supports the read only attribute only  */
+#define SOS_FATTR_VALID_PERMS (SOS_FATTR_RDONLY)
+
 /** S-OS can make a file readonly */
-#define SOS_FATTR_VALID_FLAGS (SOS_FATTR_VALID_TYPES|SOS_FATTR_RONLY)
+#define SOS_FATTR_VALID_FLAGS (SOS_FATTR_VALID_TYPES|SOS_FATTR_VALID_PERMS)
+
+/** Get S-OS file attribute
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  S-OS file type.
+ */
+#define SOS_FATTR_GET_FTYPE(_attr) ( (_attr) & (SOS_FATTR_VALID_TYPES) )
+
+/** Get S-OS file permission
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  S-OS file permission
+ */
+#define SOS_FATTR_GET_PERM(_attr) ( (_attr) & (SOS_FATTR_VALID_PERMS) )
+
+/** Determine whether S-OS file attribute is valid
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  TRUE  _attr is valid.
+    @return  FALSE _attr is invalid.
+ */
+#define SOS_FATTR_IS_VALID(_attr)			\
+	( ( ( (_attr) & ~SOS_FATTR_VALID_FLAGS ) == 0 )	\
+	    && ( SOS_FATTR_GET_FTYPE( (_attr) ) != SOS_FATTR_VALID_TYPES ) )
 
 /*
    S-OS IOCS call in Z80 memory

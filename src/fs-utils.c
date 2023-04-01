@@ -26,14 +26,13 @@
     @remark *destp should be freed by the caller after use it.
  */
 int
-fs_sword2unix(const BYTE *swordname, unsigned char **destp){
+fs_sword2unix(const BYTE *swordname, char **destp){
 	int             rc;
 	int              i;
 	size_t   fname_len;
 	size_t     ext_len;
 	size_t      bufsiz;
-	BYTE           *sp;
-	unsigned char *res;
+	char          *res;
 
 	/*
 	 * Calculate the file name length
@@ -111,7 +110,6 @@ fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
 	int                                i;
 	const char                       *sp;
 	char                             *ep;
-	const char                      *ext;
 	size_t                           len;
 	char         swd_name[SOS_FNAME_LEN];
 
@@ -186,7 +184,6 @@ fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size
 void
 fs_get_sos_header(const struct _storage_fib *fib, void *dest,
     size_t bufsiz){
-	int                                  rc;
 	unsigned char header[SOS_HEADER_BUFLEN];
 	size_t                           cpysiz;
 

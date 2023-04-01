@@ -919,7 +919,7 @@ int sos_fsame(void){
     int	r;
 
     /* check attribute */
-    if ( ( GetBYTE(EM_IBFAD) & SOS_FATTR_MASK ) != ( Z80_A & SOS_FATTR_MASK ) ) {
+    if ( SOS_FATTR_GET_FTYPE( GetBYTE(EM_IBFAD) ) != SOS_FATTR_GET_FTYPE(Z80_A) ) {
 
 	    SETFLAG(Z, 0);
 	    return(TRAP_NEXT);

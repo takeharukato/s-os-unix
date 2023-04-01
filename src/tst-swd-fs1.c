@@ -11,10 +11,9 @@
 
 void
 print_unix_filename(BYTE *name){
-	int rc;
 	unsigned char *unixname;
 
-	rc = fs_sword2unix(&name[0], &unixname);
+	fs_sword2unix(&name[0], &unixname);
 	printf("UNIX:%s\n", unixname);
 	free(unixname);
 }

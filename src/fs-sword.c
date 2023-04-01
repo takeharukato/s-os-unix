@@ -37,14 +37,15 @@
 #define FS_SWD_GETBLK_TO_WRITE(_mod) ( (_mod) & FS_SWD_GTBLK_WR_FLG )
 
 /** Determine whether the open flags is invalid
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
    @param[in] _f The open flags
    @retval TRUE  The open flags is invalid
    @retval FALSE The open flags is valid
  */
-#define FS_IS_OPEN_FLAGS_INVALID(_f)					\
-	( ( ( (_f) & FS_VFS_FD_FLAG_FTYPE_MSK ) == FS_VFS_FD_FLAG_FTYPE_MSK ) || \
-	( ( (_f) & FS_VFS_FD_FLAG_FTYPE_MSK ) == 0 ) ||			\
-        ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT )  )
+#define FS_IS_OPEN_FLAGS_INVALID(_attr, _f)				\
+        ( ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT ) || \
+	    !SOS_FATTR_IS_VALID(_attr) )
 
 
 /*
@@ -201,7 +202,6 @@ static int
 alloc_newblock_sword(sos_devltr ch, BYTE use_recs, WORD *blknop){
 	int                     rc;
 	int                      i;
-	BYTE                   rec;
 	BYTE                 *clsp;
 	BYTE  fat[SOS_RECORD_SIZE];
 
@@ -259,7 +259,6 @@ error_out:
 static int
 release_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD newsiz) {
 	int                     rc;
-	int                      i;
 	int                 relcnt;
 	BYTE                clsoff;
 	BYTE              prev_cls;
@@ -267,7 +266,6 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD newsiz) {
 	BYTE          last_cls_ptr;
 	WORD                   cls;
 	WORD               rel_cls;
-	WORD                   rec;
 	BYTE              used_rec;
 	BYTE                fatrec;
 	BYTE  fat[SOS_RECORD_SIZE];
@@ -705,7 +703,6 @@ static int
 get_block_sword(sos_devltr ch, struct _storage_fib *fib, WORD pos,
     int mode, BYTE *dest, size_t bufsiz, WORD *blkp){
 	int                     rc;
-	int                      i;
 	BYTE                   cls;
 	WORD                 rwcnt;
 	WORD                recoff;
@@ -854,7 +851,6 @@ change_filesize_raw(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	WORD                   newsiz;
 	WORD                  realsiz;
 	WORD                  remains;
-	BYTE                   recoff;
 
 	if ( ( rawoff > 0 ) || ( rawoff > SOS_MAX_FILE_SIZE ) )
 		return SOS_ERROR_SYNTAX;
@@ -1130,7 +1126,6 @@ static int
 write_sos_header(sos_devltr ch, struct _storage_fib *fibp){
 	int                               rc;
 	BYTE            fat[SOS_RECORD_SIZE];
-	WORD                             cls;
 	WORD                       headr_blk;
 	BYTE        clsbuf[SOS_CLUSTER_SIZE];
 	size_t                         wrsiz;
@@ -1191,6 +1186,7 @@ error_out:
     FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
     FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
+    @param[in]  pkt      The S-OS header operation packet.
     @param[out] fibp     The address to store the file information block
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
@@ -1199,15 +1195,15 @@ error_out:
     @retval    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_creat_sword(sos_devltr ch, const char *fname, WORD flags,
-    struct _storage_fib *fibp){
+fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
+    const struct _sword_header_packet *pkt, struct _storage_fib *fibp){
 	int                           rc;
 	BYTE                       dirno;
 	struct _storage_fib          fib;
 	BYTE     swd_name[SOS_FNAME_LEN];
 	BYTE       dent[SOS_RECORD_SIZE];
 
-	if ( FS_IS_OPEN_FLAGS_INVALID(flags) )
+	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
 	/*
@@ -1246,7 +1242,8 @@ fops_creat_sword(sos_devltr ch, const char *fname, WORD flags,
 	/*
 	 * Set file type
 	 */
-	if ( flags & FS_VFS_FD_FLAG_O_BIN )
+
+	if ( pkt->hdr_attr & SOS_FATTR_BIN )
 		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_BIN;
 	else
 		*((BYTE *)&dent[0] + SOS_FIB_OFF_ATTR ) = SOS_FATTR_ASC;
@@ -1292,6 +1289,7 @@ error_out:
     FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
     FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
+    @param[in]  pkt      The S-OS header operation packet.
     @param[out] fibp     The address to store the file information block
     @param[out] privatep The pointer to the pointer variable to store
     the private information
@@ -1304,13 +1302,14 @@ error_out:
     @retval    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
-	    struct _storage_fib *fibp, void **privatep){
+fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
+    const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
+    void **privatep){
 	int                           rc;
 	struct _storage_fib          fib;
 	BYTE     swd_name[SOS_FNAME_LEN];
 
-	if ( FS_IS_OPEN_FLAGS_INVALID(flags) )
+	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
 	if ( flags & FS_VFS_FD_FLAG_MAY_WRITE ) {
@@ -1325,7 +1324,7 @@ fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
 
-		rc = fops_creat_sword(ch, fname, flags, fibp);
+		rc = fops_creat_sword(ch, fname, flags, pkt, fibp);
 		goto set_private_out;
 	}
 
@@ -1346,8 +1345,7 @@ fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
 	/*
 	 * Check file attribute
 	 */
-	if ( ( ( flags & FS_VFS_FD_FLAG_O_BIN ) && ( fib.fib_attr != SOS_FATTR_BIN ) ) ||
-	    ( ( flags & FS_VFS_FD_FLAG_O_ASC ) && ( fib.fib_attr != SOS_FATTR_ASC ) ) ) {
+	if ( SOS_FATTR_GET_FTYPE(fib.fib_attr) != SOS_FATTR_GET_FTYPE(pkt->hdr_attr) ) {
 
 		rc = SOS_ERROR_NOENT;  /* File attribute was not matched. */
 		goto error_out;
@@ -1467,6 +1465,8 @@ fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib){
 
 	/* Copy the file infomation block */
 	memmove(fib, &fdp->fd_fib, sizeof(struct _storage_fib));
+
+	return 0;
 }
 
 /** Reposition read/write file offset
@@ -1700,6 +1700,8 @@ fops_closedir_sword(struct _sword_dir *dir){
 
 	pos->dp_pos = 0;        /* Reset position */
 	pos->dp_private = NULL; /* Clear private information */
+
+	return 0;
 }
 
 /** Change the name of a file
@@ -1719,7 +1721,6 @@ fops_rename_sword(struct _sword_dir *dir, const unsigned char *oldpath,
 	struct _storage_fib        new_fib;
 	BYTE    old_swdname[SOS_FNAME_LEN];
 	BYTE    new_swdname[SOS_FNAME_LEN];
-	BYTE         dent[SOS_DENTRY_SIZE];
 
 	pos = &dir->dir_pos;  /* Position information */
 

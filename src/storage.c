@@ -81,7 +81,7 @@
 /** Storage table (Storage mount table) */
 static struct _storage_disk_image storage[STORAGE_NR];
 /** Disk image operation table */
-static struct _storage_diops_table diops_tbl = __QUEUE_INITIALIZER(&diops_tbl.head);
+static struct _storage_diops_table diops_tbl = {__QUEUE_INITIALIZER(&diops_tbl.head)};
 
 /*
  * Internal functions
@@ -266,7 +266,6 @@ unregister_storage_operation(const char *name){
 int
 storage_mount_image(const sos_devltr ch, const char *const fname){
 	int                          rc;
-	int                        type;
 	int                         idx;
 	void                   *private;
 	struct _storage_disk_image *inf;

@@ -194,9 +194,6 @@ umount_2dimg(const sos_devltr ch){
  */
 static int
 get_image_info_2dimg(const sos_devltr ch, struct _storage_disk_pos *posp){
-	int                    rc;
-	int                   idx;
-	struct _disk2d_image *img;
 
 	if ( !DISK_2D_DEVLTR_IS_VALID(ch) )
 		return ENOENT;  /* The device is not supported by this module */
