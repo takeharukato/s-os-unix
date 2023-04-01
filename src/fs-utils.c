@@ -16,6 +16,7 @@
 #include "sim-type.h"
 #include "misc.h"
 #include "sos.h"
+#include "storage.h"
 
 /** convert from a SWORD file name to the UNIX file name
     @param[in]  swordname The file name on SWORD
@@ -176,4 +177,24 @@ fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size
 	fs_unix2sword(unixname, &conv_name[0], SOS_FNAME_LEN);
 
 	return memcmp(&conv_name[0], sword, cmp_len);
+}
+/** Get S-OS header excluding NULL terminate.
+    @param[in]  fib    The file information block of the file
+    @param[out] dest   The address of the buffer to store S-OS header
+    @param[in]  bufsiz The size of the address of the buffer to store S-OS header
+ */
+void
+fs_get_sos_header(const struct _storage_fib *fib, void *dest,
+    size_t bufsiz){
+	int                                  rc;
+	unsigned char header[SOS_HEADER_BUFLEN];
+	size_t                           cpysiz;
+
+	cpysiz = SOS_MIN(bufsiz, SOS_HEADER_LEN);
+
+	snprintf(&header[0], SOS_HEADER_BUFLEN, SOS_HEADER_PAT,
+	    fib->fib_attr & 0xff,
+	    fib->fib_dtadr & SOS_MAX_FILE_SIZE,
+	    fib->fib_exadr & SOS_MAX_FILE_SIZE);
+	memcpy(dest, &header[0], cpysiz);
 }

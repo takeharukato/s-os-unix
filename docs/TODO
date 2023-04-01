@@ -34,6 +34,8 @@ TODO list
 * D88フォーマット対応
 
 [fs]
+* sword fsのfatpos, dirps=>fatrec, dirps_rec変換処理を共通化する
+* fatrec dirpsを引数に持つ関数を内部で現在のfatrec, dirpsを取得させるように修正
 * swordのエラーコードを引数で返すようにし, 内部エラーと区別がつくようにする
 * read/writeをcreatなどと共通化しヘッダを書き込む, 読み飛ばすことが出来るように
   する(正確に書くと, rawポジションへの読み書き処理, ヘッダを含むポジションへの

@@ -170,7 +170,9 @@ struct _storage_disk_pos{
 	WORD                  dp_fatpos;   /**< File allocation table record      */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
-	fs_off_t                 dp_pos;   /**< File or device position           */
+	fs_off_t                 dp_pos;   /**< File or device position
+					    * including S-OS header.
+					    */
 	void                *dp_private;   /**< Private information  */
 };
 

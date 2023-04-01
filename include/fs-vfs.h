@@ -77,7 +77,7 @@ struct _fs_fops{
 	    size_t _count, size_t *_wrsizp);
 	int (*fops_stat)(struct _sword_file_descriptor *_fdp, struct _storage_fib *_fibp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
-	    int _whence);
+	    int _whence, fs_off_t *_newposp);
 	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset);
 	int (*fops_opendir)(struct _sword_dir *_dir);
 	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp);
