@@ -190,8 +190,8 @@ fs_get_sos_header(const struct _storage_fib *fib, void *dest,
 	cpysiz = SOS_MIN(bufsiz, SOS_HEADER_LEN);
 
 	snprintf(&header[0], SOS_HEADER_BUFLEN, SOS_HEADER_PAT,
-	    fib->fib_attr & 0xff,
-	    fib->fib_dtadr & SOS_MAX_FILE_SIZE,
-	    fib->fib_exadr & SOS_MAX_FILE_SIZE);
+	    SOS_FATTR_VAL(fib->fib_attr),
+	    SOS_Z80MEM_VAL(fib->fib_dtadr),
+	    SOS_Z80MEM_VAL(fib->fib_exadr) );
 	memcpy(dest, &header[0], cpysiz);
 }

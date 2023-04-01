@@ -226,6 +226,50 @@
 #define SOS_REC2CLS(_recno) \
 	((BYTE)( ( ( _recno ) >> SOS_CLUSTER_SHIFT ) & 0xff ) )
 
+/** Get the record value on S-OS
+    @param[in] _v  The value to convert
+    @return The record value on S-OS
+ */
+#define SOS_REC_VAL(_v) ( (_v) & 0xff )
+
+/** Get #DIRPS value on S-OS
+    @param[in] _v  The value to convert
+    @return #DIRPS value on S-OS
+ */
+#define SOS_DIRPS_VAL(_v) ( SOS_REC_VAL( (_v) ) )
+
+/** Get #FATPOS value on S-OS
+    @param[in] _v  The value to convert
+    @return #FATPOS value on S-OS
+ */
+#define SOS_FATPOS_VAL(_v) ( SOS_REC_VAL( (_v) ) )
+
+/** Get FAT value on S-OS
+    @param[in] _v  The value to convert
+    @return FAT value on S-OS
+ */
+#define SOS_FAT_VAL(_v) ( (_v) & 0xff )
+
+/** Get FATTR value on S-OS
+    @param[in] _v  The value to convert
+    @return The file attribute value on S-OS
+ */
+#define SOS_FATTR_VAL(_v) ( (_v) & 0xff )
+
+/** Address
+ */
+/** Get the memory address value on S-OS
+    @param[in] _v  The value to convert
+    @return the memory address value on S-OS
+ */
+#define SOS_Z80MEM_VAL(_v) ( (_v) & 0xffff )
+
+/** Get the file size value on S-OS
+    @param[in] _v  The value to convert
+    @return the file size value on S-OS
+ */
+#define SOS_FSIZE_VAL(_v) ( (_v) & 0xffff )
+
 /** File Header
  */
 #define	SOS_HEADER_PAT        "_SOS %02x %04x %04x\n"  /**< _SOS ATTR DTADR EXADR\n */
@@ -233,8 +277,8 @@
 #define	SOS_HEADER_BUFLEN     (SOS_HEADER_LEN + 1)     /**< Header buffer length  */
 #define SOS_HEADER_OFF        (0) /**< Header is placed at the beginning of the file. */
 #define SOS_HEADER_PARAMS_NR  (3)                      /**< Header contains 3 params */
-/*
- * FAT Entries
+
+/** FAT Entries
  */
 #define SOS_FAT_SIZE            SOS_RECORD_SIZE  /**< FAT record size */
 #define SOS_FAT_LEN             (sizeof(BYTE))   /**< FAT length */

@@ -106,10 +106,10 @@ get_dirps_and_fatpos(sos_devltr ch, BYTE *dirpsp, BYTE *fatposp){
 		goto error_out;
 
 	if ( dirpsp != NULL )
-		*dirpsp = dirps & 0xff;
+		*dirpsp = SOS_DIRPS_VAL(dirps);
 
 	if ( fatposp != NULL )
-		*fatposp = fatpos & 0xff;
+		*fatposp = SOS_FATPOS_VAL(fatpos);
 
 	return 0;
 
@@ -690,10 +690,11 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 			 * allocate new block
 			 */
 			if ( blk_remains > 1 ) /* use all cluster */
-				use_recs = SOS_CLUSTER_RECS & 0xff;
+				use_recs = (BYTE)SOS_REC_VAL(SOS_CLUSTER_RECS);
 			else
-				use_recs = (BYTE)( ( pos % SOS_CLUSTER_SIZE )
-				    / SOS_RECORD_SIZE ) & 0xff;
+				use_recs =
+					(BYTE)SOS_REC_VAL( ( pos % SOS_CLUSTER_SIZE )
+					    / SOS_RECORD_SIZE );
 
 			rc = alloc_newblock_sword(ch, use_recs, &blkno);
 			if ( rc != 0 )
@@ -1186,9 +1187,9 @@ read_sos_header(sos_devltr ch, struct _storage_fib *fibp){
 	/*
 	 * fill the file information block from the S-OS header
 	 */
-	fibp->fib_attr = attr & 0xff;
-	fibp->fib_dtadr = dtadr & 0xffff;
-	fibp->fib_exadr = exadr & 0xffff;
+	fibp->fib_attr = SOS_FATTR_VAL(attr);
+	fibp->fib_dtadr = SOS_Z80MEM_VAL(dtadr);
+	fibp->fib_exadr = SOS_Z80MEM_VAL(exadr);
 
 	return 0;
 

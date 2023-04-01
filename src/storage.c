@@ -667,7 +667,7 @@ storage_set_dirps(const sos_devltr ch, const fs_dirps dirps){
 
 	pos = &inf->di_pos;  /* position information */
 
-	pos->dp_dirps = dirps & 0xff; /* set dirps */
+	pos->dp_dirps = SOS_DIRPS_VAL(dirps); /* set dirps */
 
 	return 0;
 }
@@ -698,7 +698,7 @@ storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
 
 	pos = &inf->di_pos;  /* position information */
 
-	pos->dp_fatpos = fatpos & 0xff;
+	pos->dp_fatpos = SOS_FATPOS_VAL(fatpos);
 
 	return 0;
 }
