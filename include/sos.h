@@ -228,11 +228,11 @@
 
 /** File Header
  */
-#define	SOS_HEADER_PAT    "_SOS %02x %04x %04x\n"  /**< _SOS ATTR DTADR EXADR\n */
-#define	SOS_HEADER_LEN	  (18)                     /**< Header length  */
-#define	SOS_HEADER_BUFLEN (SOS_HEADER_LEN + 1)     /**< Header length  */
-#define SOS_HEADER_OFF    (0)    /**< Header is placed at the beginning of the file. */
-
+#define	SOS_HEADER_PAT        "_SOS %02x %04x %04x\n"  /**< _SOS ATTR DTADR EXADR\n */
+#define	SOS_HEADER_LEN	      (18)                     /**< Header length  */
+#define	SOS_HEADER_BUFLEN     (SOS_HEADER_LEN + 1)     /**< Header buffer length  */
+#define SOS_HEADER_OFF        (0) /**< Header is placed at the beginning of the file. */
+#define SOS_HEADER_PARAMS_NR  (3)                      /**< Header contains 3 params */
 /*
  * FAT Entries
  */

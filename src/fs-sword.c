@@ -56,6 +56,34 @@
  * Internal functions
  */
 
+/** Set ATTR, DTADR, EXADR in the file information block according to S-OS header
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] fibp     The address to store the file information block
+ */
+static void
+reset_fib_from_sos_header(const struct _sword_header_packet *pkt,
+    struct _storage_fib *fibp){
+
+	/*
+	 * Set DTADR and EXADR according to the S-OS header packet.
+	 */
+	if ( pkt->hdr_attr & SOS_FATTR_ASC ) {
+
+		/*
+		 * Clear DTADR and EXADR.
+		 */
+		fibp->fib_dtadr = 0;
+		fibp->fib_exadr = 0;
+	} else {
+
+		/*
+		 * Set DTADR and EXADR.
+		 */
+		fibp->fib_dtadr = pkt->hdr_dtadr;
+		fibp->fib_exadr = pkt->hdr_exadr;
+	}
+}
+
 /** Get dirps and fatpos from storage
     @param[in]   ch       The device letter of the device
     @param[out]  dirpsp   The address to store #DIRPS
@@ -1114,6 +1142,60 @@ error_out:
 	return rc;
 }
 
+/** Read S-OS header (internal function)
+    @param[in] ch     The drive letter
+    @param[out] fibp  The address to store the file information block
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  No cluster allocated.
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_INVAL  Bad data
+ */
+static int
+read_sos_header(sos_devltr ch, struct _storage_fib *fibp){
+	int                                   rc;
+	int                               params;
+	size_t                             rdsiz;
+	int                                 attr;
+	int                                dtadr;
+	int                                exadr;
+	unsigned char hdr_str[SOS_HEADER_BUFLEN];
+
+	/*
+	 * Read S-OS header
+	 */
+	rc = read_data_from_rawpos(ch, fibp,
+	    SOS_HEADER_OFF, &hdr_str[0], SOS_HEADER_LEN, &rdsiz);
+	if ( rc != 0 )
+		goto error_out;
+	if ( rdsiz != SOS_HEADER_LEN )
+		goto error_out;
+
+	hdr_str[SOS_HEADER_LEN] = '\0';  /* Terminate to call sscanf */
+
+	/*
+	 * Parse S-OS header
+	 */
+	params = sscanf(&hdr_str[0], SOS_HEADER_PAT, &attr, &dtadr, &exadr);
+	if ( params != SOS_HEADER_PARAMS_NR ) {
+
+		rc = SOS_ERROR_INVAL;  /* Invalid header */
+		goto error_out;
+	}
+
+	/*
+	 * fill the file information block from the S-OS header
+	 */
+	fibp->fib_attr = attr & 0xff;
+	fibp->fib_dtadr = dtadr & 0xffff;
+	fibp->fib_exadr = exadr & 0xffff;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Write S-OS header (internal function)
     @param[in] ch     The drive letter
     @param[in] fibp   The file information block of the file
@@ -1173,9 +1255,39 @@ error_out:
 	return rc;
 }
 
+/** Update the file information block and the S-OS header according to
+    the S-OS header operation packet.
+    @param[in]  ch    The drive letter
+    @param[in]  pkt   The S-OS header operation packet.
+    @param[out] fibp  The address to store the file information block
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  No cluster allocated.
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+static int
+update_sos_header(sos_devltr ch, const struct _sword_header_packet *pkt,
+    struct _storage_fib *fibp){
+	int rc;
+
+	/* Set DTADR and EXADR according to the S-OS header packet. */
+	reset_fib_from_sos_header(pkt, fibp);
+
+	/* Write S-OS header back */
+	rc = write_sos_header(ch, fibp);
+	if ( rc != 0 )
+		goto error_out;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /*
  * File system operations
  */
+
 /** Create a file
     @param[in] ch       The drive letter
     @param[in] fname    The filename to open
@@ -1256,10 +1368,8 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 
 	STORAGE_FILL_FIB(&fib, ch, dirno, &dent[0]); /* Fill Information block */
 
-	/*
-	 * Update S-OS header
-	 */
-	rc = write_sos_header(ch, &fib);
+	/* Update S-OS header */
+	rc = update_sos_header(ch, pkt, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -1342,6 +1452,7 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 	rc = search_dent_sword(ch, &swd_name[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
+
 	/*
 	 * Check file attribute
 	 */
@@ -1350,11 +1461,33 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, WORD flags,
 		rc = SOS_ERROR_NOENT;  /* File attribute was not matched. */
 		goto error_out;
 	}
-	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
-	    && ( fib.fib_attr & SOS_FATTR_RDONLY ) ) {
 
-		rc = SOS_ERROR_RDONLY;  /* Permission denied */
-		goto error_out;
+	/* Update the S-OS header on the disk when we open the file to write.
+	 * Read the S-OS header from the disk when we open the file to read.
+	 */
+	if ( flags & FS_VFS_FD_FLAG_MAY_WRITE ) {
+
+		/*
+		 * Update the S-OS header on the disk
+		 */
+		if  ( fib.fib_attr & SOS_FATTR_RDONLY )  {
+
+			rc = SOS_ERROR_RDONLY;  /* Permission denied */
+			goto error_out;
+		}
+
+		/* Update S-OS header */
+		rc = update_sos_header(ch, pkt, &fib);
+		if ( rc != 0 )
+			goto error_out;
+	} else {
+
+		/*
+		 * Read the file attribute, load addr, execution addr from S-OS header.
+		 */
+		rc = read_sos_header(ch, &fib);
+		if ( rc != 0 )
+			goto error_out;
 	}
 
 	/*
@@ -1439,11 +1572,9 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 		goto error_out;
 
 	/*
-	 * Update S-OS header
+	 * @remark We do not need to update the S-OS header because it does not
+	 * contain the file size information.
 	 */
-	rc = write_sos_header(pos->dp_devltr, &fdp->fd_fib);
-	if ( rc != 0 )
-		goto error_out;
 
 	return 0;
 
