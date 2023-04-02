@@ -54,29 +54,27 @@ static int seq_read_2dimg(const sos_devltr _ch, BYTE *_dest,
 	    const WORD _len, struct _storage_disk_pos *_posp);
 static int seq_write_2dimg(const sos_devltr _ch, const BYTE *_src,
 	    const WORD _len, struct _storage_disk_pos *_posp);
-static int record_read_2dimg(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-	    const WORD _count, WORD *_rdcntp);
-static int record_write_2dimg(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-	    const WORD _count, WORD *_wrcntp);
+static int record_read_2dimg(const sos_devltr _ch, BYTE *_dest, const fs_rec _rec,
+	    const size_t _count, size_t *_rdcntp);
+static int record_write_2dimg(const sos_devltr _ch, const BYTE *_src, const fs_rec _rec,
+	    const size_t _count, size_t *_wrcntp);
 
 /*
  * Variables
  */
 
 /** disk image operations
-    @remark The following code does not intentionally use the designated initializer
-    in C99 for old UNIX systems.
  */
 static struct _storage_di_ops diops_2dimg={
-	mount_2dimg,
-	umount_2dimg,
-	get_image_info_2dimg,
-	fib_read_2dimg,
-	fib_write_2dimg,
-	seq_read_2dimg,
-	seq_write_2dimg,
-	record_read_2dimg,
-	record_write_2dimg
+	.mount_image = mount_2dimg,
+	.umount_image = umount_2dimg,
+	.get_image_info = get_image_info_2dimg,
+	.fib_read = fib_read_2dimg,
+	.fib_write = fib_write_2dimg,
+	.seq_read = seq_read_2dimg,
+	.seq_write = seq_write_2dimg,
+	.record_read = record_read_2dimg,
+	.record_write = record_write_2dimg
 };
 
 static struct _disk2d_private disk_2d_private;  /* Private information */
@@ -281,14 +279,14 @@ seq_write_2dimg(const sos_devltr ch, const BYTE *src,
     @retval ENOMEM Out of memory.
  */
 static int
-record_read_2dimg(const sos_devltr ch, BYTE *dest, const WORD rec,
-    const WORD count, WORD *rdcntp){
+record_read_2dimg(const sos_devltr ch, BYTE *dest, const fs_rec rec,
+    const size_t count, size_t *rdcntp){
 	int                     rc;
 	int                    idx;
 	struct _disk2d_image  *img;
 	BYTE data[SOS_RECORD_SIZE];
-	ssize_t                res;
-	WORD               remains;
+	size_t                 res;
+	ssize_t            remains;
 	off_t                  pos;
 	void                   *dp;
 
@@ -307,8 +305,8 @@ record_read_2dimg(const sos_devltr ch, BYTE *dest, const WORD rec,
 	/*
 	 * Seek record position
 	 */
-	pos = lseek(img->fd, rec * SOS_RECORD_SIZE, SEEK_SET);
-	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
+	pos = lseek(img->fd, SOS_REC_VAL(rec) * SOS_RECORD_SIZE, SEEK_SET);
+	if ( pos != ( SOS_REC_VAL(rec) * SOS_RECORD_SIZE ) ) {
 
 		rc = EIO;
 		goto out;
@@ -355,15 +353,15 @@ out:
     @retval ENOMEM Out of memory.
  */
 static int
-record_write_2dimg(const sos_devltr ch, const BYTE *src, const WORD rec,
-    const WORD count, WORD *wrcntp){
+record_write_2dimg(const sos_devltr ch, const BYTE *src, const fs_rec rec,
+    const size_t count, size_t *wrcntp){
 	int                     rc;
 	int                    idx;
 	struct _disk2d_image  *img;
-	ssize_t                res;
-	WORD               remains;
+	size_t                 res;
+	ssize_t            remains;
 	off_t                  pos;
-	void                   *sp;
+	const void             *sp;
 
 	if ( !DISK_2D_DEVLTR_IS_VALID(ch) )
 		return ENOENT;  /* The device is not supported by this module */
@@ -380,8 +378,8 @@ record_write_2dimg(const sos_devltr ch, const BYTE *src, const WORD rec,
 	/*
 	 * Seek record position
 	 */
-	pos = lseek(img->fd, rec * SOS_RECORD_SIZE, SEEK_SET);
-	if ( pos != ( rec * SOS_RECORD_SIZE ) ) {
+	pos = lseek(img->fd, SOS_REC_VAL(rec) * SOS_RECORD_SIZE, SEEK_SET);
+	if ( pos != ( SOS_REC_VAL(rec) * SOS_RECORD_SIZE ) ) {
 
 		rc = EIO;
 		goto out;
@@ -392,7 +390,7 @@ record_write_2dimg(const sos_devltr ch, const BYTE *src, const WORD rec,
 	 */
 	rc = 0;                              /* Assume success */
 
-	for(sp = (char *)src; remains > 0; --remains) { /* write records sequentially */
+	for(sp = src; remains > 0; --remains) { /* write records sequentially */
 
 		res = write(img->fd, sp, SOS_RECORD_SIZE);
 		if ( res !=  SOS_RECORD_SIZE ) {

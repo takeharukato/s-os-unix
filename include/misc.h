@@ -45,14 +45,27 @@
     @param[in] _val   The value to align
     @param[in] _align Alignment
  */
-#define SOS_CALC_ALIGN_Z80_WORD(_val, _align)		\
-	( (WORD)( ( (_val) & ~( (_align) - 1 ) )  & 0xffff ) )
+#define SOS_CALC_ALIGN(_val, _align)		\
+	( (_val) & ~( (_align) - 1 ) )
 /** Calc next aligned z80 address
     @param[in] _val   The value to align
     @param[in] _align Alignment
  */
-#define CALC_NEXT_ALIGN_Z80_WORD(_val, _align)		\
-	SOS_CALC_ALIGN_Z80_WORD(( (_val) + ( (_align) - 1 ) ), _align)
+#define SOS_CALC_NEXT_ALIGN(_val, _align)		\
+	SOS_CALC_ALIGN( ( (_val) + ( (_align) - 1 ) ), (_align) )
+
+/** Calc aligned z80 address
+    @param[in] _val   The value to align
+    @param[in] _align Alignment
+ */
+#define SOS_CALC_ALIGN_Z80_WORD(_val, _align)		\
+	( (WORD)( SOS_CALC_ALIGN( (_val), (_align) ) & 0xffff ) )
+/** Calc next aligned z80 address
+    @param[in] _val   The value to align
+    @param[in] _align Alignment
+ */
+#define SOS_CALC_NEXT_ALIGN_Z80_WORD(_val, _align)		\
+	( (WORD)( SOS_CALC_NEXT_ALIGN( (_val), (_align) ) & 0xffff ) )
 
 /** Return the smaller value of both a and b.
     @return the smaller value of both a and b.

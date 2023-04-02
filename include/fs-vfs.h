@@ -9,6 +9,8 @@
 #if !defined(_FS_VFS_H)
 #define _FS_VFS_H
 
+#include "freestanding.h"
+
 #include "config.h"
 #include "sim-type.h"
 #include "list.h"
@@ -39,13 +41,17 @@
 #define FS_PERM_WR    (2)    /**< writable */
 #define FS_PERM_EX    (4)    /**< execute */
 
-typedef WORD fs_perm;   /** permission bit map */
+/*
+ * Type definitions
+ */
+typedef uint16_t     fs_perm;   /** permission bit map */
+typedef uint16_t fs_fd_flags;   /** fd flags           */
 
 /** File descriptor
  */
 struct _sword_file_descriptor{
-	WORD                   fd_flags;  /**< Open     flags */
-	WORD                fd_sysflags;  /**< Internal flags */
+	fs_fd_flags            fd_flags;  /**< Open     flags */
+	fs_fd_flags         fd_sysflags;  /**< Internal flags */
 	struct _storage_disk_pos fd_pos;  /**< Position Information */
 	struct _storage_fib      fd_fib;  /**< File Information Block */
 	void                *fd_private;  /**< Private Information */
@@ -55,7 +61,7 @@ struct _sword_file_descriptor{
  */
 struct _sword_dir{
 	struct _storage_disk_pos dir_pos;  /**< Position Information */
-	WORD                dir_sysflags;  /**< Internal flags       */
+	fs_fd_flags         dir_sysflags;  /**< Internal flags       */
 	void                *dir_private;  /**< Private Information  */
 };
 
@@ -71,11 +77,11 @@ struct _sword_header_packet{
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
-	int (*fops_creat)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
-	    const struct _sword_header_packet *_pkt,
+	int (*fops_creat)(sos_devltr _ch, const unsigned char *_filepath,
+	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, BYTE *_resp);
-	int (*fops_open)(sos_devltr _ch, const unsigned char *_filepath, WORD _flags,
-	    const struct _sword_header_packet *_pkt,
+	int (*fops_open)(sos_devltr _ch, const unsigned char *_filepath,
+	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, void **_privatep, BYTE *_resp);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp, BYTE *_resp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_dest,
@@ -108,8 +114,8 @@ struct _fs_fops{
 struct _fs_super_block{
 	fs_blk_num     sb_blk_nr;  /**< The block numbers which the device contains */
 	fs_blk_num   sb_freeblks;  /**< The block numbers of free blocks */
-	WORD            sb_dirps;  /**< The the first directory entry record */
-	WORD           sb_fatpos;  /**< The allocation table record */
+	fs_dirps        sb_dirps;  /**< The the first directory entry record */
+	fs_fatpos      sb_fatpos;  /**< The allocation table record */
 };
 
 /** File system manager

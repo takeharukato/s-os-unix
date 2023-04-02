@@ -38,7 +38,7 @@ main(int argc, char *argv[]){
 	BYTE      rec[SOS_RECORD_SIZE];
 	BYTE     rec2[SOS_RECORD_SIZE];
 	BYTE swdname[SOS_FNAME_BUFSIZ];
-	WORD                       len;
+	size_t                     len;
 	unsigned char        *unixname;
 	struct _storage_disk_image img;
 	struct _storage_fib        fib;

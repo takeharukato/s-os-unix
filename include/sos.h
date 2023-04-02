@@ -196,13 +196,18 @@
 /*
  * Disk I/O
  */
-#define SOS_MAX_FILE_SIZE       (0xffff)  /**< Max file size */
 #define SOS_RECORD_SIZE         (256) /**< Record (Sector) size in byte. */
 #define SOS_CLUSTER_SHIFT       (4)   /**< 16 records per cluster  */
 #define SOS_CLUSTER_SIZE        \
 	( SOS_RECORD_SIZE << SOS_CLUSTER_SHIFT ) /**< Cluster size in byte (4096). */
 #define SOS_CLUSTER_RECS        \
-	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xffff ) )  /**< 16 records */
+	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xff ) )  /**< 16 records */
+#define SOS_RESERVED_FAT_NR     (2)        /**< Cluster 0x00-0x01 are reserved. */
+#define SOS_MAX_FILE_CLUSTER    (0x4F)     /**< Max cluster number in Hu-Basic on 2D */
+#define SOS_MAX_FILE_SIZE       \
+	( ( SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR ) \
+	    * SOS_CLUSTER_SIZE)  /**< Max file size  0x4efff */
+
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
 	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
@@ -210,14 +215,14 @@
 #define SOS_DENTRY_NR          (SOS_CLUSTER_SIZE / SOS_DENTRY_SIZE)  /**< The maximum number of directory entries */
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
-#define SOS_FAT_CLSNUM_MASK    (0xff)   /**< cluster size in Sword is BYTE */
+#define SOS_FAT_CLSNUM_MASK    (0xff)   /**< FAT entry size in Sword is BYTE */
 
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number
     @return The first record number of the cluster
  */
-#define SOS_CLS2REC(_clsno) ((WORD)( ( ( ( _clsno ) & 0xff ) << SOS_CLUSTER_SHIFT ) \
-		& 0xffff ) )
+#define SOS_CLS2REC(_clsno) ((WORD)( ( ( ( _clsno ) & 0xffff ) << SOS_CLUSTER_SHIFT ) \
+		& 0xffffff ) )
 
 /** Convert from a record number to a cluster number
     @param[in] _recno The record number
@@ -230,7 +235,7 @@
  * Value mask
  */
 
-/** Get the cluster number on S-OS
+/** Get the cluster number in the cluster chain on S-OS
     @param[in] _v  The value to convert
     @return The cluster number on S-OS
  */
@@ -239,14 +244,27 @@
 /** Get the record value on S-OS
     @param[in] _v  The value to convert
     @return The record value on S-OS
+    @remark The record number size is 24 bits
  */
-#define SOS_REC_VAL(_v) ( (_v) & 0xff )
+#define SOS_REC_VAL(_v) ( (_v) & 0xffffff )
+
+/** Get the used records in the cluster on S-OS
+    @param[in] _v  The value to convert
+    @return The record value on S-OS
+ */
+#define SOS_USEDREC_IN_CLUSTER_VAL(_v) ( (_v) & ( SOS_CLUSTER_RECS - 1 ) )
 
 /** Get #DIRPS value on S-OS
     @param[in] _v  The value to convert
     @return The #DIRPS value on S-OS
  */
 #define SOS_DIRPS_VAL(_v) ( SOS_REC_VAL( (_v) ) )
+
+/** Get #DIRNO value on S-OS
+    @param[in] _v  The value to convert
+    @return The #DIRNO value on S-OS
+ */
+#define SOS_DIRNO_VAL(_v) ( (_v) & 0xff )
 
 /** Get #FATPOS value on S-OS
     @param[in] _v  The value to convert
@@ -272,13 +290,13 @@
     @param[in] _v  The value to convert
     @return The memory address value on S-OS
  */
-#define SOS_Z80MEM_VAL(_v) ( (_v) & 0xffff )
+#define SOS_Z80MEM_VAL(_v) ( ( (unsigned int)(_v) > 0xffff ) ? 0xffff : (_v) )
 
 /** Get the file size value on S-OS
     @param[in] _v  The value to convert
     @return The file size value on S-OS
  */
-#define SOS_FSIZE_VAL(_v) ( (_v) & 0xffff )
+#define SOS_FSIZE_VAL(_v) ( (_v) & (SOS_MAX_FILE_SIZE - 1) )
 
 /** Get the error code value on S-OS
     @param[in] _v  The value to convert
@@ -411,9 +429,18 @@
 #if !defined(_ASM)
 typedef BYTE            sos_devltr;  /**< Device Letter */
 typedef SIGNED_DWORD      fs_off_t;  /**< File Offset */
+typedef UNSIGNED_DWORD      fs_rec;  /**< Record number for vfs (24 bits) */
+typedef WORD                fs_cls;  /**< Cluster number for vfs */
+typedef SIGNED_DWORD    fs_cls_off;  /**< Cluster offset number for vfs */
+typedef SIGNED_DWORD    fs_rec_off;  /**< Record offset number for vfs (32 bits) */
 typedef long              fs_dirno;  /**< DIRNO for vfs */
 typedef WORD              fs_dirps;  /**< DIRPS for vfs */
 typedef WORD             fs_fatpos;  /**< FATPOS for vfs */
 typedef WORD            fs_blk_num;  /**< block numbers for vfs */
+
+typedef BYTE        fs_sword_dirps; /**< #DIRPS  in the sword file system. */
+typedef BYTE        fs_sword_dirno; /**< #DIRNO  in the sword file system. */
+typedef BYTE       fs_sword_fatpos; /**< #FATPOS in the sword file system. */
+typedef BYTE       fs_sword_fatent; /**< The FAT entry of the sword file system. */
 #endif  /*  _ASM  */
 #endif

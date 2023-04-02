@@ -570,8 +570,8 @@ out:
     @retval ENOMEM Out of memory.
  */
 int
-storage_record_read(const sos_devltr ch, BYTE *dest, const WORD rec, const WORD count,
-	WORD *rdcntp){
+storage_record_read(const sos_devltr ch, BYTE *dest, const fs_rec rec,
+    const size_t count, size_t *rdcntp){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;
@@ -615,8 +615,8 @@ out:
     @retval ENOMEM Out of memory.
  */
 int
-storage_record_write(const sos_devltr ch, const BYTE *src, const WORD rec,
-    const WORD count, WORD *wrcntp){
+storage_record_write(const sos_devltr ch, const BYTE *src, const fs_rec rec,
+    const size_t count, size_t *wrcntp){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;

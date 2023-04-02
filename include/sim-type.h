@@ -27,6 +27,17 @@ typedef long	        SIGNED_DWORD;
 #endif  /*  LONG_MAX == 2147483647L  */
 #endif  /*  INT_MAX == 2147483647  */
 
+/* Virtual file system  needs to be at least 32 bits wide unsigned int for the record  */
+#if UINT_MAX >= 4294967295U
+typedef unsigned int	UNSIGNED_DWORD;
+#else
+#if ULONG_MAX == 4294967295U
+typedef unsigned long	UNSIGNED_DWORD;
+#else
+#error Need to find an 32-bit type for SIGNED_DWORD
+#endif  /* LONG_MAX == 4294967295U */
+#endif  /* UINT_MAX >= 4294967295U */
+
 /* FASTREG needs to be at least 16 bits wide and efficient for the
    host architecture */
 #if UINT_MAX >= 65535

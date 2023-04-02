@@ -198,10 +198,10 @@ struct _storage_di_ops{
 	    const WORD _len, struct _storage_disk_pos *_posp);
 	int (*seq_write)(const sos_devltr _ch, const BYTE *_src,
 	    const WORD _len, struct _storage_disk_pos *_posp);
-	int (*record_read)(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-	    const WORD _count, WORD *_rdcntp);
-	int (*record_write)(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-	    const WORD _count, WORD *_wrcntp);
+	int (*record_read)(const sos_devltr _ch, BYTE *_dest, const fs_rec _rec,
+	    const size_t _count, size_t *_rdcntp);
+	int (*record_write)(const sos_devltr _ch, const BYTE *_src, const fs_rec _rec,
+	    const size_t _count, size_t *_wrcntp);
 };
 
 /** Storage manager
@@ -233,10 +233,10 @@ int storage_fib_write(const sos_devltr _ch, const BYTE _dirno,
     const struct _storage_fib *_fib);
 int storage_seq_read(const sos_devltr _ch, BYTE *_dest, const WORD _len);
 int storage_seq_write(const sos_devltr _ch, const BYTE *_src, const WORD _len);
-int storage_record_read(const sos_devltr _ch, BYTE *_dest, const WORD _rec,
-    const WORD _count, WORD *_rdcntp);
-int storage_record_write(const sos_devltr _ch, const BYTE *_src, const WORD _rec,
-    const WORD _count, WORD *_wrcntp);
+int storage_record_read(const sos_devltr _ch, BYTE *_dest, const fs_rec _rec,
+    const size_t _count, size_t *_rdcntp);
+int storage_record_write(const sos_devltr _ch, const BYTE *_src, const fs_rec _rec,
+    const size_t _count, size_t *_wrcntp);
 int storage_set_dirps(const sos_devltr _ch, const fs_dirps _dirps);
 int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
 int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
