@@ -94,7 +94,7 @@
 /*
  * File Information block
  */
-#define STORAGE_FIB_SIZE_MAX   (SOS_MAX_FILE_SIZE)  /**< Max size of SIZE/DTADR/EXADR */
+#define STORAGE_FIB_SIZE_MAX   (0xffff)  /**< Max size of SIZE/DTADR/EXADR */
 
 /** Fix the file size up
     @param[in] _v The size to fix.

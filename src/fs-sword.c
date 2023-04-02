@@ -43,7 +43,7 @@
    @retval TRUE  The open flags is invalid
    @retval FALSE The open flags is valid
  */
-#define FS_IS_OPEN_FLAGS_INVALID(_attr, _f)				\
+#define FS_SWD_IS_OPEN_FLAGS_INVALID(_attr, _f)				\
         ( ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT ) || \
 	    !SOS_FATTR_IS_VALID(_attr) )
 
@@ -52,19 +52,38 @@
     @return   The size value of the buffer or SSIZE_MAX
     if the size of the buffer is longer than SSIZE_MAX.
  */
-#define FS_SIZE_FOR_LOOP(_siz) ( ( (_siz) > SSIZE_MAX ) ? (SSIZE_MAX) : (_siz) )
+#define FS_SWD_SIZE_FOR_LOOP(_siz) ( ( (_siz) > SSIZE_MAX ) ? (SSIZE_MAX) : (_siz) )
 
 /** Calculate #DIRNO from the offset position in the directory entry.
     @param[in] _pos The file position in the directory entry.
     @return #DIRNO of the file
  */
-#define FS_OFF2DIRNO(_pos) ( (_pos) / SOS_DENTRY_SIZE )
+#define FS_SWD_OFF2DIRNO(_pos) ( (_pos) / SOS_DENTRY_SIZE )
 
 /** Calculate the offset position in the directory entry from #DIRNO.
     @param[in] _dirno #DIRNO of the file
     @return The offset position in the directory entry
  */
-#define FS_DIRNO2OFF(_dirno) ( (_dirno) * SOS_DENTRY_SIZE )
+#define FS_SWD_DIRNO2OFF(_dirno) ( (_dirno) * SOS_DENTRY_SIZE )
+
+/** Adjust file position according to the Sword/Hu-Basic file system.
+    @param[in] _pos The file position
+    @return Fixed file position
+ */
+#define FS_SWD_ADJUST_POS(_pos)			\
+	( ( (_pos) > SOS_MAX_FILE_SIZE ) ? ( SOS_MAX_FILE_SIZE ) : (_pos) )
+
+/** Adjust read/write count and loop counter
+    @param[in] _count The variable containing read/write count passed by system calls
+    @param[out] _rwcnt The variable containing the fixed length according to the max file size.
+    @param[out] _pos The variable containing the file position
+    @param[out] _remain The variable of the loop counter in read/write.
+ */
+#define FS_SWD_ADJUST_CONTERS(_count, _rwcnt, _pos, _remains) do{		\
+		(_pos) = FS_SWD_ADJUST_POS( (_pos) );			\
+		(_rwcnt) = SOS_MIN( (_pos) + (_count), SOS_MAX_FILE_SIZE ); \
+		(_remains) = FS_SWD_SIZE_FOR_LOOP((_rwcnt));		\
+	}while(0)
 
 /*
  * Foward declarations
@@ -421,7 +440,7 @@ write_dent_sword(sos_devltr ch, struct _storage_fib *fib){
 	/* Calculate dirno offset in the record */
 	dirno_offset = fib->fib_dirno % SOS_DENTRIES_PER_REC;
 	/* refer the directory entry to modify */
-	dent = (BYTE *)&buf[0] +  FS_DIRNO2OFF(dirno_offset);
+	dent = (BYTE *)&buf[0] +  FS_SWD_DIRNO2OFF(dirno_offset);
 	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */
 
 	/*
@@ -818,7 +837,7 @@ get_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
 	/*
 	 * read cluster
 	 */
-	rd_remains = FS_SIZE_FOR_LOOP(bufsiz);
+	rd_remains = FS_SWD_SIZE_FOR_LOOP(bufsiz);
 	for(recoff = 0; rd_remains > 0 ;
 	    rd_remains -= SOS_MIN(rd_remains, SOS_RECORD_SIZE), ++recoff) {
 
@@ -882,7 +901,7 @@ put_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
 	if ( rc != 0 )
 		goto error_out;
 
-	wr_remains = FS_SIZE_FOR_LOOP(bufsiz);
+	wr_remains = FS_SWD_SIZE_FOR_LOOP(bufsiz);
 	for(sp = src, rec = SOS_CLS2REC(cls); wr_remains > 0;
 	    wr_remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE, ++rec) {
 
@@ -1049,7 +1068,7 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, fs_fd_flags flags,
 	BYTE     swd_name[SOS_FNAME_LEN];
 	BYTE    clsbuf[SOS_CLUSTER_SIZE];
 
-	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
+	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
 	/*
@@ -1156,7 +1175,7 @@ fops_open_sword(sos_devltr ch, const unsigned char *fname, fs_fd_flags flags,
 	BYTE                         res;
 	BYTE     swd_name[SOS_FNAME_LEN];
 
-	if ( FS_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) ) {
+	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) ) {
 
 		rc = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 		goto error_out;
@@ -1279,22 +1298,16 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	pos = &fdp->fd_pos;
 	fib = &fdp->fd_fib;
 
-	/*
-	 * Fix read size
-	 */
-	remains = FS_SIZE_FOR_LOOP(count);
-	remains = SOS_MIN(fib->fib_size - pos->dp_pos, remains);
-	rdcnt = remains;
+	/* Adjust read size */
+	FS_SWD_ADJUST_CONTERS(count, rdcnt, pos->dp_pos, remains);
 
-	if ( pos->dp_pos >= fib->fib_size ) {
+	if ( pos->dp_pos == SOS_MAX_FILE_SIZE ) {
 
-		pos->dp_pos = fib->fib_size; /* Fix the postion */
-		rc = SOS_ERROR_NOENT;  /* The file position reached to the file size. */
-		goto error_out;
+		rc = 0;  /* Nothing to be done.  */
+		goto out;
 	}
 
 	for(dp = dest, off = pos->dp_pos; remains > 0; ) {
-
 
 		/*
 		 * Copy data
@@ -1302,7 +1315,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 		rc = get_block_sword(pos->dp_devltr, &fdp->fd_fib, off,
 		    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 		if ( rc != 0 )
-			goto error_out;
+			goto out;
 
 		if ( remains > SOS_CLUSTER_SIZE ) {
 
@@ -1324,7 +1337,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 
 	rc = 0;
 
-error_out:
+out:
 	if ( rdsizp != NULL )
 		*rdsizp = rdcnt - remains;
 
@@ -1365,8 +1378,14 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	fib = &fdp->fd_fib;
 
 	/* Adjust write size */
-	wrcnt = SOS_MIN(pos->dp_pos + count, SOS_MAX_FILE_SIZE );
-	remains = FS_SIZE_FOR_LOOP(wrcnt);
+	FS_SWD_ADJUST_CONTERS(count, wrcnt, pos->dp_pos, remains);
+
+	if ( pos->dp_pos == SOS_MAX_FILE_SIZE ) {
+
+		rc = 0;  /* Nothing to be done.  */
+		goto error_out;
+	}
+
 	for(sp = src, off = pos->dp_pos; remains > 0; ) {
 
 		/*
@@ -1634,7 +1653,7 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 	/*
 	 * read current entry
 	 */
-	dirno = FS_OFF2DIRNO(pos->dp_pos); /* Get #DIRNO */
+	dirno = FS_SWD_OFF2DIRNO(pos->dp_pos); /* Get #DIRNO */
 	if ( dirno >= SOS_DENTRY_NR ) {
 
 		rc = SOS_ERROR_NOENT;  /* Reaches max DIRNO */
@@ -1660,8 +1679,8 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 	 * @remark This function regards a directory as a binary file containing
 	 * an array of directory entries, it sets dir_pos only.
 	 */
-	pos->dp_pos = FS_DIRNO2OFF(dirno + 1);  /* file position */
-	if ( FS_OFF2DIRNO(pos->dp_pos) == SOS_DENTRY_NR ) {
+	pos->dp_pos = FS_SWD_DIRNO2OFF(dirno + 1);  /* file position */
+	if ( FS_SWD_OFF2DIRNO(pos->dp_pos) == SOS_DENTRY_NR ) {
 
 		pos->dp_pos = 0;       /* Reset the position in fd. */
 		rc = SOS_ERROR_NOENT;  /* Reaches max DIRNO */
@@ -1706,7 +1725,7 @@ fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno, BYTE *resp){
 	if ( dirno > SOS_DENTRY_NR )
 		return -ENXIO;   /* #DIRNO is out of range. */
 
-	pos->dp_pos = dirno * SOS_DENTRY_SIZE;  /* set seek position */
+	pos->dp_pos = FS_SWD_DIRNO2OFF(dirno);  /* set seek position */
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(0);  /* return code */
@@ -1736,7 +1755,8 @@ fops_telldir_sword(const struct _sword_dir *dir, fs_dirno *dirnop, BYTE *resp){
 	if ( dirnop == NULL )
 		goto error_out;
 
-	*dirnop = pos->dp_pos / SOS_DENTRY_SIZE;  /* current position */
+	*dirnop = FS_SWD_OFF2DIRNO(pos->dp_pos);  /* current position */
+
 	sos_assert( SOS_DENTRY_NR > *dirnop );
 
 	if ( resp != NULL )
