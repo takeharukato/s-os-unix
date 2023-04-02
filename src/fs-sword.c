@@ -613,6 +613,7 @@ search_free_dent_sword(sos_devltr ch, fs_sword_dirno *dirnop){
 	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
 	if ( rc != 0 )
 		goto error_out;
+
 	/*
 	 * Search a free entry
 	 */
@@ -638,8 +639,6 @@ search_free_dent_sword(sos_devltr ch, fs_sword_dirno *dirnop){
 		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
 
 			attr = *( dent + SOS_FIB_OFF_ATTR );
-
-
 			if ( ( attr == SOS_FATTR_FREE ) || ( attr == SOS_FATTR_EODENT ) )
 				goto found; /* an entry was found */
 		}
@@ -664,42 +663,6 @@ error_out:
 	return rc;
 }
 
-/** Allocate the first cluster of the file if it is not allocated.
-    @param[in]  ch     The drive letter
-    @param[in]  fib    The file information block of the file contains the block
-    @param[out] clsp   The address to store the cluster number in FAT.
-    @retval    0                Success
-    @retval    SOS_ERROR_IO     I/O Error
-    @retval    SOS_ERROR_NOENT  File not found
-    @retval    SOS_ERROR_BADFAT Invalid cluster chain
-    @retval    SOS_ERROR_NOSPC  Device full
- */
-static int
-allocate_first_cluster(sos_devltr ch, struct _storage_fib *fib, fs_sword_fatent *clsp){
-	int                     rc;
-	fs_sword_fatent        cls;
-	fs_cls               blkno;
-
-	cls = SOS_CLS_VAL(fib->fib_cls);
-	if ( !SOS_IS_END_CLS(cls) )
-		goto out;  /* already allocated */
-
-	rc = alloc_newblock_sword(ch, 1, &blkno);
-	if ( rc != 0 )
-		goto error_out;
-
-	fib->fib_cls = SOS_CLS_VAL(blkno); /* set first cluster */
-	cls = SOS_CLS_VAL(fib->fib_cls);
-
-out:
-	if ( clsp != NULL )
-		*clsp = cls;
-
-	return 0;
-
-error_out:
-	return rc;
-}
 /** Get the cluster number of the block from the file position of the file
     @param[in]  ch     The drive letter
     @param[in]  fib    The file information block of the file contains the block
@@ -732,18 +695,25 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	/* The beginning of the cluster at the newsiz in cluster. */
 	blk_remains = SOS_CALC_ALIGN(pos, SOS_CLUSTER_SIZE) / SOS_CLUSTER_SIZE;
 
-	if ( FS_SWD_GETBLK_TO_WRITE(mode) ) { /* block for write case */
+	/*
+	 * Ensure the first cluster of the file in case of writing.
+	 */
+	if ( ( SOS_IS_END_CLS(fib->fib_cls) )
+	    && ( FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
 
-		/* Allocate first cluster if it has not been allocated. */
-		rc = allocate_first_cluster(ch, fib, &cls);
-		if ( rc != 0 )
-			goto error_out;
-		sos_assert( fib->fib_cls == cls );
+			rc = alloc_newblock_sword(ch, 1, &blkno);
+			if ( rc != 0 )
+				goto error_out;
+
+			fib->fib_cls = SOS_CLS_VAL(blkno); /* set first cluster */
 	}
 
-	cls = SOS_CLS_VAL(fib->fib_cls);
+	cls = SOS_CLS_VAL(fib->fib_cls); /* Get the first cluster */
 
-	while( blk_remains > 0 ){ /* Return fib->fib_cls when pos == 0 */
+	/*
+	 * Get the cluster number (FAT index).
+	 */
+	while( blk_remains > 0 ) {
 
 		prev_cls = cls;  /* Previous FAT */
 		cls = fat[cls];  /* Next FAT */
