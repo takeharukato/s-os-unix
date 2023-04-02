@@ -173,6 +173,9 @@ write_fat_sword(sos_devltr ch, const fs_sword_fatent *fatbuf){
 	if ( rc != 0 )
 		goto error_out;
 
+	/*
+	 * Write the file allocation table
+	 */
 	rc = storage_record_write(ch, fatbuf,
 	    fatrec, SOS_FAT_SIZE/SOS_RECORD_SIZE, &wrcnt);
 
@@ -934,7 +937,7 @@ error_out:
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize(struct _storage_fib *fib, struct _storage_disk_pos *pos,
+change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
     fs_off_t off){
 	int                        rc;
 	fs_off_t               newsiz;
@@ -1551,7 +1554,7 @@ fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset,
 	fib = &fdp->fd_fib;  /* file information block */
 	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
 
-	rc = change_filesize(fib, pos, offset);
+	rc = change_filesize_sword(fib, pos, offset);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -1936,7 +1939,7 @@ fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path,
 	 * We should free the file allocation table after modifying the directory entry
 	 * because we should make the file invisible in such a situation.
 	 */
-	rc = change_filesize(&fib, &dir->dir_pos, 0);
+	rc = change_filesize_sword(&fib, &dir->dir_pos, 0);
 	if ( rc != 0 )
 		goto error_out;
 
