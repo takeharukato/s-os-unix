@@ -722,56 +722,57 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 		sos_assert( fib->fib_cls == cls );
 	}
 
-	for(cls = SOS_CLS_VAL(fib->fib_cls), prev_cls = cls; blk_remains >= 0;
-	    --blk_remains) {
+	cls = SOS_CLS_VAL(fib->fib_cls);
+
+	while( blk_remains > 0 ){ /* Return fib->fib_cls when pos == 0 */
+
+		prev_cls = cls;  /* Previous FAT */
+		cls = fat[cls];  /* Next FAT */
+		--blk_remains;   /* update counter */
 
 		if ( cls == SOS_FAT_ENT_FREE ) {  /* Free entry */
 
 			rc = SOS_ERROR_BADFAT;  /* Invalid cluster chain */
 			goto error_out;
 		}
+		if ( !SOS_IS_END_CLS(cls) )   /* End of cluster */
+			continue;    /* next cluster */
+		/*
+		 * End of the cluster
+		 */
+		if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
 
-		if ( SOS_IS_END_CLS(cls) ) {  /* End of cluster */
-
-			if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
-
-				if ( blk_remains > 0 ) { /* block read case */
-
-					/* return the block not found error  */
-					rc = SOS_ERROR_NOENT;
-					goto error_out;
-				}
-				break;
-			}
-
-			/*
-			 * allocate new block
-			 */
-			if ( blk_remains > 0 ) /* use all cluster */
-				use_recs = SOS_REC_VAL(SOS_CLUSTER_RECS);
-			else
-				use_recs = pos % SOS_CLUSTER_SIZE / SOS_RECORD_SIZE + 1;
-
-			rc = alloc_newblock_sword(ch, use_recs, &blkno);
-			if ( rc != 0 )
-				goto error_out;
-
-			rc = read_fat_sword(ch, &fat[0]);   /* reload fat */
-			if ( rc != 0 )
-				goto error_out;
-
-			fat[prev_cls] = SOS_CLS_VAL(blkno); /* make cluster chain */
-			cls = fat[prev_cls];
-
-			rc = write_fat_sword(ch, &fat[0]);  /* write fat */
-			if ( rc != 0 )
-				goto error_out;
-
-			continue;
+			/* return the block not found error  */
+			rc = SOS_ERROR_NOENT;
+			goto error_out;
 		}
-		prev_cls = cls;
-		cls = fat[cls];
+
+		/*
+		 * allocate new block
+		 */
+		if ( blk_remains > 0 ) /* use all cluster */
+			use_recs = SOS_REC_VAL(SOS_CLUSTER_RECS);
+		else
+			use_recs = pos % SOS_CLUSTER_SIZE / SOS_RECORD_SIZE + 1;
+
+		/* allocate a new block */
+		rc = alloc_newblock_sword(ch, use_recs, &blkno);
+		if ( rc != 0 )
+			goto error_out;
+
+		rc = read_fat_sword(ch, &fat[0]);   /* reload fat */
+		if ( rc != 0 )
+			goto error_out;
+
+		fat[prev_cls] = SOS_CLS_VAL(blkno); /* make cluster chain */
+		cls = fat[prev_cls];
+
+		rc = write_fat_sword(ch, &fat[0]);  /* write fat */
+		if ( rc != 0 )
+			goto error_out;
+
 	}
+
 	if ( clsp != NULL )
 		*clsp = cls;
 	return 0;
@@ -883,7 +884,7 @@ put_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
 
 	wr_remains = FS_SIZE_FOR_LOOP(bufsiz);
 	for(sp = src, rec = SOS_CLS2REC(cls); wr_remains > 0;
-	    wr_remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE) {
+	    wr_remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE, ++rec) {
 
 		if ( SOS_RECORD_SIZE > wr_remains ) {
 
@@ -1298,12 +1299,13 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 		/*
 		 * Copy data
 		 */
+		rc = get_block_sword(pos->dp_devltr, &fdp->fd_fib, off,
+		    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+		if ( rc != 0 )
+			goto error_out;
+
 		if ( remains > SOS_CLUSTER_SIZE ) {
 
-			rc = get_block_sword(pos->dp_devltr, &fdp->fd_fib, off,
-			    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-			if ( rc != 0 )
-				goto error_out;
 
 			/* read and copy the record */
 			memcpy(dp, &clsbuf[0], SOS_CLUSTER_SIZE);
@@ -1311,11 +1313,6 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 			dp += SOS_CLUSTER_SIZE;
 			remains -= SOS_CLUSTER_SIZE;
 		} else {
-
-			rc = get_block_sword(pos->dp_devltr, &fdp->fd_fib, off,
-			    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-			if ( rc != 0 )
-				goto error_out;
 
 			/* read the record and copy the remaining bytes. */
 			memcpy(dp, &clsbuf[0], remains);

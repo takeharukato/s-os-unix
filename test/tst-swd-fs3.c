@@ -242,6 +242,9 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	fdp->fd_flags = flags; /* remember file open flags */
 	fdp->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;  /* set file opened */
 
+	if ( resp != NULL )
+		*resp = res;
+
 	return 0;
 
 error_out:
@@ -442,7 +445,7 @@ read_file_test(struct _sword_file_descriptor *fdp){
 int
 main(int argc, char *argv[]){
 	int            rc;
-	int           idx;
+	int             i;
 	fs_fd_flags flags;
 	struct _sword_file_descriptor fd;
 	struct _sword_header_packet *pkt, hdr_pkt;
@@ -487,7 +490,11 @@ main(int argc, char *argv[]){
 	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
 	sos_assert( res == 0 );
 
-	memset(buf1, 'A', SOS_MAX_FILE_SIZE);
+	for(i = 0; SOS_MAX_FILE_SIZE / SOS_CLUSTER_SIZE > i; ++i){
+
+		memset((char*)&buf1[0] + (SOS_CLUSTER_SIZE * i), '0'+ i,
+		    SOS_CLUSTER_SIZE);
+	}
 	rc = fs_vfs_write(&fd, buf1, SOS_MAX_FILE_SIZE, &cnt, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
