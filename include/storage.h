@@ -91,6 +91,18 @@
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
+/*
+ * File Information block
+ */
+#define STORAGE_FIB_SIZE_MAX   (SOS_MAX_FILE_SIZE)  /**< Max size of SIZE/DTADR/EXADR */
+
+/** Fix the file size up
+    @param[in] _v The size to fix.
+    @return  fixed size.
+ */
+#define STORAGE_FIB_FIX_SIZE(_v) \
+	( ( (_v) > STORAGE_FIB_SIZE_MAX ) ? (STORAGE_FIB_SIZE_MAX) : (_v) )
+
 /** Fill the file information block on the directory entry
     @param[in] _fib    The pointer to the file information block
     @param[in] _dent   The directory entry to copy the FIB to

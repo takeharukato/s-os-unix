@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -447,9 +448,8 @@ main(int argc, char *argv[]){
 	struct _sword_header_packet *pkt, hdr_pkt;
 	struct _sword_dir dir;
 	struct _storage_fib fib;
-	char buf1[BUFSIZ];
-	char buf2[BUFSIZ];
-	size_t len;
+	char *buf1;
+	char *buf2;
 	size_t cnt;
 	BYTE res;
 
@@ -458,6 +458,14 @@ main(int argc, char *argv[]){
 
 	if ( 2 > argc )
 		return 0;
+
+	buf1 = malloc(SOS_MAX_FILE_SIZE);
+	if ( buf1 == NULL )
+		exit(1);
+
+	buf2 = malloc(SOS_MAX_FILE_SIZE);
+	if ( buf2 == NULL )
+		exit(1);
 
 	pkt = &hdr_pkt;
 	memset(pkt, 0, sizeof(struct _sword_header_packet));
@@ -470,129 +478,20 @@ main(int argc, char *argv[]){
 	rc = storage_set_fatpos('A', SOS_FATPOS_DEFAULT);
 	sos_assert( rc == 0 );
 
-	/*
-	 * Open/Close
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
-	/* close error (double close) */
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == SOS_ERROR_NOTOPEN );
-
-	/* Invalid file attribute */
-	pkt->hdr_attr = SOS_FATTR_BIN;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_NOENT );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file not found */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_NOENT );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file exists */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_SYNTAX );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file name exists */
-	pkt->hdr_attr = SOS_FATTR_BIN;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_CREAT|FS_VFS_FD_FLAG_O_EXCL,
-	    pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_EXIST );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* offline device */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('B', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_OFFLINE );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	rc = fs_vfs_opendir('A', &dir, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_closedir(&dir, &res);
-	sos_assert( res == 0 );
-
 	show_dir('A');
-
-	/*
-	 * Create test
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
-	printf("After create\n");
-	show_dir('A');
-
-	rc = fs_vfs_opendir('A', &dir, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_unlink(&dir, "NOEXISTS.ASM", &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_closedir(&dir, &res);
-	sos_assert( res == 0 );
-
-	printf("After unlink\n");
-	show_dir('A');
-
-	/*
-	 * read ascii file
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = read_file_test(&fd);
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
 	/*
 	 * write ascii file
 	 */
 	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "TST-SWD.TXT",
+	rc = fs_vfs_open('A', "MAX-SIZ.TXT",
 	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
 	sos_assert( res == 0 );
 
-	snprintf(&buf1[0], BUFSIZ, "Sword file system test.\r");
-	len = strlen(&buf1[0]);
-
-	rc = fs_vfs_write(&fd, &buf1[0], len, &cnt, &res);
+	memset(buf1, 'A', SOS_MAX_FILE_SIZE);
+	rc = fs_vfs_write(&fd, buf1, SOS_MAX_FILE_SIZE, &cnt, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
-	sos_assert( cnt == len );
+	sos_assert( cnt == SOS_MAX_FILE_SIZE );
 
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res == 0 );
@@ -604,25 +503,29 @@ main(int argc, char *argv[]){
 	 * Verify
 	 */
 	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "TST-SWD.TXT",
+	rc = fs_vfs_open('A', "MAX-SIZ.TXT",
 	    FS_VFS_FD_FLAG_O_RDWR, pkt, &fd, &res);
 	sos_assert( res == 0 );
 
-	rc = fs_vfs_read(&fd, &buf2[0], len, &cnt, &res);
+	rc = fs_vfs_read(&fd, buf2, SOS_MAX_FILE_SIZE, &cnt, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
-	sos_assert( cnt == len );
+	sos_assert( cnt == SOS_MAX_FILE_SIZE );
 
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res == 0 );
 
-	rc = memcmp(&buf1[0],&buf2[0],len);
+	rc = memcmp(buf1, buf2, SOS_MAX_FILE_SIZE);
 	sos_assert( rc == 0 );
+
+	/*
+	 * remove file
+	 */
 
 	rc = fs_vfs_opendir('A', &dir, &res);
 	sos_assert( res == 0 );
 
-	rc = fs_vfs_unlink(&dir, "TST-SWD.TXT", &res);
+	rc = fs_vfs_unlink(&dir, "MAX-SIZ.TXT", &res);
 	sos_assert( res == 0 );
 
 	rc = fs_vfs_closedir(&dir, &res);
@@ -630,6 +533,9 @@ main(int argc, char *argv[]){
 
 	printf("After unlink\n");
 	show_dir('A');
+
+	free(buf1);
+	free(buf2);
 
 	return 0;
 }

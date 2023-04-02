@@ -204,9 +204,8 @@
 	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xff ) )  /**< 16 records */
 #define SOS_RESERVED_FAT_NR     (2)        /**< Cluster 0x00-0x01 are reserved. */
 #define SOS_MAX_FILE_CLUSTER    (0x4F)     /**< Max cluster number in Hu-Basic on 2D */
-#define SOS_MAX_FILE_SIZE       \
-	( ( SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR ) \
-	    * SOS_CLUSTER_SIZE)  /**< Max file size  0x4efff */
+/** Max file size is 0xffff due to the File Information Block  */
+#define SOS_MAX_FILE_SIZE       (0xffff)
 
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \

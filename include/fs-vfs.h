@@ -21,7 +21,8 @@
 #define FS_VFS_FD_FLAG_O_RDONLY   (0x0)     /**< ReadOnly   */
 #define FS_VFS_FD_FLAG_O_WRONLY   (0x1)     /**< WriteOnly  */
 #define FS_VFS_FD_FLAG_O_RDWR     (0x2)     /**< Read/Write */
-#define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create  */
+#define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create     */
+#define FS_VFS_FD_FLAG_O_EXCL     (0x8)     /**< Exclusive  */
 #define FS_VFS_FD_FLAG_SYS_OPENED  (1)  /**< The file is opened */
 /** Write flags
  */
