@@ -85,6 +85,35 @@
 		(_remains) = FS_SWD_SIZE_FOR_LOOP((_rwcnt));		\
 	}while(0)
 
+/** Get the used records in the cluster on S-OS
+    @param[in] _fatent  The value in the FAT at the end of the cluster chain.
+    @return The record value on S-OS
+ */
+#define FS_SWD_USEDREC_IN_CLUSTER(_fatent) ( (_fatent) & 0xf )
+
+/** Calculate the FAT entry value of the end of the cluster chain.
+    @param[in] _use_recs The number of the used record in the last cluster
+    ( range: 1 - 16 ).
+    @return The FAT entry value of the end of the cluster chain
+ */
+#define FS_SWD_MAKE_CLS_END(_use_recs) \
+	( SOS_FAT_ENT_EOF_MASK | FS_SWD_USEDREC_IN_CLUSTER( (_use_recs) - 1 ) )
+
+/** Calculate the size of the last cluster in the cluster chain.
+    @param[in] _fatent The FAT entry value of the last cluster in the cluster chain.
+    @return The size of the last cluster in bytes.
+ */
+#define FS_SWD_SIZE_OF_LAST_CLUSTER(_fatent) \
+	( ( FS_SWD_USEDREC_IN_CLUSTER((_fatent)) + 1 ) * SOS_RECORD_SIZE )
+
+/** Calculate the number of records in the last cluster of the cluster chain.
+    @param[in] _pos The file position at the end of file.
+    @return The number of records in the last cluster (unit: the number of records).
+ */
+#define FS_SWD_CALS_RECS_OF_LAST_CLS(_pos) \
+	( ( ( SOS_CALC_ALIGN( (_pos), SOS_RECORD_SIZE) / SOS_RECORD_SIZE ) \
+	    % SOS_CLUSTER_RECS ) + 1 )
+
 /*
  * Foward declarations
  */
@@ -258,10 +287,9 @@ alloc_newblock_sword(sos_devltr ch, fs_rec use_recs, fs_cls *blknop){
 
 			/* alloc new cluster and fill used records */
 			if ( use_recs > 0 )
-				*clsp = SOS_FAT_ENT_EOF_MASK|
-					SOS_USEDREC_IN_CLUSTER_VAL( (use_recs - 1) );
+				*clsp = FS_SWD_MAKE_CLS_END(use_recs);
 			else
-				*clsp = SOS_FAT_ENT_EOF_MASK|0xf;
+				*clsp = FS_SWD_MAKE_CLS_END(SOS_CLUSTER_RECS);
 			goto found;
 		}
 	}
@@ -291,7 +319,7 @@ error_out:
 /** Release the block in the file.
     @param[in] ch     The drive letter
     @param[in] fib    The file information block of the file contains the block
-    @param[in] size The file length of the file to be truncated.
+    @param[in] size   The file length of the file to be truncated.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_NOENT  File not found
@@ -354,7 +382,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 	 * Handle the last cluster of the file
 	 */
 	if ( newsiz == 0 )
-		fib->fib_cls = SOS_FAT_ENT_EOF_MASK;
+		fib->fib_cls = FS_SWD_MAKE_CLS_END(1);
 
 	/* @remark We have not checked whether prev_cls is SOS_FAT_ENT_FREE yet
 	 * when clsoff == 0. So we should check ( prev_cls == SOS_FAT_ENT_FREE ) with
@@ -364,13 +392,11 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 		goto no_need_release;  /* no cluster allocated or invalid chain */
 
 	/* Calculate used records */
-	used_rec = (SOS_CALC_NEXT_ALIGN(newsiz, SOS_RECORD_SIZE) / SOS_RECORD_SIZE) \
-		% SOS_CLUSTER_RECS + 1;
+	used_rec = FS_SWD_CALS_RECS_OF_LAST_CLS(newsiz);
 	last_cls_ptr = fat[prev_cls]; /* save the first cluster number to release */
 	/* Mark the end of cluster at the end of cluster after releasing */
 	if  ( used_rec > 0 )
-		fat[prev_cls] =
-			SOS_FAT_ENT_EOF_MASK|SOS_USEDREC_IN_CLUSTER_VAL(used_rec - 1);
+		fat[prev_cls] = FS_SWD_MAKE_CLS_END(used_rec);
 
 	/*
 	 * Release blocks
@@ -742,7 +768,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 		if ( blk_remains > 0 ) /* use all cluster */
 			use_recs = SOS_REC_VAL(SOS_CLUSTER_RECS);
 		else
-			use_recs = pos % SOS_CLUSTER_SIZE / SOS_RECORD_SIZE + 1;
+			use_recs = FS_SWD_CALS_RECS_OF_LAST_CLS(pos);
 
 		/* allocate a new block */
 		rc = alloc_newblock_sword(ch, use_recs, &blkno);
@@ -763,6 +789,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	}
 
 	sos_assert( !SOS_IS_END_CLS(cls) );
+
 	if ( clsp != NULL )
 		*clsp = cls;
 
@@ -770,7 +797,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 
 		/* Return the available size in the cluster */
 		if ( SOS_IS_END_CLS(fat[cls]) )
-			*cls_sizp = (SOS_USEDREC_IN_CLUSTER_VAL(fat[cls]) + 1) * SOS_RECORD_SIZE;
+			*cls_sizp = FS_SWD_SIZE_OF_LAST_CLUSTER(fat[cls]);
 		else
 			*cls_sizp = SOS_CLUSTER_SIZE;
 	}
@@ -1133,7 +1160,7 @@ fops_creat_sword(sos_devltr ch, const unsigned char *fname, fs_fd_flags flags,
 	fib.fib_size = 0;
 	fib.fib_dtadr = pkt->hdr_dtadr;
 	fib.fib_exadr = pkt->hdr_exadr;
-	fib.fib_cls = SOS_FAT_ENT_EOF_MASK; /* No FAT alloced */
+	fib.fib_cls = FS_SWD_MAKE_CLS_END(SOS_CLUSTER_RECS); /* No FAT alloced */
 	memcpy(&fib.fib_sword_name[0],&swd_name[0],SOS_FNAME_LEN);
 
 	/*

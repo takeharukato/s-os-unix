@@ -248,12 +248,6 @@
  */
 #define SOS_REC_VAL(_v) ( (_v) & 0xffffff )
 
-/** Get the used records in the cluster on S-OS
-    @param[in] _v  The value to convert
-    @return The record value on S-OS
- */
-#define SOS_USEDREC_IN_CLUSTER_VAL(_v) ( (_v) & ( SOS_CLUSTER_RECS - 1 ) )
-
 /** Get #DIRPS value on S-OS
     @param[in] _v  The value to convert
     @return The #DIRPS value on S-OS
