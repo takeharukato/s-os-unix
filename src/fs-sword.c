@@ -701,8 +701,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	/*
 	 * Ensure the first cluster of the file in case of writing.
 	 */
-	if ( ( SOS_IS_END_CLS(fib->fib_cls) )
-	    && ( FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
+	if ( SOS_IS_END_CLS(fib->fib_cls) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
 
 			rc = alloc_newblock_sword(ch, 1, &blkno);
 			if ( rc != 0 )
@@ -1274,12 +1273,6 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	/* Adjust read size */
 	FS_SWD_ADJUST_CONTERS(count, rdcnt, pos->dp_pos, remains);
 
-	if ( pos->dp_pos == SOS_MAX_FILE_SIZE ) {
-
-		rc = 0;  /* Nothing to be done.  */
-		goto out;
-	}
-
 	for(dp = dest, off = pos->dp_pos; remains > 0; ) {
 
 		/*
@@ -1287,8 +1280,17 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 		 */
 		rc = get_block_sword(pos->dp_devltr, &fdp->fd_fib, off,
 		    FS_SWD_GTBLK_RD_FLG, &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-		if ( rc != 0 )
+
+		if ( rc != 0 ) {
+
+			/* Returns rdsize=0 with success due to the end of the file
+			 * when the file position points the end of file.
+			 */
+			if ( rc == SOS_ERROR_NOENT )
+				rc = 0;
+
 			goto out;
+		}
 
 		if ( remains > SOS_CLUSTER_SIZE ) {
 
