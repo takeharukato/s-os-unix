@@ -785,10 +785,29 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 		rc = write_fat_sword(ch, &fat[0]);  /* write fat */
 		if ( rc != 0 )
 			goto error_out;
-
 	}
 
 	sos_assert( !SOS_IS_END_CLS(cls) );
+
+	/*
+	 * extends records in the cluster if it is needed.
+	 */
+	rc = read_fat_sword(ch, &fat[0]);   /* reload fat */
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( SOS_IS_END_CLS(fat[cls]) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
+
+		use_recs = FS_SWD_CALS_RECS_OF_LAST_CLS(pos);
+		if ( use_recs > SOS_FAT_END_CLS_RECS(fat[cls]) ) {
+
+			fat[cls] = FS_SWD_MAKE_CLS_END(use_recs); /* Update */
+
+			rc = write_fat_sword(ch, &fat[0]);  /* write fat */
+			if ( rc != 0 )
+				goto error_out;
+		}
+	}
 
 	if ( clsp != NULL )
 		*clsp = cls;
