@@ -353,7 +353,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 	 */
 
 	/* How many clusters to search */
-	newsiz = SOS_MIN(newsiz,SOS_MAX_FILE_SIZE);
+	newsiz = SOS_MIN(size, SOS_MAX_FILE_SIZE);
 	/* The beginning of the cluster at the newsiz in cluster. */
 	clsoff = SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE) / SOS_CLUSTER_SIZE;
 
@@ -377,12 +377,6 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 			goto error_out;
 		}
 	}
-
-	/*
-	 * Handle the last cluster of the file
-	 */
-	if ( newsiz == 0 )
-		fib->fib_cls = FS_SWD_MAKE_CLS_END(1);
 
 	/* @remark We have not checked whether prev_cls is SOS_FAT_ENT_FREE yet
 	 * when clsoff == 0. So we should check ( prev_cls == SOS_FAT_ENT_FREE ) with
@@ -418,6 +412,20 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 	}
 
 no_need_release:
+	/*
+	 * Handle the last cluster of the file
+	 */
+	if ( newsiz == 0 ) {
+
+		if ( !SOS_IS_END_CLS(fib->fib_cls) ) {
+
+		    if ( fat[fib->fib_cls] != SOS_FAT_ENT_FREE )
+			    fat[fib->fib_cls] = SOS_FAT_ENT_FREE;
+
+		    fib->fib_cls = FS_SWD_MAKE_CLS_END(SOS_CLUSTER_RECS);
+		}
+	}
+
 	rc = write_fat_sword(ch, &fat[0]);  /* write fat */
 	if ( rc != 0 )
 		goto error_out;
@@ -731,6 +739,10 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 			if ( rc != 0 )
 				goto error_out;
 
+			rc = read_fat_sword(ch, &fat[0]);  /* reload fat */
+			if ( rc != 0 )
+				goto error_out;
+
 			fib->fib_cls = SOS_CLS_VAL(blkno); /* set first cluster */
 	}
 
@@ -1002,7 +1014,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	size_t               cls_size;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
-	if ( ( off > 0 ) || ( off > SOS_MAX_FILE_SIZE ) )
+	if ( ( 0 > off ) || ( off > SOS_MAX_FILE_SIZE ) )
 		return SOS_ERROR_SYNTAX;
 
 	newsiz = off;
@@ -1036,6 +1048,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 
 		sos_assert( cls_size >= fib->fib_size % SOS_CLUSTER_SIZE );
 
+		/* Clear the newly allocated region. */
 		memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
 		    0x0, cls_size - fib->fib_size % SOS_CLUSTER_SIZE);
 
@@ -1608,8 +1621,7 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
     * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset,
-    BYTE *resp){
+fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
 	int                        rc;
 	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
