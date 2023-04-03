@@ -46,6 +46,7 @@ TODO list
 * D88フォーマット対応
 
 [fs]
+* DIRPS/FATアクセスをマクロ化してread/write誤りを防ぐようにする
 * release_block_swordで独自にリリース対象ブロックを算出している
   処理をget_cluster_number_swordに置き換えること。
   =>ロジックを書き直した方が速い

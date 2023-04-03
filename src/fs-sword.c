@@ -155,6 +155,269 @@ error_out:
 	return rc;
 }
 
+/** Read the directory entry by #DIRNO
+    @param[in]   ch        The drive letter
+    @param[in]   dirno     The #DIRNO number of the directory entry to read.
+    @param[out]  recp      The address to store the record number of the directory entry.
+    @param[out]  dentp     The address to store the directory entry.
+    @param[in]   bufsiz    The size of the buffer pointed by DENTP.
+    @retval     0               Success
+    @retval     SOS_ERROR_IO    I/O Error
+    @retval     SOS_ERROR_NOENT File not found
+ */
+static int
+read_dent_sword(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
+    BYTE *dentp, size_t bufsiz){
+	int                      i;
+	int                     rc;
+	size_t                 cur;
+	fs_rec                 rec;
+	BYTE                  attr;
+	size_t               rdcnt;
+	BYTE                 *dent;
+	BYTE  buf[SOS_RECORD_SIZE];
+	fs_sword_dirps   dirps_rec;
+
+	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
+	if ( rc != 0 )
+		goto error_out;
+
+	for(rec = dirps_rec, cur = 0; SOS_DENTRY_NR > cur; ++rec) {
+
+		/*
+		 * Read each directory entry
+		 */
+
+		/* Read a directory entry record */
+		rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rdcnt);
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rdcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+
+		/*
+		 * Search for the directory entry specified by #DIRNO
+		 */
+		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
+		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
+
+			attr = *( dent + SOS_FIB_OFF_ATTR );
+
+			if ( attr == SOS_FATTR_FREE )
+				continue; /* Free entry */
+
+			if ( attr == SOS_FATTR_EODENT ) {
+
+				rc = SOS_ERROR_NOENT; /* File not found */
+				goto error_out;
+			}
+
+			if ( cur == dirno ) {
+
+				if ( recp != NULL )
+					*recp = rec;
+
+				if ( dentp != NULL )
+					memcpy(dentp, dent,
+					    SOS_MIN(bufsiz, SOS_DENTRY_SIZE));
+
+				goto found;
+			}
+		}
+	}
+
+	/*
+	 * The end of directory entry was not found.
+	 */
+	return SOS_ERROR_NOENT; /* File not found */
+
+found:
+	return  0;
+
+error_out:
+	return rc;
+
+}
+
+/** Write the directory entry to the disk.
+    @param[in] ch    The drive letter
+    @param[in] fib   The address of the file information block
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
+ */
+static int
+write_dent_sword(sos_devltr ch, struct _storage_fib *fib){
+	int                      rc;
+	fs_rec                  rec;
+	fs_sword_dirno dirno_offset;
+	fs_sword_dirps    dirps_rec;
+	size_t                rwcnt;
+	BYTE                  *dent;
+	BYTE   buf[SOS_RECORD_SIZE];
+
+	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Read directory entry
+	 */
+	rec = fib->fib_dirno / SOS_DENTRIES_PER_REC + dirps_rec;
+	rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rwcnt);
+	if ( rc != 0 )
+		goto error_out;  /* Error */
+
+	if ( rwcnt != 1 ) {
+
+		rc = SOS_ERROR_IO;
+		goto error_out;  /* I/O Error */
+	}
+
+	/* Calculate dirno offset in the record */
+	dirno_offset = fib->fib_dirno % SOS_DENTRIES_PER_REC;
+	/* refer the directory entry to modify */
+	dent = (BYTE *)&buf[0] +  FS_SWD_DIRNO2OFF(dirno_offset);
+	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */
+
+	/*
+	 * Write directory entry
+	 */
+	rc = storage_record_write(ch, &buf[0], rec, 1, &rwcnt);
+	if ( rc != 0 )
+		goto error_out;  /* Error */
+
+	if ( rwcnt != 1 ) {
+
+		rc = SOS_ERROR_IO;
+		goto error_out;  /* I/O Error */
+	}
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Search a file in the directory entry on the disk.
+    @param[in] ch     The drive letter
+    @param[in] swd_name The file name in SWORD(NOT C String)
+    @param[out] fib  The destination address of the file information block
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
+ */
+static int
+search_dent_sword(sos_devltr ch, const BYTE *swd_name, struct _storage_fib *fib){
+	int                         rc;
+	fs_rec                     rec;
+	fs_sword_dirno           dirno;
+	BYTE     dent[SOS_DENTRY_SIZE];
+
+	for(dirno = 0; SOS_DENTRY_NR > dirno; ++dirno) {
+
+		/* Read each directory entry. */
+		rc = read_dent_sword(ch, dirno, &rec, &dent[0], SOS_DENTRY_SIZE);
+		if ( rc != 0 )
+			goto error_out; /* File not found */
+
+		if ( memcmp(&dent[0] + SOS_FIB_OFF_FNAME, &swd_name[0],
+			SOS_FNAME_NAMELEN) == 0 )
+			goto found;  /* Found */
+	}
+
+	sos_assert_no_reach();  /* This function never comes here */
+
+found:
+	/*
+	 * Fill the file information block
+	 */
+	if ( fib != NULL )
+		STORAGE_FILL_FIB(fib, ch, dirno, &dent[0]);
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Search a free directory entry on the disk.
+    @param[in] ch     The drive letter
+    @param[out] dirnop The the address to store #DIRNO of the found entry.
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOSPC Free entry not found
+ */
+static int
+search_free_dent_sword(sos_devltr ch, fs_sword_dirno *dirnop){
+	int                     rc;
+	int                      i;
+	fs_rec                 rec;
+	fs_sword_dirno       dirno;
+	fs_sword_dirno   end_dirno;
+	fs_sword_dirps   dirps_rec;
+	BYTE                  attr;
+	size_t               rdcnt;
+	BYTE                 *dent;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Search a free entry
+	 */
+	for(rec = dirps_rec, dirno = 0; SOS_DENTRY_NR > dirno; ++rec) {
+
+		/*
+		 * Read a directory entry
+		 */
+		rc = storage_record_read(ch, &buf[0], rec, 1, &rdcnt);
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rdcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+
+		/*
+		 * Search a free entry
+		 */
+		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
+		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
+
+			attr = *( dent + SOS_FIB_OFF_ATTR );
+			if ( ( attr == SOS_FATTR_FREE ) || ( attr == SOS_FATTR_EODENT ) )
+				goto found; /* an entry was found */
+		}
+	}
+
+	/*
+	 * Reach the end of directory
+	 */
+	rc = SOS_ERROR_NOSPC; /* Device Full */
+	goto error_out;
+
+found:
+	/*
+	 * Return the #DIRNO of the free entry.
+	 */
+	if ( dirnop != NULL )
+		*dirnop = dirno;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Read file allocation table (FAT)
     @param[in]  ch  The device letter of the device
     @param[out] fatbuf Memory buffer for the FAT
@@ -217,6 +480,144 @@ write_fat_sword(sos_devltr ch, const fs_sword_fatent *fatbuf){
 	return 0;
 
 error_out:
+	return rc;
+}
+
+/** Read cluster
+    @param[in]  ch       The drive letter
+    @param[out] dest    The address to store the contents of the cluster.
+    @param[in]  cls     The cluster number to read from.
+    @param[in]  count   The length to read.
+    @param[out] rdsizp  The address to store the read length.
+    @retval     0             success
+    @retval     SOS_ERROR_IO  I/O Error
+ */
+int
+read_cluster_sword(sos_devltr ch, void *dest, fs_sword_fatent cls, size_t count,
+    size_t *rdsizp){
+	int                     rc;
+	size_t               rwcnt;
+	fs_rec_off          recoff;
+	size_t               rdsiz;
+	ssize_t         rd_remains;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	/*
+	 * read cluster
+	 */
+	rd_remains = FS_SWD_SIZE_FOR_LOOP(count);
+	rdsiz = rd_remains;
+	for(recoff = 0; rd_remains > 0 ;
+	    rd_remains -= SOS_MIN(rd_remains, SOS_RECORD_SIZE), ++recoff) {
+
+		rc = storage_record_read(ch, &buf[0], SOS_CLS2REC(cls) + recoff,
+		    1, &rwcnt);
+
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rwcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+
+		/*
+		 * Copy contents of the block
+		 */
+		if ( dest != NULL )
+			memcpy(dest + recoff * SOS_RECORD_SIZE,
+			    &buf[0], SOS_MIN(rd_remains, SOS_RECORD_SIZE));
+	}
+
+	rc = 0;
+
+error_out:
+	if ( rdsizp != NULL )
+		*rdsizp = rdsiz - rd_remains;
+
+	return rc;
+}
+
+/** Write cluster
+    @param[in]  ch       The drive letter
+    @param[in]  src    The address contains data to write.
+    @param[in]  cls     The cluster number to write to.
+    @param[in]  count   The length to write.
+    @param[out] wrsizp  The address to store the write length.
+    @retval     0             success
+    @retval     SOS_ERROR_IO  I/O Error
+ */
+int
+write_cluster_sword(sos_devltr ch, const void *src, fs_sword_fatent cls,
+    size_t count, size_t *wrsizp){
+	int                     rc;
+	const void             *sp;
+	size_t               rwcnt;
+	fs_rec_off          recoff;
+	size_t               wrsiz;
+	ssize_t         wr_remains;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+
+	wr_remains = FS_SWD_SIZE_FOR_LOOP(count);
+	wrsiz = wr_remains;
+
+	for(sp = src, recoff = SOS_CLS2REC(cls); wr_remains > 0;
+	    wr_remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE, ++recoff) {
+
+		if ( SOS_RECORD_SIZE > wr_remains ) {
+
+			/*
+			 * Modify the beginning of the buffer at the end of file
+			 */
+			rc = storage_record_read(ch, &buf[0], recoff, 1, &rwcnt);
+
+			if ( rc != 0 )
+				goto error_out;  /* I/O Error */
+
+			if ( rwcnt != 1 ) {
+
+				rc = SOS_ERROR_IO;
+				goto error_out;  /* I/O Error */
+			}
+
+			memcpy(&buf[0], sp, wr_remains);  /* Modify */
+
+			/*
+			 * Write back
+			 */
+			rc = storage_record_write(ch, &buf[0], recoff, 1, &rwcnt);
+
+			if ( rc != 0 )
+				goto error_out;  /* I/O Error */
+
+			if ( rwcnt != 1 ) {
+
+				rc = SOS_ERROR_IO;
+				goto error_out;  /* I/O Error */
+			}
+			wr_remains = 0;
+		} else {
+
+			/*
+			 * Write back
+			 */
+			rc = storage_record_write(ch, sp, recoff, 1, &rwcnt);
+			if ( rc != 0 )
+				goto error_out;  /* I/O Error */
+			if ( rwcnt != 1 ) {
+
+				rc = SOS_ERROR_IO;
+				goto error_out;  /* I/O Error */
+			}
+		}
+	}
+
+error_out:
+	if ( wrsizp != NULL )
+		*wrsizp = wrsiz - wr_remains;
+
 	return rc;
 }
 
@@ -577,267 +978,6 @@ error_out:
 	return rc;
 }
 
-/** Write the directory entry to the disk.
-    @param[in] ch    The drive letter
-    @param[in] fib   The address of the file information block
-    @retval    0               Success
-    @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOENT File not found
- */
-static int
-write_dent_sword(sos_devltr ch, struct _storage_fib *fib){
-	int                      rc;
-	fs_rec                  rec;
-	fs_sword_dirno dirno_offset;
-	fs_sword_dirps    dirps_rec;
-	size_t                rwcnt;
-	BYTE                  *dent;
-	BYTE   buf[SOS_RECORD_SIZE];
-
-	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
-	if ( rc != 0 )
-		goto error_out;
-
-	/*
-	 * Read directory entry
-	 */
-	rec = fib->fib_dirno / SOS_DENTRIES_PER_REC + dirps_rec;
-	rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rwcnt);
-	if ( rc != 0 )
-		goto error_out;  /* Error */
-
-	if ( rwcnt != 1 ) {
-
-		rc = SOS_ERROR_IO;
-		goto error_out;  /* I/O Error */
-	}
-
-	/* Calculate dirno offset in the record */
-	dirno_offset = fib->fib_dirno % SOS_DENTRIES_PER_REC;
-	/* refer the directory entry to modify */
-	dent = (BYTE *)&buf[0] +  FS_SWD_DIRNO2OFF(dirno_offset);
-	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */
-
-	/*
-	 * Write directory entry
-	 */
-	rc = storage_record_write(ch, &buf[0], rec, 1, &rwcnt);
-	if ( rc != 0 )
-		goto error_out;  /* Error */
-
-	if ( rwcnt != 1 ) {
-
-		rc = SOS_ERROR_IO;
-		goto error_out;  /* I/O Error */
-	}
-
-	return 0;
-
-error_out:
-	return rc;
-}
-/** Read the directory entry by #DIRNO
-    @param[in]   ch        The drive letter
-    @param[in]   dirno     The #DIRNO number of the directory entry to read.
-    @param[out]  recp      The address to store the record number of the directory entry.
-    @param[out]  dentp     The address to store the directory entry.
-    @param[in]   bufsiz    The size of the buffer pointed by DENTP.
-    @retval     0               Success
-    @retval     SOS_ERROR_IO    I/O Error
-    @retval     SOS_ERROR_NOENT File not found
- */
-static int
-read_dent_sword(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
-    BYTE *dentp, size_t bufsiz){
-	int                      i;
-	int                     rc;
-	size_t                 cur;
-	fs_rec                 rec;
-	BYTE                  attr;
-	size_t               rdcnt;
-	BYTE                 *dent;
-	BYTE  buf[SOS_RECORD_SIZE];
-	fs_sword_dirps   dirps_rec;
-
-	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
-	if ( rc != 0 )
-		goto error_out;
-
-	for(rec = dirps_rec, cur = 0; SOS_DENTRY_NR > cur; ++rec) {
-
-		/*
-		 * Read each directory entry
-		 */
-
-		/* Read a directory entry record */
-		rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rdcnt);
-		if ( rc != 0 )
-			goto error_out;  /* Error */
-
-		if ( rdcnt != 1 ) {
-
-			rc = SOS_ERROR_IO;
-			goto error_out;  /* I/O Error */
-		}
-
-		/*
-		 * Search for the directory entry specified by #DIRNO
-		 */
-		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
-		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
-
-			attr = *( dent + SOS_FIB_OFF_ATTR );
-
-			if ( attr == SOS_FATTR_FREE )
-				continue; /* Free entry */
-
-			if ( attr == SOS_FATTR_EODENT ) {
-
-				rc = SOS_ERROR_NOENT; /* File not found */
-				goto error_out;
-			}
-
-			if ( cur == dirno ) {
-
-				if ( recp != NULL )
-					*recp = rec;
-
-				if ( dentp != NULL )
-					memcpy(dentp, dent,
-					    SOS_MIN(bufsiz, SOS_DENTRY_SIZE));
-
-				goto found;
-			}
-		}
-	}
-
-	/*
-	 * The end of directory entry was not found.
-	 */
-	return SOS_ERROR_NOENT; /* File not found */
-
-found:
-	return  0;
-
-error_out:
-	return rc;
-
-}
-/** Search a file in the directory entry on the disk.
-    @param[in] ch     The drive letter
-    @param[in] swd_name The file name in SWORD(NOT C String)
-    @param[out] fib  The destination address of the file information block
-    @retval    0               Success
-    @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOENT File not found
- */
-static int
-search_dent_sword(sos_devltr ch, const BYTE *swd_name, struct _storage_fib *fib){
-	int                         rc;
-	fs_rec                     rec;
-	fs_sword_dirno           dirno;
-	BYTE     dent[SOS_DENTRY_SIZE];
-
-	for(dirno = 0; SOS_DENTRY_NR > dirno; ++dirno) {
-
-		/* Read each directory entry. */
-		rc = read_dent_sword(ch, dirno, &rec, &dent[0], SOS_DENTRY_SIZE);
-		if ( rc != 0 )
-			goto error_out; /* File not found */
-
-		if ( memcmp(&dent[0] + SOS_FIB_OFF_FNAME, &swd_name[0],
-			SOS_FNAME_NAMELEN) == 0 )
-			goto found;  /* Found */
-	}
-
-	sos_assert_no_reach();  /* This function never comes here */
-
-found:
-	/*
-	 * Fill the file information block
-	 */
-	if ( fib != NULL )
-		STORAGE_FILL_FIB(fib, ch, dirno, &dent[0]);
-
-	return 0;
-
-error_out:
-	return rc;
-}
-
-/** Search a free directory entry on the disk.
-    @param[in] ch     The drive letter
-    @param[out] dirnop The the address to store #DIRNO of the found entry.
-    @retval    0               Success
-    @retval    SOS_ERROR_IO    I/O Error
-    @retval    SOS_ERROR_NOSPC Free entry not found
- */
-static int
-search_free_dent_sword(sos_devltr ch, fs_sword_dirno *dirnop){
-	int                     rc;
-	int                      i;
-	fs_rec                 rec;
-	fs_sword_dirno       dirno;
-	fs_sword_dirno   end_dirno;
-	fs_sword_dirps   dirps_rec;
-	BYTE                  attr;
-	size_t               rdcnt;
-	BYTE                 *dent;
-	BYTE  buf[SOS_RECORD_SIZE];
-
-	rc = get_dirps_and_fatpos(ch, &dirps_rec, NULL);
-	if ( rc != 0 )
-		goto error_out;
-
-	/*
-	 * Search a free entry
-	 */
-	for(rec = dirps_rec, dirno = 0; SOS_DENTRY_NR > dirno; ++rec) {
-
-		/*
-		 * Read a directory entry
-		 */
-		rc = storage_record_read(ch, &buf[0], rec, 1, &rdcnt);
-		if ( rc != 0 )
-			goto error_out;  /* Error */
-
-		if ( rdcnt != 1 ) {
-
-			rc = SOS_ERROR_IO;
-			goto error_out;  /* I/O Error */
-		}
-
-		/*
-		 * Search a free entry
-		 */
-		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
-		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
-
-			attr = *( dent + SOS_FIB_OFF_ATTR );
-			if ( ( attr == SOS_FATTR_FREE ) || ( attr == SOS_FATTR_EODENT ) )
-				goto found; /* an entry was found */
-		}
-	}
-
-	/*
-	 * Reach the end of directory
-	 */
-	rc = SOS_ERROR_NOSPC; /* Device Full */
-	goto error_out;
-
-found:
-	/*
-	 * Return the #DIRNO of the free entry.
-	 */
-	if ( dirnop != NULL )
-		*dirnop = dirno;
-
-	return 0;
-
-error_out:
-	return rc;
-}
-
 /** Get the block in the file.
     @param[in]  ch       The drive letter
     @param[in]  fib      The file information block of the file contains the block
@@ -861,11 +1001,7 @@ get_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
     int mode, BYTE *dest, size_t bufsiz, fs_cls *blkp, size_t *cls_sizp){
 	int                     rc;
 	fs_sword_fatent        cls;
-	size_t               rwcnt;
-	fs_rec_off          recoff;
-	ssize_t         rd_remains;
 	size_t            cls_size;
-	BYTE  buf[SOS_RECORD_SIZE];
 
 	/*
 	 * Get the cluster number of POS
@@ -874,34 +1010,13 @@ get_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
 	if ( rc != 0 )
 		goto error_out;
 
-	/*
-	 * read cluster
-	 */
-	rd_remains = FS_SWD_SIZE_FOR_LOOP(bufsiz);
-	for(recoff = 0; rd_remains > 0 ;
-	    rd_remains -= SOS_MIN(rd_remains, SOS_RECORD_SIZE), ++recoff) {
-
-		rc = storage_record_read(ch, &buf[0],
-		    SOS_CLS2REC(cls) + recoff, 1, &rwcnt);
-		if ( rc != 0 )
-			goto error_out;  /* Error */
-
-		if ( rwcnt != 1 ) {
-
-			rc = SOS_ERROR_IO;
-			goto error_out;  /* I/O Error */
-		}
-
-		/*
-		 * Copy contents of the block
-		 */
-		if ( dest != NULL )
-			memcpy(dest + recoff * SOS_RECORD_SIZE,
-			    &buf[0], SOS_MIN(rd_remains, SOS_RECORD_SIZE));
-	}
+	rc = read_cluster_sword(ch, dest, cls, bufsiz, NULL);
+	if ( rc != 0 )
+		goto error_out;
 
 	if ( blkp != NULL )
 		*blkp = cls;  /* return the number of cluster */
+
 	if ( cls_sizp != NULL )
 		*cls_sizp = cls_size; /* return the available size in the cluster */
 
@@ -929,12 +1044,7 @@ static int
 put_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
     const void *src, size_t bufsiz){
 	int                     rc;
-	fs_rec                 rec;
-	size_t               rwcnt;
 	fs_sword_fatent        cls;
-	ssize_t         wr_remains;
-	const void             *sp;
-	BYTE  buf[SOS_RECORD_SIZE];
 
 	/*
 	 * Get the cluster number of POS
@@ -943,53 +1053,48 @@ put_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t pos,
 	if ( rc != 0 )
 		goto error_out;
 
-	wr_remains = FS_SWD_SIZE_FOR_LOOP(bufsiz);
-	for(sp = src, rec = SOS_CLS2REC(cls); wr_remains > 0;
-	    wr_remains -= SOS_RECORD_SIZE, sp += SOS_RECORD_SIZE, ++rec) {
+	rc = write_cluster_sword(ch, src, cls, bufsiz, NULL);
+	if ( rc != 0 )
+		goto error_out;
 
-		if ( SOS_RECORD_SIZE > wr_remains ) {
+	return 0;
 
-			/*
-			 * Modify the beginning of the buffer at the end of file
-			 */
-			rc = storage_record_read(ch, &buf[0], rec, 1, &rwcnt);
-			if ( rc != 0 )
-				goto error_out;  /* I/O Error */
-			if ( rwcnt != 1 ) {
+error_out:
+	return rc;
+}
 
-				rc = SOS_ERROR_IO;
-				goto error_out;  /* I/O Error */
-			}
+/** Clear remaining bytes in the cluster after the end of file.
+    @param[in] ch               The drive letter
+    @param[in] fib              The file information block of the file.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+ */
+static int
+clear_remains_at_end(sos_devltr ch, struct _storage_fib *fib){
+	int                        rc;
+	size_t               cls_size;
+	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
-			memcpy(&buf[0], sp, wr_remains);  /* Modify */
+	/* clear data from the current file size to the end of cluster */
+	rc = get_block_sword(ch,
+	    fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
+	    &clsbuf[0], SOS_CLUSTER_SIZE, NULL, &cls_size);
+	if ( rc != 0 )
+		goto error_out;
 
-			/*
-			 * Write back
-			 */
-			rc = storage_record_write(ch, &buf[0], rec, 1, &rwcnt);
-			if ( rc != 0 )
-				goto error_out;  /* I/O Error */
-			if ( rwcnt != 1 ) {
+	sos_assert( cls_size >= fib->fib_size % SOS_CLUSTER_SIZE );
 
-				rc = SOS_ERROR_IO;
-				goto error_out;  /* I/O Error */
-			}
-			wr_remains = 0;
-		} else {
+	/* Clear the newly allocated region. */
+	memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
+	    0x0, cls_size - fib->fib_size % SOS_CLUSTER_SIZE);
 
-			/*
-			 * Write back
-			 */
-			rc = storage_record_write(ch, sp, rec, 1, &rwcnt);
-			if ( rc != 0 )
-				goto error_out;  /* I/O Error */
-			if ( rwcnt != 1 ) {
+	/* update culster */
+	rc = put_block_sword(ch, fib, fib->fib_size, &clsbuf[0],
+	    SOS_CLUSTER_SIZE);
 
-				rc = SOS_ERROR_IO;
-				goto error_out;  /* I/O Error */
-			}
-		}
-	}
+	if ( rc != 0 )
+		goto error_out;
 
 	return 0;
 
@@ -1039,23 +1144,8 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		if ( rc != 0 )
 			goto error_out;
 
-		/* clear data from the current file size to the end of cluster */
-		rc = get_block_sword(pos->dp_devltr,
-		    fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
-		    &clsbuf[0], SOS_CLUSTER_SIZE, NULL, &cls_size);
-		if ( rc != 0 )
-			goto error_out;
-
-		sos_assert( cls_size >= fib->fib_size % SOS_CLUSTER_SIZE );
-
-		/* Clear the newly allocated region. */
-		memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
-		    0x0, cls_size - fib->fib_size % SOS_CLUSTER_SIZE);
-
-		/* update culster */
-		rc = put_block_sword(pos->dp_devltr,
-		    fib, fib->fib_size,
-		    &clsbuf[0], SOS_CLUSTER_SIZE);
+		/* Clear remaining data after the end of file. */
+		rc = clear_remains_at_end(pos->dp_devltr, fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -1064,6 +1154,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	 * update file information block
 	 */
 	fib->fib_size = STORAGE_FIB_FIX_SIZE( newsiz );  /* update size */
+
 	rc = write_dent_sword(pos->dp_devltr, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
