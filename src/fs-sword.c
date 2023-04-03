@@ -1026,44 +1026,6 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		    &clsbuf[0], SOS_CLUSTER_SIZE);
 		if ( rc != 0 )
 			goto error_out;
-
-#if 0
-		if ( SOS_CLUSTER_SIZE > extends ) {
-
-			/*
-			 * extend records at the last cluster
-			 */
-
-			/* Read block */
-			rc = get_block_sword(pos->dp_devltr,
-			    fib, fib->fib_size, FS_SWD_GTBLK_RD_FLG,
-			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL, &cls_size);
-			if ( rc != 0 )
-				goto error_out;
-
-			sos_assert( cls_size >=
-			    ( extends + fib->fib_size % SOS_CLUSTER_SIZE ) );
-
-			memset(&clsbuf[0] + fib->fib_size % SOS_CLUSTER_SIZE,
-			    0x0, extends);  /* Clear newly allocated buffer. */
-
-			/* update culster */
-			rc = put_block_sword(pos->dp_devltr,
-			    fib, fib->fib_size,
-			    &clsbuf[0], SOS_CLUSTER_SIZE);
-			if ( rc != 0 )
-				goto error_out;
-		} else {
-
-			/* alloc new blocks to the newsize. */
-			rc = get_block_sword(pos->dp_devltr,
-			    fib, newsiz, FS_SWD_GTBLK_WR_FLG,
-			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL,
-			    &cls_size);
-			if ( rc != 0 )
-				goto error_out;
-		}
-#endif
 	}
 
 	/*
