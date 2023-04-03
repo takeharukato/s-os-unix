@@ -364,16 +364,13 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 		goto no_need_release;  /* no cluster allocated or invalid chain */
 
 	/* Calculate used records */
-	used_rec = SOS_CALC_NEXT_ALIGN(newsiz, SOS_RECORD_SIZE) / SOS_RECORD_SIZE;
-
+	used_rec = (SOS_CALC_NEXT_ALIGN(newsiz, SOS_RECORD_SIZE) / SOS_RECORD_SIZE) \
+		% SOS_CLUSTER_RECS + 1;
 	last_cls_ptr = fat[prev_cls]; /* save the first cluster number to release */
 	/* Mark the end of cluster at the end of cluster after releasing */
 	if  ( used_rec > 0 )
 		fat[prev_cls] =
 			SOS_FAT_ENT_EOF_MASK|SOS_USEDREC_IN_CLUSTER_VAL(used_rec - 1);
-	else
-		fat[prev_cls] =	SOS_FAT_ENT_EOF_MASK;
-
 
 	/*
 	 * Release blocks
