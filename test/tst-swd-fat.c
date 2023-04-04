@@ -63,7 +63,7 @@ struct _fs_sword_fat tst_fat;
     @return The number of records in the last cluster (unit: the number of records).
  */
 #define FS_SWD_CALC_RECS_AT_LAST_CLS(_pos)				\
-	( SOS_CALC_NEXT_ALIGN( (_pos), SOS_CLUSTER_SIZE) / SOS_CLUSTER_SIZE )
+	( SOS_CALC_NEXT_ALIGN( (_pos), SOS_RECORD_SIZE) / SOS_RECORD_SIZE )
 
 /** Calculate the FAT entry value of the end of the file at _POS
     @param[in] _pos The file position at the end of file.
@@ -71,7 +71,7 @@ struct _fs_sword_fat tst_fat;
  */
 #define FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(_pos)	\
 	( SOS_FAT_ENT_EOF_MASK | \
-	    ( ( ( FS_SWD_CALC_RECS_AT_LAST_CLS(pos) ) - 1 ) & 0xf ) )
+	    ( ( FS_SWD_CALC_RECS_AT_LAST_CLS( (_pos) )  - 1 ) & 0xf ) )
 
 static int
 read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
@@ -186,91 +186,124 @@ get_cluster_number_sword(struct _storage_fib *fib, fs_off_t offset, int mode,
 	fs_blk_num       blk_off;
 	fs_blk_num       new_blk;
 	fs_cls_off   blk_remains;
+	size_t       use_cls_siz;
 	struct _fs_sword_fat fat;
 
 	/* Read the contents of the current FAT. */
 	read_fat_sword(fib->fib_devltr, &fat);
 
-	/* Get the first block number of the file. */
-	cur = fib->fib_cls;
-
 	/* Return SOS_ERROR_BADFAT when the first file allocation table entry
 	 * points SOS_FAT_ENT_FREE.
 	 */
-	if ( FS_SWD_GET_FAT(&fat, cur) == SOS_FAT_ENT_FREE ) {
+	if ( fib->fib_cls == SOS_FAT_ENT_FREE ) {
 
 		rc = SOS_ERROR_BADFAT;
 		goto error_out;
 	}
 
-	/* Return SOS_ERROR_NOENT if the file is empty. */
-	if ( FS_SWD_IS_END_CLS(cur) ) {
+	/* When MODE is specified as FS_SWD_GTBLK_RD_FLG
+	 * and the file is empty, return SOS_ERROR_NOENT
+	 * without expanding the cluster.
+	 */
+	if ( ( FS_SWD_IS_END_CLS(fib->fib_cls) )
+	    && ( !FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
 
 		rc = SOS_ERROR_NOENT;
 		goto error_out;
 	}
 
+	/* Get the first block number of the file. */
+	cur = fib->fib_cls;
+
 	/* Adjust the file potision. */
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Calculate the offset block number in the file from the offset position. */
-	blk_off = SOS_CALC_ALIGN(pos, SOS_CLUSTER_SIZE)/SOS_CLUSTER_SIZE;
+	if ( FS_SWD_GETBLK_TO_WRITE(mode) )
+		blk_off = SOS_CALC_NEXT_ALIGN(pos + 1, SOS_CLUSTER_SIZE)
+			/ SOS_CLUSTER_SIZE;
+	else
+		blk_off = SOS_CALC_ALIGN(pos, SOS_CLUSTER_SIZE)
+			/ SOS_CLUSTER_SIZE;
 
-       for(blk_remains = blk_off; blk_remains > 0;
-	   --blk_remains, cur = FS_SWD_GET_FAT(&fat, cur)) {
+	for(blk_remains = blk_off; blk_remains > 0;
+	    --blk_remains) {
 
-	       /* If the current block is in the middle of the cluster chain,
-		* go to the next cluster.
-		*/
-	       if ( !FS_SWD_IS_END_CLS(cur) )
-		       continue;  /*  cluster */
+		if ( !FS_SWD_IS_END_CLS(cur) ) {
 
-	       if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
+			/* If the current block is in the middle of the cluster chain,
+			 * go to the next cluster.
+			 */
+			cur = FS_SWD_GET_FAT(&fat, cur);
 
-		       /* When MODE is specified as FS_SWD_GTBLK_RD_FLG
-			* and the specified block is not found,
-			* return SOS_ERROR_NOENT without expanding the cluster.
-			*/
-		       rc = SOS_ERROR_NOENT;
-		       goto error_out;
-	       }
+			/* The free FAT entry should not exist in
+			 * the cluster chain.
+			 */
+			if ( cur == SOS_FAT_ENT_FREE ) {
 
-	       /*
-		* Expand the cluster.
-		*/
-	       rc = alloc_newblock_sword(&fat, &new_blk);
-	       if ( rc != 0 )
-		       goto error_out;
+				rc = SOS_ERROR_BADFAT;
+				goto error_out;
+			}
+			continue;  /* Continue searching */
+		}
 
-	       /* Assume all records are used. */
-	       FS_SWD_SET_FAT(&fat, new_blk,
-		   FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(SOS_CLUSTER_SIZE-1));
+		if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
 
-	       if ( blk_remains == 1 ) { /* When the block is placed at the end. */
+			/* When MODE is specified as FS_SWD_GTBLK_RD_FLG
+			 * and the specified block is not found,
+			 * return SOS_ERROR_NOENT without expanding the cluster.
+			 */
+			rc = SOS_ERROR_NOENT;
+			goto error_out;
+		}
 
-		       /* Calculate the number of the used records.
-			*/
+		/*
+		 * Expand the cluster.
+		 */
+		rc = alloc_newblock_sword(&fat, &new_blk);
+		if ( rc != 0 )
+			goto error_out;
 
-		       /* It should write at least one byte
-			* when a new block is allocated.
-			*/
-		       sos_assert( (pos % SOS_CLUSTER_SIZE) > 0);
+		/* Assume all records are used. */
+		FS_SWD_SET_FAT(&fat, new_blk,
+		    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(SOS_CLUSTER_SIZE-1));
 
-		       /* Write the number of used records. */
-		       FS_SWD_SET_FAT(&fat, new_blk,
-			   FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(pos));
-	       }
-	       /* Add the newly allocated block to the cluster chain. */
-	       FS_SWD_SET_FAT(&fat, cur, new_blk);
-       }
+		if ( blk_remains == 1 ) { /* When the block is placed at the end. */
 
-       if ( blkp != NULL )
-	       *blkp = cur;
+			/* Calculate the number of the used records.
+			 */
 
-       /* Write the file allocation table back. */
-       write_fat_sword(fib->fib_devltr, &fat);
+			/* It should write at least one byte
+			 * when a new block is allocated.
+			 * @remark Note that it should calculate the container size of
+			 * written data, not the position to write in
+			 * the following code.
+			 */
+			use_cls_siz = SOS_CALC_NEXT_ALIGN(pos % SOS_CLUSTER_SIZE + 1,
+			    SOS_RECORD_SIZE) - 1;
+			/* Write the number of used records. */
+			FS_SWD_SET_FAT(&fat, new_blk,
+			    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(use_cls_siz));
+		}
+		/* Add the newly allocated block to the cluster chain. */
+		if ( FS_SWD_IS_END_CLS(fib->fib_cls) ) {
 
-       return 0;
+			/* The block is the first block of
+			 * the file.
+			 */
+			fib->fib_cls = new_blk;
+			cur = new_blk;
+		} else
+			FS_SWD_SET_FAT(&fat, cur, new_blk);
+	}
+
+	if ( blkp != NULL )
+		*blkp = cur;
+
+	if ( FS_SWD_GETBLK_TO_WRITE(mode) ) /* Write the file allocation table back. */
+		write_fat_sword(fib->fib_devltr, &fat);
+
+	return 0;
 
 error_out:
 
@@ -281,16 +314,47 @@ error_out:
        return rc;
 }
 
-int
-main(int argc, char *argv[]){
 
-	/*
-	 * Init FAT
-	 */
+void
+reset_fat(void){
+
 	memset(&tst_fat, 0x00, sizeof(struct _fs_sword_fat));
 
 	FS_SWD_SET_FAT(&tst_fat,0,0x8f);
 	FS_SWD_SET_FAT(&tst_fat,1,0x8f);
+}
+
+int
+main(int argc, char *argv[]){
+	int                  rc;
+	struct _storage_fib fib;
+	fs_off_t         offset;
+	fs_blk_num          blk;
+
+	/*
+	 * Init FAT
+	 */
+	reset_fat();
+
+	fib.fib_cls = 0x00;
+	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
+	sos_assert( rc == SOS_ERROR_BADFAT );
+
+	FS_SWD_SET_FAT(&tst_fat,2,0x0);
+	fib.fib_cls = 0x02;
+	rc = get_cluster_number_sword(&fib, SOS_CLUSTER_SIZE, FS_SWD_GTBLK_RD_FLG, &blk);
+	sos_assert( rc == SOS_ERROR_BADFAT );
+
+	fib.fib_cls = 0x8f;
+	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
+	sos_assert( rc == SOS_ERROR_NOENT );
+
+	fib.fib_cls = 0x8f;
+	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+
+	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
+	sos_assert( rc == 0 );
 
 	return 0;
 }
