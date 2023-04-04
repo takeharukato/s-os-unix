@@ -268,7 +268,7 @@
 
 /** Get FAT value on S-OS
     @param[in] _v  The value to convert
-    @return The FAT value on S-OS
+    @return The FAT entry value on S-OS
  */
 #define SOS_FAT_VAL(_v) ( (_v) & 0xff )
 
@@ -316,18 +316,6 @@
 #define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
 #define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
 
-/** Determine whether the cluster is the cluster at the end of file.
-    @param[in] _nxt_cls the next cluster number of the cluster to examine
-    @retval TRUE   The cluster is placed at the end of file.
-    @retval FALSE  The cluster is NOT placed at the end of file.
- */
-#define SOS_IS_END_CLS(_nxt_cls) ( (_nxt_cls) & SOS_FAT_ENT_EOF_MASK )
-
-/** Calculate how many records are used in the cluster at the end of the file
-    @param[in] _ent The value of the file allocation table entry at the end of the file
-    @return The number of used records in the cluster at the end of the file
- */
-#define SOS_FAT_END_CLS_RECS(_ent) ( ( (_ent) & 0xf ) + 1 )
 /*
  * Drive letters
  */

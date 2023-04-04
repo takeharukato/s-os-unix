@@ -85,6 +85,21 @@
 		(_remains) = FS_SWD_SIZE_FOR_LOOP((_rwcnt));		\
 	}while(0)
 
+/** Determine whether the cluster is the cluster at the end of file.
+    @param[in] _nxt_cls the next cluster number of the cluster to examine
+    @retval TRUE   The cluster is placed at the end of file.
+    @retval FALSE  The cluster is NOT placed at the end of file.
+ */
+#define FS_SWD_IS_END_CLS(_nxt_cls) ( ( (_nxt_cls) & SOS_FAT_ENT_EOF_MASK ) != 0 )
+
+/** Calculate how many records are used in the cluster at the end of the file
+    @param[in] _ent The value of the file allocation table entry at the end of the file
+    @return The number of used records in the cluster at the end of the file
+ */
+#define FS_SWD_FAT_END_CLS_RECS(_ent) ( ( (_ent) & 0xf ) + 1 )
+
+/* here */
+
 /** Get the used records in the cluster on S-OS
     @param[in] _fatent  The value in the FAT at the end of the cluster chain.
     @return The record value on S-OS
@@ -699,7 +714,7 @@ alloc_newblock_sword(sos_devltr ch, fs_rec use_recs, fs_cls *blknop){
 	goto error_out;
 
 found:
-	sos_assert( SOS_IS_END_CLS(*clsp) );
+	sos_assert( FS_SWD_IS_END_CLS(*clsp) );
 	sos_assert( &fat[i] == clsp );
 
 	clear_block_sword(ch, i);  /* clear new block */
@@ -753,7 +768,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	/*
 	 * Ensure the first cluster of the file in case of writing.
 	 */
-	if ( SOS_IS_END_CLS(fib->fib_cls) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
+	if ( FS_SWD_IS_END_CLS(fib->fib_cls) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
 
 			rc = alloc_newblock_sword(ch, 1, &blkno);
 			if ( rc != 0 )
@@ -782,7 +797,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 			rc = SOS_ERROR_BADFAT;  /* Invalid cluster chain */
 			goto error_out;
 		}
-		if ( !SOS_IS_END_CLS(cls) )   /* End of cluster */
+		if ( !FS_SWD_IS_END_CLS(cls) )   /* End of cluster */
 			continue;    /* next cluster */
 		/*
 		 * End of the cluster
@@ -819,7 +834,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 			goto error_out;
 	}
 
-	sos_assert( !SOS_IS_END_CLS(cls) );
+	sos_assert( !FS_SWD_IS_END_CLS(cls) );
 
 	/*
 	 * extends records in the cluster if it is needed.
@@ -828,10 +843,10 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	if ( rc != 0 )
 		goto error_out;
 
-	if ( SOS_IS_END_CLS(fat[cls]) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
+	if ( FS_SWD_IS_END_CLS(fat[cls]) && FS_SWD_GETBLK_TO_WRITE(mode) ) {
 
 		use_recs = FS_SWD_CALS_RECS_OF_LAST_CLS(pos);
-		if ( use_recs > SOS_FAT_END_CLS_RECS(fat[cls]) ) {
+		if ( use_recs > FS_SWD_FAT_END_CLS_RECS(fat[cls]) ) {
 
 			fat[cls] = FS_SWD_MAKE_CLS_END(use_recs); /* Update */
 
@@ -847,7 +862,7 @@ get_cluster_number_sword(sos_devltr ch, struct _storage_fib *fib,
 	if ( cls_sizp != NULL ) {
 
 		/* Return the available size in the cluster */
-		if ( SOS_IS_END_CLS(fat[cls]) )
+		if ( FS_SWD_IS_END_CLS(fat[cls]) )
 			*cls_sizp = FS_SWD_SIZE_OF_LAST_CLUSTER(fat[cls]);
 		else
 			*cls_sizp = SOS_CLUSTER_SIZE;
@@ -912,7 +927,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 			goto error_out;
 		}
 
-		if ( SOS_IS_END_CLS(cls) ) {
+		if ( FS_SWD_IS_END_CLS(cls) ) {
 
 			/* return the block not found error  */
 			rc = SOS_ERROR_NOENT;
@@ -924,7 +939,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 	 * when clsoff == 0. So we should check ( prev_cls == SOS_FAT_ENT_FREE ) with
 	 * the following if clause.
 	 */
-	if ( SOS_IS_END_CLS(prev_cls) || ( prev_cls == SOS_FAT_ENT_FREE ) )
+	if ( FS_SWD_IS_END_CLS(prev_cls) || ( prev_cls == SOS_FAT_ENT_FREE ) )
 		goto no_need_release;  /* no cluster allocated or invalid chain */
 
 	/* Calculate used records */
@@ -948,7 +963,7 @@ release_block_sword(sos_devltr ch, struct _storage_fib *fib, fs_off_t size) {
 			sos_assert( next_cls != SOS_FAT_ENT_FREE );
 
 			fat[rel_cls] = SOS_FAT_ENT_FREE; /* free cluster */
-			if ( SOS_IS_END_CLS(next_cls) )
+			if ( FS_SWD_IS_END_CLS(next_cls) )
 				break;
 		}
 	}
@@ -959,7 +974,7 @@ no_need_release:
 	 */
 	if ( newsiz == 0 ) {
 
-		if ( !SOS_IS_END_CLS(fib->fib_cls) ) {
+		if ( !FS_SWD_IS_END_CLS(fib->fib_cls) ) {
 
 		    if ( fat[fib->fib_cls] != SOS_FAT_ENT_FREE )
 			    fat[fib->fib_cls] = SOS_FAT_ENT_FREE;
