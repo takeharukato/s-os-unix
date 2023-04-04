@@ -337,24 +337,39 @@ main(int argc, char *argv[]){
 	reset_fat();
 
 	fib.fib_cls = 0x00;
+	blk=0;
 	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
 	sos_assert( rc == SOS_ERROR_BADFAT );
 
 	FS_SWD_SET_FAT(&tst_fat,2,0x0);
 	fib.fib_cls = 0x02;
+	blk=0;
 	rc = get_cluster_number_sword(&fib, SOS_CLUSTER_SIZE, FS_SWD_GTBLK_RD_FLG, &blk);
 	sos_assert( rc == SOS_ERROR_BADFAT );
 
 	fib.fib_cls = 0x8f;
+	blk=0;
 	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
 	sos_assert( rc == SOS_ERROR_NOENT );
 
 	fib.fib_cls = 0x8f;
+	blk=0;
 	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_WR_FLG, &blk);
 	sos_assert( rc == 0 );
+	sos_assert( blk == 2 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
+	blk=0;
 	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_RD_FLG, &blk);
 	sos_assert( rc == 0 );
+	sos_assert( blk == 2 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
+
+	blk=0;
+	rc = get_cluster_number_sword(&fib, 255, FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 2 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
 	return 0;
 }
