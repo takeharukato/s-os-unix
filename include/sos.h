@@ -424,5 +424,6 @@ typedef BYTE        fs_sword_dirps; /**< #DIRPS  in the sword file system. */
 typedef BYTE        fs_sword_dirno; /**< #DIRNO  in the sword file system. */
 typedef BYTE       fs_sword_fatpos; /**< #FATPOS in the sword file system. */
 typedef BYTE       fs_sword_fatent; /**< The FAT entry of the sword file system. */
+typedef BYTE         fs_sword_attr; /**< File Attribute */
 #endif  /*  _ASM  */
 #endif

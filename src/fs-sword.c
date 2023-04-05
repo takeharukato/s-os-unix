@@ -36,6 +36,18 @@
  */
 #define FS_SWD_GETBLK_TO_WRITE(_mod) ( (_mod) & FS_SWD_GTBLK_WR_FLG )
 
+/** Calculate #DIRNO from the offset position in the directory entry.
+    @param[in] _pos The file position in the directory entry.
+    @return #DIRNO of the file
+ */
+#define FS_SWD_OFF2DIRNO(_pos) ( (_pos) / SOS_DENTRY_SIZE )
+
+/** Calculate the offset position in the directory entry from #DIRNO.
+    @param[in] _dirno #DIRNO of the file
+    @return The offset position in the directory entry
+ */
+#define FS_SWD_DIRNO2OFF(_dirno) ( (_dirno) * SOS_DENTRY_SIZE )
+
 /** Determine whether the open flags is invalid
     @param[in] _attr The file attribute in the file information block or
     the directory entry.
@@ -53,18 +65,6 @@
     if the size of the buffer is longer than SSIZE_MAX.
  */
 #define FS_SWD_SIZE_FOR_LOOP(_siz) ( ( (_siz) > SSIZE_MAX ) ? (SSIZE_MAX) : (_siz) )
-
-/** Calculate #DIRNO from the offset position in the directory entry.
-    @param[in] _pos The file position in the directory entry.
-    @return #DIRNO of the file
- */
-#define FS_SWD_OFF2DIRNO(_pos) ( (_pos) / SOS_DENTRY_SIZE )
-
-/** Calculate the offset position in the directory entry from #DIRNO.
-    @param[in] _dirno #DIRNO of the file
-    @return The offset position in the directory entry
- */
-#define FS_SWD_DIRNO2OFF(_dirno) ( (_dirno) * SOS_DENTRY_SIZE )
 
 /** Adjust file position according to the Sword/Hu-Basic file system.
     @param[in] _pos The file position
