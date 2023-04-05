@@ -339,6 +339,7 @@ get_cluster_number_sword(struct _storage_fib *fib, fs_off_t offset, int mode,
 			rc = SOS_ERROR_NOENT; /* no record allocated at POS. */
 			goto error_out;
 		}
+
 		/* Expand the cluster length */
 		handle_last_cluster(&fat, pos, mode, cur);
 	}
@@ -363,11 +364,15 @@ error_out:
 
 void
 reset_fat(void){
+	int i;
 
 	memset(&tst_fat, 0x00, sizeof(struct _fs_sword_fat));
 
-	FS_SWD_SET_FAT(&tst_fat,0,0x8f);
-	FS_SWD_SET_FAT(&tst_fat,1,0x8f);
+	for(i = 0; SOS_RESERVED_FAT_NR > i; ++i) {
+		FS_SWD_SET_FAT(&tst_fat, i, 0x8f);
+	}
+	for( i = SOS_MAX_FILE_CLUSTER + 1; SOS_FAT_SIZE > i; ++i)
+		FS_SWD_SET_FAT(&tst_fat, i, SOS_FAT_ENT_UNAVAILABLE);
 }
 
 int
@@ -444,7 +449,8 @@ main(int argc, char *argv[]){
 	 * search invalid block in the chain
 	 */
 	blk=0;
-	rc = get_cluster_number_sword(&fib, SOS_CLUSTER_SIZE*2, FS_SWD_GTBLK_RD_FLG, &blk);
+	rc = get_cluster_number_sword(&fib, SOS_CLUSTER_SIZE*2, FS_SWD_GTBLK_RD_FLG,
+	    &blk);
 	sos_assert( rc != 0 );
 	sos_assert( rc == SOS_ERROR_NOENT );
 
@@ -461,6 +467,17 @@ main(int argc, char *argv[]){
 	sos_assert( blk == 3 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x81 );
 
+	/*
+	 * Max size file
+	 */
+	reset_fat();
+	blk=0;
+	fib.fib_cls = 0x8f;
+	rc = get_cluster_number_sword(&fib, SOS_MAX_FILE_SIZE - 1,
+	    FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
 
 	return 0;
 }

@@ -206,7 +206,7 @@
 #define SOS_MAX_FILE_CLUSTER    (0x4F)     /**< Max cluster number in Hu-Basic on 2D */
 /** Max file size on the disk (0x4d000 = 315392 bytes). */
 #define SOS_MAX_FILE_SIZE       \
-	( ( SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR ) * SOS_CLUSTER_SIZE )
+	( ( SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR + 1) * SOS_CLUSTER_SIZE )
 
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
 #define SOS_DENTRIES_PER_REC    \
@@ -315,7 +315,7 @@
 
 #define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
 #define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
-
+#define SOS_FAT_ENT_UNAVAILABLE (0xff)           /**< Unavailable cluster */
 /*
  * Drive letters
  */
