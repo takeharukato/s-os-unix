@@ -61,29 +61,83 @@ rw_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat, int mode){
 error_out:
 	return rc;
 }
+
+/** Read File Allocation Table
+    @param[in]  ch     The device letter of the device
+    @param[in]  fat    The address to store the read file allocation table into.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+ */
 static int
 read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
 
 	return rw_fat_sword(ch, fat, FS_VFS_IO_DIR_RD);
 }
 
+/** Write File Allocation Table
+    @param[in]  ch     The device letter of the device
+    @param[in]  fat    The file allocation table to write.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+ */
 static int
 write_fat_sword(sos_devltr ch, const struct _fs_sword_fat *fat){
 
 	return rw_fat_sword(ch, (struct _fs_sword_fat *)fat, FS_VFS_IO_DIR_WR);
 }
 
+/** Clear a file block
+    @param[in]  fib      The file information block of the file contains the block.
+    @param[in]  blkno    The block number
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+ */
+static int
+clear_block_sword(struct _storage_fib *fib, fs_cls blkno){
+	int                     rc;
+	fs_rec                 rec;
+	size_t               rwcnt;
+	size_t             remains;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	memset(&buf[0], 0x0, SOS_RECORD_SIZE); /* clear data */
+	for(rec = SOS_CLS2REC(blkno), remains = SOS_CLUSTER_RECS;
+	    remains > 0; ++rec, --remains) {
+
+		/*
+		 * clear records in the cluster
+		 */
+		rc = storage_record_write(fib->fib_devltr, &buf[0], rec, 1, &rwcnt);
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rwcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+	}
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Allocate new block on the disk.
+    @param[in]  fib      The file information block of the file contains the block.
     @param[in]  fat      The pointer to the file allocation table cache.
     @param[in]  pos      The file offset position
     @param[in]  use_recs The used record numbers at the last cluster
     @param[out] blknop   The address to store the block number of the new block.
     @retval    0                Success
     @retval    SOS_ERROR_NOSPC  Device full
+    @retval    SOS_ERROR_IO     I/O Error
   */
 static int
-alloc_newblock_sword(struct _fs_sword_fat *fat, fs_blk_num *blkp){
+alloc_newblock_sword(struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	int  i;
+	int rc;
 
 	for( i = SOS_RESERVED_FAT_NR; SOS_MAX_FILE_CLUSTER >= i; ++i)
 		if ( FS_SWD_GET_FAT(fat, i) == SOS_FAT_ENT_FREE )
@@ -92,6 +146,10 @@ alloc_newblock_sword(struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	return SOS_ERROR_NOSPC;  /* Device full */
 
 found:
+	rc = clear_block_sword(fib, SOS_CLS_VAL(i));  /* clear the new block */
+	if ( rc != 0 )
+		return rc;
+
 	if ( blkp != NULL )
 		*blkp = i;
 
@@ -165,7 +223,7 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_f
 	/*
 	 * Allocate the first cluster
 	 */
-	rc = alloc_newblock_sword(fat, &new_blk);
+	rc = alloc_newblock_sword(fib, fat, &new_blk);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -267,7 +325,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		/*
 		 * Expand the cluster chain.
 		 */
-		rc = alloc_newblock_sword(&fat, &new_blk);
+		rc = alloc_newblock_sword(fib, &fat, &new_blk);
 		if ( rc != 0 )
 			goto error_out;
 
