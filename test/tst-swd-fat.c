@@ -380,6 +380,7 @@ static int
 release_blocks_sword(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
 	int                   rc;
 	fs_off_t             pos;
+	fs_off_t         rel_pos;
 	fs_blk_num          next;
 	fs_blk_num           cur;
 	fs_blk_num      rel_blks;
@@ -393,21 +394,42 @@ release_blocks_sword(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relb
 	/* Adjust the file potision. */
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
-	/* Start from the next cluster alignment. */
-	pos = SOS_CALC_NEXT_ALIGN(pos, SOS_CLUSTER_SIZE);
-
-	/* Get the start block number to release. */
-	rc = get_cluster_number_sword(fib, pos, FS_SWD_GTBLK_RD_FLG, &next);
-	if ( rc != 0 )
-		goto error_out;
-
 	/* Read the contents of the current FAT. */
 	read_fat_sword(fib->fib_devltr, &fat);
 
 	/*
+	 * Release records in the last cluster
+	 */
+	if ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) {
+
+		/* Get the last block number of the remaining blocks. */
+		rc = get_cluster_number_sword(fib, pos, FS_SWD_GTBLK_RD_FLG, &cur);
+		if ( rc != 0 )
+			goto error_out;
+
+		/* Shrink the cluster */
+		handle_last_cluster(&fat, pos, FS_SWD_GTBLK_RD_FLG, cur);
+	}
+
+	rel_blks = 0;   /* Initialize the number of released blocks */
+
+	/* Start from the next cluster alignment. */
+	rel_pos = SOS_CALC_NEXT_ALIGN(pos, SOS_CLUSTER_SIZE);
+
+	/* Get the start block number to release. */
+	rc = get_cluster_number_sword(fib, rel_pos, FS_SWD_GTBLK_RD_FLG, &next);
+	if ( rc != 0 ) {
+
+		if ( ( rc == SOS_ERROR_NOENT )
+		    && ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) )
+			goto release_end;  /* Some records might be released. */
+
+		goto error_out;
+	}
+
+	/*
 	 * Release blocks
 	 */
-	rel_blks = 0;
 	do{
 
 		cur = next; /* The block number to release. */
@@ -424,10 +446,11 @@ release_blocks_sword(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relb
 
 	} while( !FS_SWD_IS_END_CLS( next ) );
 
+release_end:
 	/* Write the file allocation table back
-	 * when some blocks were released.
+	 * when some records were released.
 	 */
-	if ( rel_blks > 0 ) {
+	if ( ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
 		rc = write_fat_sword(fib->fib_devltr, &fat);
 		if ( rc != 0 )
@@ -608,6 +631,45 @@ main(int argc, char *argv[]){
 	blk=0;
 	rc = release_blocks_sword(&fib, 0, &blk);
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR + 1 );
+	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
+
+
+	/*
+	 * Shirink the block
+	 */
+	reset_fat();
+	fib.fib_cls = 0x8f;
+	blk=0;
+	rc = get_cluster_number_sword(&fib, SOS_CLUSTER_SIZE - 1, FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 2 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	blk=SOS_MAX_FILE_CLUSTER+1;
+	rc = release_blocks_sword(&fib, SOS_CLUSTER_SIZE - 1, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 0 );
+	sos_assert( !FS_SWD_IS_END_CLS(fib.fib_cls) );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, fib.fib_cls ) == 0x8f);
+
+	blk=SOS_MAX_FILE_CLUSTER+1;
+	rc = release_blocks_sword(&fib, SOS_CLUSTER_SIZE - SOS_RECORD_SIZE - 1, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 0 );
+	sos_assert( !FS_SWD_IS_END_CLS(fib.fib_cls) );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, fib.fib_cls ) == 0x8e);
+
+	blk=SOS_MAX_FILE_CLUSTER+1;
+	rc = release_blocks_sword(&fib, SOS_RECORD_SIZE - 1, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 0 );
+	sos_assert( !FS_SWD_IS_END_CLS(fib.fib_cls) );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, fib.fib_cls ) == 0x80);
+
+	blk=0;
+	rc = release_blocks_sword(&fib, 0, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 1 );
 	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
 	return 0;
