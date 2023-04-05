@@ -1,5 +1,6 @@
 #if !defined(_TST_SWD_SWDFS_H)
 #define _TST_SWD_SWDFS_H
+
 #define FS_IO_DIR_RD   (0)   /* Get block to read */
 #define FS_IO_DIR_WR   (1)   /* Get block to write */
 
