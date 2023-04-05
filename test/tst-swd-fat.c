@@ -226,6 +226,7 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, struct _storage_fib *fib,
 error_out:
 	return rc;
 }
+
 /** Get the cluster number of the block from the file position of the file.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
@@ -344,11 +345,15 @@ get_cluster_number_sword(struct _storage_fib *fib, fs_off_t offset, int mode,
 		handle_last_cluster(&fat, pos, mode, cur);
 	}
 
+	if ( FS_SWD_GETBLK_TO_WRITE(mode) ) { /* Write the file allocation table back. */
+
+		rc = write_fat_sword(fib->fib_devltr, &fat);
+		if ( rc != 0 )
+			goto error_out;
+	}
+
 	if ( blkp != NULL )
 		*blkp = cur;
-
-	if ( FS_SWD_GETBLK_TO_WRITE(mode) ) /* Write the file allocation table back. */
-		write_fat_sword(fib->fib_devltr, &fat);
 
 	return 0;
 
@@ -361,6 +366,90 @@ error_out:
        return rc;
 }
 
+/** Release blocks from the file position of the file.
+    @param[in]  fib      The file information block of the file contains the block.
+    @param[in]  offset   The file position where the block is placed at.
+    @param[in]  relblkp  The total amount of released blocks ( unit:the number of blocks ).
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+ */
+static int
+release_blocks_sword(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
+	int                   rc;
+	fs_off_t             pos;
+	fs_blk_num          next;
+	fs_blk_num           cur;
+	fs_blk_num      rel_blks;
+	struct _fs_sword_fat fat;
+
+	/* Return with release size 0.
+	 */
+	if ( fib->fib_cls == SOS_FAT_ENT_FREE )
+		return SOS_ERROR_BADFAT;  /* Bad file allocation table */
+
+	/* Adjust the file potision. */
+	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+
+	/* Start from the next cluster alignment. */
+	pos = SOS_CALC_NEXT_ALIGN(pos, SOS_CLUSTER_SIZE);
+
+	/* Get the start block number to release. */
+	rc = get_cluster_number_sword(fib, pos, FS_SWD_GTBLK_RD_FLG, &next);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Read the contents of the current FAT. */
+	read_fat_sword(fib->fib_devltr, &fat);
+
+	/*
+	 * Release blocks
+	 */
+	rel_blks = 0;
+	do{
+
+		cur = next; /* The block number to release. */
+
+		if ( FS_SWD_GET_FAT(&fat, cur) == SOS_FAT_ENT_FREE ) {
+
+			rc = SOS_ERROR_BADFAT;  /* Bad file allocation table */
+			goto error_out;
+		}
+
+		next = FS_SWD_GET_FAT(&fat, cur);  /* Remember the next cluster */
+		FS_SWD_SET_FAT(&fat, cur, SOS_FAT_ENT_FREE); /* Free Cluster */
+		++rel_blks;   /* Increment the number of released blocks  */
+
+	} while( !FS_SWD_IS_END_CLS( next ) );
+
+	/* Write the file allocation table back
+	 * when some blocks were released.
+	 */
+	if ( rel_blks > 0 ) {
+
+		rc = write_fat_sword(fib->fib_devltr, &fat);
+		if ( rc != 0 )
+			goto error_out;
+	}
+
+	/* Release the first block of the file */
+	if ( FS_SWD_GET_FAT(&fat, fib->fib_cls) == SOS_FAT_ENT_FREE )
+		fib->fib_cls = FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1);
+
+	if ( relblkp != NULL )
+		*relblkp = rel_blks;
+
+	return 0;
+
+error_out:
+       /* @remark We should return without
+	* writing the modified file allocation table.
+	*/
+
+	return rc;
+}
 
 void
 reset_fat(void){
@@ -478,6 +567,48 @@ main(int argc, char *argv[]){
 	sos_assert( rc == 0 );
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	/*
+	 * Release
+	 */
+	reset_fat();
+
+	fib.fib_cls = 0x00;
+	blk=0;
+	rc = release_blocks_sword(&fib, 0, &blk);
+	sos_assert( rc == SOS_ERROR_BADFAT );
+
+	fib.fib_cls = 0x8f;
+	blk=0;
+	rc = release_blocks_sword(&fib, 0, &blk);
+	sos_assert( rc == SOS_ERROR_NOENT );
+
+	fib.fib_cls = 0x8f;
+	blk=0;
+	rc = get_cluster_number_sword(&fib, 0, FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+
+	blk=0;
+	rc = release_blocks_sword(&fib, 0, &blk);
+	sos_assert( blk == 1 );
+	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
+
+	/*
+	 * Release max size file
+	 */
+	reset_fat();
+	blk=0;
+	fib.fib_cls = 0x8f;
+	rc = get_cluster_number_sword(&fib, SOS_MAX_FILE_SIZE - 1,
+	    FS_SWD_GTBLK_WR_FLG, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	blk=0;
+	rc = release_blocks_sword(&fib, 0, &blk);
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR + 1 );
+	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
 	return 0;
 }
