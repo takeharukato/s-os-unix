@@ -163,7 +163,69 @@ found:
 
 	return 0;
 }
+static void
+handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, int mode, fs_blk_num blk){
+	size_t       use_cls_siz;
 
+	if ( !FS_SWD_IS_END_CLS(FS_SWD_GET_FAT(fat, blk)) )
+		return ;  /* No need to calculate the size of the used records */
+
+	/* Calculate the number of the used records.
+	 */
+
+	/* It should write at least one byte
+	 * when a new block is allocated.
+	 * @remark Note that it should calculate the container size of
+	 * written data, not the position to write in
+	 * the following code.
+	 */
+	use_cls_siz = SOS_CALC_NEXT_ALIGN(pos % SOS_CLUSTER_SIZE + 1,
+	    SOS_RECORD_SIZE) - 1;
+
+	/* Write the number of used records. */
+	FS_SWD_SET_FAT(fat, blk,
+	    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(use_cls_siz));
+
+	return ;
+}
+
+static int
+prepare_first_block_sword(struct _fs_sword_fat *fat, struct _storage_fib *fib,
+    int mode){
+	int              rc;
+	fs_blk_num  new_blk;
+
+	sos_assert( fib->fib_cls != SOS_FAT_ENT_FREE );
+
+	/* When MODE is specified as FS_SWD_GTBLK_RD_FLG
+	 * and the file is empty, return SOS_ERROR_NOENT
+	 * without expanding the cluster.
+	 */
+	if ( ( FS_SWD_IS_END_CLS(fib->fib_cls) )
+	    && ( !FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/*
+	 * Allocate the first cluster
+	 */
+	rc = alloc_newblock_sword(fat, &new_blk);
+	if ( rc != 0 )
+		goto error_out;
+
+	fib->fib_cls = new_blk;
+
+	/* mark the end of cluster chain */
+	FS_SWD_SET_FAT(fat, new_blk, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
+	handle_last_cluster(fat, 0, mode, new_blk);
+
+	return 0;
+
+error_out:
+	return rc;
+}
 /** Get the cluster number of the block from the file position of the file.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
@@ -186,37 +248,32 @@ get_cluster_number_sword(struct _storage_fib *fib, fs_off_t offset, int mode,
 	fs_blk_num       blk_off;
 	fs_blk_num       new_blk;
 	fs_cls_off   blk_remains;
-	size_t       use_cls_siz;
 	struct _fs_sword_fat fat;
-
-	/* Read the contents of the current FAT. */
-	read_fat_sword(fib->fib_devltr, &fat);
 
 	/* Return SOS_ERROR_BADFAT when the first file allocation table entry
 	 * points SOS_FAT_ENT_FREE.
 	 */
-	if ( fib->fib_cls == SOS_FAT_ENT_FREE ) {
+	if ( fib->fib_cls == SOS_FAT_ENT_FREE )
+		return SOS_ERROR_BADFAT;  /* Bad file allocation table */
 
-		rc = SOS_ERROR_BADFAT;
-		goto error_out;
-	}
+	/* Read the contents of the current FAT. */
+	read_fat_sword(fib->fib_devltr, &fat);
 
-	/* When MODE is specified as FS_SWD_GTBLK_RD_FLG
-	 * and the file is empty, return SOS_ERROR_NOENT
-	 * without expanding the cluster.
+	/* Adjust the file potision. */
+	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+
+	/* If the first block has not been not alocated yet,
+	 * prepare it.
 	 */
-	if ( ( FS_SWD_IS_END_CLS(fib->fib_cls) )
-	    && ( !FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
+	if ( FS_SWD_IS_END_CLS(fib->fib_cls) ) {
 
-		rc = SOS_ERROR_NOENT;
-		goto error_out;
+		rc = prepare_first_block_sword(&fat, fib, mode);
+		if ( rc != 0 )
+			goto error_out;
 	}
 
 	/* Get the first block number of the file. */
 	cur = fib->fib_cls;
-
-	/* Adjust the file potision. */
-	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Calculate the offset block number in the file from the offset position. */
 	if ( FS_SWD_GETBLK_TO_WRITE(mode) )
@@ -268,23 +325,9 @@ get_cluster_number_sword(struct _storage_fib *fib, fs_off_t offset, int mode,
 		FS_SWD_SET_FAT(&fat, new_blk,
 		    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(SOS_CLUSTER_SIZE-1));
 
-		if ( blk_remains == 1 ) { /* When the block is placed at the end. */
+		if ( blk_remains == 1 )  /* When the block is placed at the end. */
+			handle_last_cluster(&fat, pos, mode, new_blk);
 
-			/* Calculate the number of the used records.
-			 */
-
-			/* It should write at least one byte
-			 * when a new block is allocated.
-			 * @remark Note that it should calculate the container size of
-			 * written data, not the position to write in
-			 * the following code.
-			 */
-			use_cls_siz = SOS_CALC_NEXT_ALIGN(pos % SOS_CLUSTER_SIZE + 1,
-			    SOS_RECORD_SIZE) - 1;
-			/* Write the number of used records. */
-			FS_SWD_SET_FAT(&fat, new_blk,
-			    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(use_cls_siz));
-		}
 		/* Add the newly allocated block to the cluster chain. */
 		if ( FS_SWD_IS_END_CLS(fib->fib_cls) ) {
 
@@ -328,7 +371,6 @@ int
 main(int argc, char *argv[]){
 	int                  rc;
 	struct _storage_fib fib;
-	fs_off_t         offset;
 	fs_blk_num          blk;
 
 	/*
