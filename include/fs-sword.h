@@ -121,6 +121,8 @@ int fs_swd_search_dent_by_name(sos_devltr _ch, const BYTE *_swd_name, struct _st
 int fs_swd_search_free_dent(sos_devltr _ch, fs_dirno *_dirnop);
 int fs_swd_write_dent(sos_devltr _ch, struct _storage_fib *_fib);
 
-int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size_t _bufsiz);
-int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz);
+int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size_t _bufsiz,
+    size_t *_rwsizp);
+int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz,
+    size_t *_rwsizp);
 #endif  /*  _FS_SWORD_H  */

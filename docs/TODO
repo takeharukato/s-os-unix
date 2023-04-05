@@ -109,7 +109,6 @@ $81 = 0x80
         /* Truncate 2 block without releasing blocks by shirnking */
 	543:    rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res); <=ここで解放ループが働いていない?
 ---
-
 * ファイルサイズを変えない場合にブロックの獲得や解放が起こらないことの確認
   (念のため)
 * クラスタ内部でのファイルサイズ変更時の動作確認
@@ -122,6 +121,7 @@ $81 = 0x80
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
 
 [fs済]
+* fs_swd_read_block/fs_swd_write_blockに書込みバイト数を返却する機能を実装[済]
 * set/resetの為にchmodオペレーションが必要[済]
 * creatを要作成[済]
 * sword fsのfatpos, dirps=>fatrec, dirps_rec変換処理を共通化する[済]

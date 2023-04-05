@@ -16,6 +16,8 @@
 #include "list.h"
 #include "storage.h"
 
+/** I/O Direction
+ */
 #define FS_VFS_IO_DIR_RD   (0)   /* read */
 #define FS_VFS_IO_DIR_WR   (1)   /* write */
 
