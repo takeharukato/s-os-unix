@@ -419,6 +419,8 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 		if ( rc != 0 )
 			goto error_out;
 
+		/* Mark the end of cluster */
+		FS_SWD_SET_FAT(&fat, cur, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
 		/* Shrink the cluster */
 		handle_last_cluster(&fat, pos, FS_VFS_IO_DIR_RD, cur);
 	}

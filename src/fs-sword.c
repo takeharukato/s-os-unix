@@ -25,24 +25,24 @@
 /** Truncate a file to a specified length
     @param[in]  fib    The file information block of the file.
     @param[in]  pos    The file position information
-    @param[in]  off    The file length of the file to be truncated.
+    @param[in]  newpos The file position of the file to be truncated.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
 change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
-    fs_off_t off){
+    fs_off_t newpos){
 	int                        rc;
 	fs_off_t               newsiz;
 	fs_off_t              extends;
 	fs_blk_num                blk;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
-	if ( ( 0 > off ) || ( off > SOS_MAX_FILE_SIZE ) )
+	if ( ( 0 > newpos ) || ( newpos >= SOS_MAX_FILE_SIZE ) )
 		return SOS_ERROR_SYNTAX;
 
-	newsiz = off;
+	newsiz = newpos;
 
 	extends = newsiz - fib->fib_size;
 
@@ -64,19 +64,21 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		/*
 		 * Clear extra bytes after the end of file.
 		 */
-		rc = fs_swd_read_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE), &clsbuf[0],
-		    SOS_CLUSTER_SIZE, NULL);
-		if ( rc != 0 )
-			goto error_out;
+		if ( ( newsiz > 0) && ( ( ( newsiz + 1 ) % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
-		if ( ( newsiz % SOS_CLUSTER_SIZE ) > 0 )
-			memset((void *)&clsbuf[0] + newsiz % SOS_CLUSTER_SIZE,
-			    0x0, SOS_CLUSTER_SIZE - ( newsiz % SOS_CLUSTER_SIZE ) );
+			rc = fs_swd_read_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
 
-		rc = fs_swd_write_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
-		    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
-		if ( rc != 0 )
-			goto error_out;
+			memset((void *)&clsbuf[0] + ( newsiz + 1) % SOS_CLUSTER_SIZE,
+			    0x0, SOS_CLUSTER_SIZE - ( ( newsiz + 1) % SOS_CLUSTER_SIZE ) );
+
+			rc = fs_swd_write_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
+			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			if ( rc != 0 )
+				goto error_out;
+		}
 	}
 
 	/*
@@ -542,13 +544,19 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
 int
 fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
 	int                        rc;
+	fs_off_t               newpos;
 	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
 
 	fib = &fdp->fd_fib;  /* file information block */
 	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
 
-	rc = change_filesize_sword(fib, pos, offset);
+	offset=SOS_MIN( offset, SOS_MAX_FILE_SIZE);
+
+	newpos = 0;
+	if ( offset > 0 )
+		newpos = offset - 1;
+	rc = change_filesize_sword(fib, pos, newpos);
 	if ( rc != 0 )
 		goto error_out;
 
