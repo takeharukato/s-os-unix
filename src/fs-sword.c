@@ -51,7 +51,11 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		/*
 		 * Release file blocks
 		 */
-		rc = fs_swd_release_blocks(fib, newsiz, NULL);
+		if ( newsiz == 0 ) /* Release all blocks */
+			rc = fs_swd_release_blocks(fib, 0, NULL);
+		else  /* Release after newsiz */
+			rc = fs_swd_release_blocks(fib, newsiz+1, NULL);
+
 		if ( rc != 0 )
 			goto error_out;
 	} else {
@@ -552,11 +556,11 @@ fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *r
 	fib = &fdp->fd_fib;  /* file information block */
 	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
 
-	offset=SOS_MIN( offset, SOS_MAX_FILE_SIZE);
+	offset=SOS_MIN( offset, SOS_MAX_FILE_SIZE -1);
 
 	newpos = 0;
 	if ( offset > 0 )
-		newpos = offset - 1;
+		newpos = offset;
 	rc = change_filesize_sword(fib, pos, newpos);
 	if ( rc != 0 )
 		goto error_out;
