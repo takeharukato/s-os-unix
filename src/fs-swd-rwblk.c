@@ -20,120 +20,54 @@
 #include "fs-vfs.h"
 #include "fs-sword.h"
 
-/** Read/Write cluster
+/** Read/Write data to the cluster
     @param[in]  ch      The drive letter
     @param[in]  mode     The number to specify the behavior.
     * FS_VFS_IO_DIR_RD Get block to read
     * FS_VFS_IO_DIR_WR Get block to write
     @param[out] buf     The address to store the contents of the cluster.
     @param[in]  blk     The cluster number to read from or write to.
-    @param[in]  count   The read/write length.
     @retval     0             success
     @retval     SOS_ERROR_IO  I/O Error
  */
 static int
-rw_cluster_sword(sos_devltr ch, int mode, void *buf, fs_blk_num blk, size_t count){
-	int                         i;
+rw_cluster_sword(sos_devltr ch, int mode, void *buf, fs_blk_num blk){
 	int                        rc;
+	int                         i;
 	size_t                  rwcnt;
-	fs_rec_off             recoff;
-	size_t             rw_remains;
-	BYTE  recbuf[SOS_RECORD_SIZE];
+	BYTE blkbuf[SOS_CLUSTER_SIZE];
+
+	/* Prepare data to write */
+	if ( FS_VFS_IODIR_WRITE(mode) )
+		memcpy(&blkbuf[0], buf, SOS_CLUSTER_SIZE);
 
 	/*
-	 * read/write cluster
+	 * Read/Write a cluster.
 	 */
-	sos_assert( SOS_CLUSTER_SIZE >= count);
-	rw_remains = count;
+	for(i = 0; SOS_CLUSTER_RECS > i; ++i){
 
-	if ( buf == NULL )
-		goto null_buff;
+		if ( !FS_VFS_IODIR_WRITE(mode) ) /* Read the contents of a cluster */
+			rc = storage_record_read(ch, &blkbuf[0] + i * SOS_RECORD_SIZE,
+			    SOS_CLS2REC( SOS_CLS_VAL(blk) ), 1, &rwcnt);
+		else    /* Write the contents of a buffer to the cluster. */
+			rc = storage_record_write(ch, &blkbuf[0] + i * SOS_RECORD_SIZE,
+				    SOS_CLS2REC( SOS_CLS_VAL(blk) ), 1, &rwcnt);
 
-	for(recoff = 0, i= 0;
-	    SOS_CLUSTER_RECS > i ;
-	    ++i, ++recoff, rw_remains -= SOS_MIN(rw_remains, SOS_RECORD_SIZE) ) {
+		if ( rc != 0 )
+			goto error_out;  /* Error */
 
-		if ( !FS_VFS_IODIR_WRITE(mode) ) { /* Read the contents of a cluster */
+		if ( rwcnt != 1 ) {
 
-			rc = storage_record_read(ch, &recbuf[0],
-			    SOS_CLS2REC( SOS_CLS_VAL(blk) ) + recoff, 1, &rwcnt);
-
-			if ( rc != 0 )
-				goto error_out;  /* Error */
-
-			if ( rwcnt != 1 ) {
-
-				rc = SOS_ERROR_IO;
-				goto error_out;  /* I/O Error */
-			}
-
-			/*
-			 * Copy contents of the block
-			 */
-			memcpy(buf + recoff * SOS_RECORD_SIZE,
-			    &recbuf[0], SOS_MIN(rw_remains, SOS_RECORD_SIZE));
-		} else {
-
-			/*
-			 * Write the data to a cluster.
-			 */
-			if ( SOS_RECORD_SIZE > rw_remains ) { /* Write a part of the record. */
-
-				/*
-				 * Modify the beginning of the buffer at the end of file
-				 */
-				rc = storage_record_read(ch, &recbuf[0],
-				    SOS_CLS2REC( SOS_CLS_VAL(blk) ) + recoff, 1, &rwcnt);
-
-				if ( rc != 0 )
-					goto error_out;  /* I/O Error */
-
-				if ( rwcnt != 1 ) {
-
-					rc = SOS_ERROR_IO;
-					goto error_out;  /* I/O Error */
-				}
-
-				memcpy(&recbuf[0],
-				    buf + recoff * SOS_RECORD_SIZE,
-				    rw_remains);  /* Modify */
-
-				/*
-				 * Write back
-				 */
-				rc = storage_record_write(ch, &recbuf[0],
-				    SOS_CLS2REC( SOS_CLS_VAL(blk) ) + recoff, 1, &rwcnt);
-
-				if ( rc != 0 )
-					goto error_out;  /* I/O Error */
-
-				if ( rwcnt != 1 ) {
-
-					rc = SOS_ERROR_IO;
-					goto error_out;  /* I/O Error */
-				}
-
-				rw_remains = 0;
-
-			} else {  /* Write a whole record. */
-
-				rc = storage_record_write(ch, buf + recoff * SOS_RECORD_SIZE,
-				    SOS_CLS2REC( SOS_CLS_VAL(blk) ) + recoff, 1, &rwcnt);
-
-				if ( rc != 0 )
-					goto error_out;  /* I/O Error */
-
-				if ( rwcnt != 1 ) {
-
-					rc = SOS_ERROR_IO;
-					goto error_out;  /* I/O Error */
-				}
-			}
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
 		}
 	}
 
-null_buff:
-	rc = 0;
+	/* copy data from the local buffer to BUF */
+	if ( !FS_VFS_IODIR_WRITE(mode) )
+		memcpy(buf, &blkbuf[0], SOS_CLUSTER_SIZE);
+
+	return 0;
 
 error_out:
 	return rc;
@@ -201,7 +135,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 
 		/* Read block into local buffer */
 		rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_RD,
-		    &blkbuf[0], blk, SOS_CLUSTER_SIZE);
+		    &blkbuf[0], blk);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -221,7 +155,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 
 			/* Write block */
 			rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_WR,
-			    &blkbuf[0], blk, SOS_CLUSTER_SIZE);
+			    &blkbuf[0], blk);
 			if ( rc != 0 )
 				goto error_out;
 		}
