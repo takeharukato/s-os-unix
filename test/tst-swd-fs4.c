@@ -18,14 +18,14 @@ int fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count
 int fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
     size_t count, size_t *wrsizp, BYTE *resp);
 int fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp);
-int fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path, BYTE *resp);
+int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
 int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
 int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 int fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp);
-int fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path, BYTE *resp);
+int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
 int fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp);
 
-const unsigned char *ftype_name_tbl[]={
+const char *ftype_name_tbl[]={
 	"???",
 	"Asc",
 	"Bin"};
@@ -54,10 +54,9 @@ get_ftype_idx(BYTE attr){
 
 void
 print_unix_filename(BYTE *name){
-	int rc;
-	unsigned char *unixname;
+	char *unixname;
 
-	rc = fs_sword2unix(&name[0], &unixname);
+	fs_sword2unix(&name[0], &unixname);
 	printf("UNIX:%s\n", unixname);
 	free(unixname);
 }
@@ -114,6 +113,8 @@ init_dir_stream(sos_devltr ch, struct _sword_dir *dir){
 	storage_get_fatpos(ch, &pos->dp_fatpos);
 	dir->dir_sysflags = 0;
 	dir->dir_private = NULL;
+
+	return 0;
 }
 
 static int
@@ -256,7 +257,6 @@ error_out:
 
 static int
 fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
-	int   rc;
 	BYTE res;
 
 	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
@@ -265,7 +265,7 @@ fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
 		goto error_out;
 	}
 
-	rc = fops_close_sword(fdp, &res);
+	fops_close_sword(fdp, &res);
 	if ( res != 0 )
 		goto error_out;
 
@@ -282,7 +282,6 @@ error_out:
 
 static int
 fs_vfs_truncate(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
-	int   rc;
 	BYTE res;
 
 	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
@@ -291,7 +290,7 @@ fs_vfs_truncate(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp)
 		goto error_out;
 	}
 
-	rc = fops_truncate_sword(fdp, offset, &res);
+	fops_truncate_sword(fdp, offset, &res);
 	if ( res != 0 )
 		goto error_out;
 
@@ -305,7 +304,7 @@ error_out:
 }
 
 static int
-fs_vfs_unlink(struct _sword_dir *dir, const unsigned char *path, BYTE *resp){
+fs_vfs_unlink(struct _sword_dir *dir, const char *path, BYTE *resp){
 	int   rc;
 	BYTE res;
 
@@ -331,88 +330,11 @@ error_out:
 }
 
 static int
-fs_vfs_read(struct _sword_file_descriptor *fdp, void *buf, size_t count,
-    size_t *rwcntp, BYTE *resp){
-	int                        rc;
-	size_t                  rdsiz;
-	BYTE                      res;
-	struct _storage_disk_pos *pos;
-
-	pos = &fdp->fd_pos;
-
-	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
-
-		res = SOS_ERROR_NOTOPEN;
-		goto error_out;
-	}
-
-	rdsiz = 0;  /* Init read size */
-	rc = fops_read_sword(fdp, buf, count, &rdsiz, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	pos->dp_pos += rdsiz;  /* update position */
-
-	res = 0;
-
-error_out:
-	if ( rwcntp != NULL )
-		*rwcntp = rdsiz;
-
-	if ( resp != NULL )
-		*resp = res;
-
-	return rc;
-}
-
-static int
-fs_vfs_write(struct _sword_file_descriptor *fdp, const void *buf, size_t count,
-    size_t *rwcntp, BYTE *resp){
-	int                        rc;
-	size_t                  wrsiz;
-	BYTE                      res;
-	struct _storage_disk_pos *pos;
-
-	pos = &fdp->fd_pos;
-
-	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
-
-		res = SOS_ERROR_NOTOPEN;
-		goto error_out;
-	}
-
-	if ( !( fdp->fd_flags & FS_VFS_FD_FLAG_MAY_WRITE ) ) {
-
-		res = SOS_ERROR_NOTOPEN;  /* The file is not opend to write. */
-		goto error_out;
-	}
-
-	wrsiz = 0;  /* Init written size */
-
-	rc = fops_write_sword(fdp, buf, count, &wrsiz, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	pos->dp_pos += wrsiz;  /* update position */
-
-	res = 0;
-
-error_out:
-	if ( rwcntp != NULL )
-		*rwcntp = wrsiz;
-
-	if ( resp != NULL )
-		*resp = res;
-
-	return rc;
-}
-
-static int
 show_dir(sos_devltr ch){
 	int   rc;
 	int   idx;
-	unsigned char fname[SOS_FNAME_NAME_BUFSIZ];
-	unsigned char ext[SOS_FNAME_EXT_BUFSIZ];
+	char fname[SOS_FNAME_NAME_BUFSIZ];
+	char ext[SOS_FNAME_EXT_BUFSIZ];
 	struct _storage_fib fib;
 	struct _sword_dir dir;
 	BYTE res;
@@ -451,27 +373,10 @@ show_dir(sos_devltr ch){
 
 	return 0;
 }
-static int
-read_file_test(struct _sword_file_descriptor *fdp){
-	int           rc;
-	BYTE         res;
-	char buf[BUFSIZ];
-	size_t       cnt;
-
-	do{
-
-		rc = fs_vfs_read(fdp, &buf[0], BUFSIZ, &cnt, &res);
-		if ( rc != 0 )
-			break;
-		printf("Read:%lu byte\n", cnt);
-	}while( res == 0 );
-
-}
 int
 main(int argc, char *argv[]){
 	int            rc;
 	int             i;
-	fs_fd_flags flags;
 	struct _sword_file_descriptor fd;
 	struct _sword_header_packet *pkt, hdr_pkt;
 	struct _sword_dir dir;

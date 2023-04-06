@@ -92,10 +92,10 @@ struct _sword_header_packet{
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
-	int (*fops_creat)(sos_devltr _ch, const unsigned char *_filepath,
+	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, BYTE *_resp);
-	int (*fops_open)(sos_devltr _ch, const unsigned char *_filepath,
+	int (*fops_open)(sos_devltr _ch, const char *_filepath,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, void **_privatep, BYTE *_resp);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp, BYTE *_resp);
@@ -116,11 +116,11 @@ struct _fs_fops{
 	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop,
 	    BYTE *_resp);
 	int (*fops_closedir)(struct _sword_dir *_dir, BYTE *_resp);
-	int (*fops_rename)(struct _sword_dir *_dir, const unsigned char *_oldpath,
-	    const unsigned char *_newpath, BYTE *_resp);
-	int (*fops_chmod)(struct _sword_dir *_dir, const unsigned char *_path,
+	int (*fops_rename)(struct _sword_dir *_dir, const char *_oldpath,
+	    const char *_newpath, BYTE *_resp);
+	int (*fops_chmod)(struct _sword_dir *_dir, const char *_path,
 	    const fs_perm _perm, BYTE *_resp);
-	int (*fops_unlink)(struct _sword_dir *_dir, const unsigned char *_path,
+	int (*fops_unlink)(struct _sword_dir *_dir, const char *_path,
 	    BYTE *_resp);
 };
 

@@ -106,7 +106,7 @@ error_out:
     @retval     0         success
  */
 int
-fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
+fs_unix2sword(const char *unixname, BYTE *dest, size_t size){
 	int                                i;
 	const char                       *sp;
 	char                             *ep;
@@ -167,7 +167,7 @@ fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
     @retval    positive   UNIX file name is grater than SWORD
  */
 int
-fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size_t len){
+fs_compare_unix_and_sword(const char *unixname, const BYTE *sword, size_t len){
 	size_t                 cmp_len;
 	BYTE  conv_name[SOS_FNAME_LEN];
 

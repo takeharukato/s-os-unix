@@ -121,8 +121,9 @@ error_out:
     *    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_creat_sword(sos_devltr ch, const unsigned char *fname, fs_fd_flags flags,
-    const struct _sword_header_packet *pkt, struct _storage_fib *fibp, BYTE *resp){
+fops_creat_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
+    const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
+    BYTE *resp){
 	int                           rc;
 	fs_dirno                   dirno;
 	struct _storage_fib          fib;
@@ -227,7 +228,7 @@ error_out:
     * SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch, const unsigned char *fname, fs_fd_flags flags,
+fops_open_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
     const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
     void **privatep, BYTE *resp){
 	int                           rc;
@@ -775,8 +776,8 @@ fops_closedir_sword(struct _sword_dir *dir, BYTE *resp){
     * SOS_ERROR_NOENT Oldpath is not Found.
  */
 int
-fops_rename_sword(struct _sword_dir *dir, const unsigned char *oldpath,
-    const unsigned char *newpath, BYTE *resp){
+fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
+    const char *newpath, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib        old_fib;
@@ -847,7 +848,7 @@ error_out:
     * SOS_ERROR_NOENT path is not Found.
  */
 int
-fops_chmod_sword(struct _sword_dir *dir, const unsigned char *path,
+fops_chmod_sword(struct _sword_dir *dir, const char *path,
     const fs_perm perm, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
@@ -903,8 +904,7 @@ error_out:
     * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_unlink_sword(struct _sword_dir *dir, const unsigned char *path,
-    BYTE *resp){
+fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;

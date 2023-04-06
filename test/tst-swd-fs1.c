@@ -11,7 +11,7 @@
 
 void
 print_unix_filename(BYTE *name){
-	unsigned char *unixname;
+	char *unixname;
 
 	fs_sword2unix(&name[0], &unixname);
 	printf("UNIX:%s\n", unixname);
@@ -36,10 +36,8 @@ main(int argc, char *argv[]){
 	int                          i;
 	BYTE              temp[BUFSIZ];
 	BYTE      rec[SOS_RECORD_SIZE];
-	BYTE     rec2[SOS_RECORD_SIZE];
 	BYTE swdname[SOS_FNAME_BUFSIZ];
 	size_t                     len;
-	unsigned char        *unixname;
 	struct _storage_disk_image img;
 	struct _storage_fib        fib;
 
