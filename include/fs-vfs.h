@@ -21,6 +21,15 @@
 #define FS_VFS_IO_DIR_RD   (0)   /* read */
 #define FS_VFS_IO_DIR_WR   (1)   /* write */
 
+/** Determine the direction of getting block.
+    @param[in] _mod  The direction flag
+    FS_IO_DIR_RD Get block to read
+    FS_IO_DIR_WR Get block to write
+    @retval TRUE  Get block to write
+    @retval FALSE Get block to read
+ */
+#define FS_VFS_IODIR_WRITE(_mod) ( (_mod) & FS_VFS_IO_DIR_WR )
+
 /** file decriptor flags
  */
 #define FS_VFS_FD_FLAG_O_RDONLY   (0x0)     /**< ReadOnly   */

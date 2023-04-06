@@ -137,7 +137,7 @@ mount_2dimg(const sos_devltr ch, const char *fname, void **ref_priv){
 	if ( 0 > fd )
 		return EIO;  /* The device is not supported by this module */
 
-	img->fname = strdup(fname);  /* copy file name string  */
+	img->fname = (unsigned char *)strdup(fname);  /* copy file name string  */
 	if ( img->fname == NULL ) {
 
 		rc = ENOMEM;   /* Out of memory */

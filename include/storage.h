@@ -165,8 +165,8 @@ struct _storage_di_ops;
  */
 struct _storage_fib{
 	sos_devltr               fib_devltr;  /**< Device letter     */
-	BYTE                       fib_attr;  /**< File attribute    */
-	BYTE                      fib_dirno;  /**< DIRNO of the file */
+	fs_sword_attr              fib_attr;  /**< File attribute    */
+	fs_sword_dirno            fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
 	WORD                      fib_exadr;  /**< File exec address */

@@ -10,16 +10,6 @@
 #define _FS_SWORD_H
 
 #include "sim-type.h"
-#include "storage.h"
-
-/** Determine the direction of getting block.
-    @param[in] _mod  The direction flag
-    FS_IO_DIR_RD Get block to read
-    FS_IO_DIR_WR Get block to write
-    @retval TRUE  Get block to write
-    @retval FALSE Get block to read
- */
-#define FS_VFS_IODIR_WRITE(_mod) ( (_mod) & FS_VFS_IO_DIR_WR )
 
 /** Refer the file allocation table array
     @return The address of the file allocation table array
@@ -102,16 +92,28 @@
  */
 #define FS_SWD_DIRNO2OFF(_dirno) ( (_dirno) * SOS_DENTRY_SIZE )
 
+/** Determine whether the open flags is invalid
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+   @param[in] _f The open flags
+   @retval TRUE  The open flags is invalid
+   @retval FALSE The open flags is valid
+ */
+#define FS_SWD_IS_OPEN_FLAGS_INVALID(_attr, _f)				\
+        ( ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT ) || \
+	    !SOS_FATTR_IS_VALID(_attr) )
+
 /*
  * Data types
  */
-
 
 /** File Allocation Table
  */
 struct _fs_sword_fat{
 	fs_sword_fatent fat[SOS_FAT_SIZE];  /**< File Allocation Table */
 };
+
+struct _storage_fib;
 
 int fs_swd_get_block_number(struct _storage_fib *_fib, fs_off_t _offset, int _mode, fs_blk_num *_blkp);
 int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset, fs_blk_num *_relblkp);
@@ -125,4 +127,9 @@ int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size
     size_t *_rwsizp);
 int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz,
     size_t *_rwsizp);
+
+int fs_sword2unix(const BYTE *_swordname, char **_destp);
+int fs_unix2sword(const unsigned char *_unixname, BYTE *_dest, size_t _size);
+int fs_compare_unix_and_sword(const unsigned char *_unixname, const BYTE *_sword, size_t _len);
+void fs_get_sos_header(const struct _storage_fib *_fib, void *_dest, size_t _bufsiz);
 #endif  /*  _FS_SWORD_H  */

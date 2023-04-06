@@ -116,18 +116,18 @@ fs_unix2sword(const unsigned char *unixname, BYTE *dest, size_t size){
 	/*
 	 * Skip drive letter
 	 */
-	sp = strchr(&unixname[0],':');
+	sp = strchr((char *)&unixname[0],':');
 	if ( sp != NULL )
 		while( *sp == ':' )
 			++sp;
 	else
-		sp = &unixname[0];
+		sp = (const char *)&unixname[0];
 	/* Fill spaces */
 	memset(&swd_name[0], SCR_SOS_SPC, SOS_FNAME_LEN);
 	/*
 	 * Copy file name
 	 */
-	ep = strrchr(unixname,'.');
+	ep = strrchr((const char *)unixname,'.');
 	if ( ep != NULL )
 		while( *ep == '.' )
 			++ep;  /* skip sequential dots */
@@ -184,8 +184,8 @@ fs_compare_unix_and_sword(const unsigned char *unixname, const BYTE *sword, size
 void
 fs_get_sos_header(const struct _storage_fib *fib, void *dest,
     size_t bufsiz){
-	unsigned char header[SOS_HEADER_BUFLEN];
-	size_t                           cpysiz;
+	char   header[SOS_HEADER_BUFLEN];
+	size_t                    cpysiz;
 
 	cpysiz = SOS_MIN(bufsiz, SOS_HEADER_LEN);
 

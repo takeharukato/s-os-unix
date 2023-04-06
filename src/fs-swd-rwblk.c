@@ -158,39 +158,64 @@ error_out:
 static int
 rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
     size_t bufsiz, size_t *rwsizp){
-	int                     rc;
-	fs_blk_num             blk;
-	fs_off_t               off;
-	size_t               rwlen;
-	size_t          rw_remains;
+	int                        rc;
+	fs_blk_num                blk;
+	size_t                 cpylen;
+	size_t                remains;
+	fs_off_t              pos_off;
+	fs_off_t              blk_off;
+	fs_off_t              blk_pos;
+	void                    *bufp;
+	BYTE blkbuf[SOS_CLUSTER_SIZE];
 
-	for(rw_remains = bufsiz, off = 0; rw_remains > 0; ) {
+	pos_off = 0;                       /* offset from current file position */
+	blk_off = pos % SOS_CLUSTER_SIZE;  /* copy offset in the cluster */
+	remains = bufsiz;                  /* remaining bytes of request size */
+	bufp = buf;                        /* The destination address of data */
 
-		/*
-		 * Get the cluster number of POS
-		 */
+	while( remains > 0 ) {
 
-		rc = fs_swd_get_block_number(fib, pos + off, mode, &blk);
+		/* Calculate block position */
+		blk_pos = SOS_CALC_ALIGN(pos + pos_off, SOS_CLUSTER_SIZE);
+
+		/* Get the block number and allocate a block if it is needed. */
+		rc = fs_swd_get_block_number(fib, blk_pos, mode, &blk);
 		if ( rc != 0 )
 			goto error_out;
 
-		rwlen = SOS_MIN(rw_remains, SOS_CLUSTER_SIZE);
-		/*
-		 * Read/Write cluster
-		 */
-		rc = rw_cluster_sword(fib->fib_devltr, mode, buf + off, blk, rwlen);
-		if ( rc != 0 )
-			goto error_out;
+		/* Read block into local buffer */
+		rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_RD,
+		    &blkbuf[0], blk, SOS_CLUSTER_SIZE);
 
-		rw_remains -= rwlen;
-		off += rwlen;
+		/* copy length from the buffer */
+		cpylen = SOS_MIN( SOS_CLUSTER_SIZE - blk_off, remains);
+
+		/* copy from the buffer for the contents of the cluster */
+		if ( !FS_VFS_IODIR_WRITE(mode) )  /* Read */
+			memcpy(bufp + pos_off, &blkbuf[0] + blk_off, cpylen);
+		else { /* Write */
+
+			/* Modify the block */
+			memcpy(&blkbuf[0] + blk_off, bufp + pos_off, cpylen);
+
+			/* Write block */
+			rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_WR,
+			    &blkbuf[0], blk, SOS_CLUSTER_SIZE);
+			if ( rc != 0 )
+				goto error_out;
+		}
+
+		/* update positions */
+		bufp += cpylen;
+		pos_off += cpylen;
+		remains -= cpylen;
 	}
 
-	rc =  0;
+	rc = 0;
 
 error_out:
 	if ( rwsizp != NULL )
-		*rwsizp = bufsiz - rw_remains;
+		*rwsizp = bufsiz - remains;
 
 	return rc;
 }
