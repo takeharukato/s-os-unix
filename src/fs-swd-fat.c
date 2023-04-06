@@ -433,7 +433,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	if ( rc != 0 ) {
 
 		if ( ( rc == SOS_ERROR_NOENT )
-		    && ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) )
+		    && ( ( pos == 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) )
 			goto release_end;  /* Some records might be released. */
 
 		goto error_out;
@@ -462,7 +462,7 @@ release_end:
 	/* Write the file allocation table back
 	 * when some records were released.
 	 */
-	if ( ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
+	if ( ( pos == 0 ) || ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
 		rc = write_fat_sword(fib->fib_devltr, &fat);
 		if ( rc != 0 )
@@ -470,7 +470,8 @@ release_end:
 	}
 
 	/* Release the first block of the file */
-	if ( FS_SWD_GET_FAT(&fat, fib->fib_cls) == SOS_FAT_ENT_FREE )
+	if ( ( !FS_SWD_IS_END_CLS( fib->fib_cls ) )
+	    && ( FS_SWD_GET_FAT(&fat, fib->fib_cls) == SOS_FAT_ENT_FREE ) )
 		fib->fib_cls = FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1);
 
 	if ( relblkp != NULL )
@@ -483,5 +484,51 @@ error_out:
 	* writing the modified file allocation table.
 	*/
 
+	return rc;
+}
+
+/** Get used size in the block
+    @param[in]  fib      The file information block of the file contains the block.
+    @param[in]  offset   The file position where the block is placed at.
+    @param[out] usedsizp Used size in the cluster.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+ */
+int
+fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t *usedsizp){
+	int                   rc;
+	fs_off_t             pos;
+	fs_blk_num           blk;
+	size_t        used_bytes;
+	struct _fs_sword_fat fat;
+
+	/* Adjust the file potision. */
+	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+
+	/* Read the contents of the current FAT. */
+	read_fat_sword(fib->fib_devltr, &fat);
+
+	/* Get the last block number of the remaining blocks. */
+	rc = fs_swd_get_block_number(fib, pos, FS_VFS_IO_DIR_RD, &blk);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Get cluster size
+	 */
+	if ( !FS_SWD_IS_END_CLS( FS_SWD_GET_FAT(&fat, blk) ) )
+		used_bytes = SOS_CLUSTER_SIZE;
+	else
+		used_bytes = FS_SWD_FAT_END_CLS_RECS( FS_SWD_GET_FAT(&fat, blk) ) * SOS_RECORD_SIZE;
+
+	if ( usedsizp != NULL )
+		*usedsizp = used_bytes;
+
+	return 0;
+
+error_out:
 	return rc;
 }

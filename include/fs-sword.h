@@ -117,6 +117,7 @@ struct _storage_fib;
 
 int fs_swd_get_block_number(struct _storage_fib *_fib, fs_off_t _offset, int _mode, fs_blk_num *_blkp);
 int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset, fs_blk_num *_relblkp);
+int fs_swd_get_used_size_in_block(struct _storage_fib *_fib, fs_off_t _offset, size_t *_usedsizp);
 
 int fs_swd_search_dent_by_dirno(sos_devltr _ch, fs_dirno _dirno, struct _storage_fib *_fib);
 int fs_swd_search_dent_by_name(sos_devltr _ch, const BYTE *_swd_name, struct _storage_fib *_fib);

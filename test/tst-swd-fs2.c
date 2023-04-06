@@ -430,9 +430,9 @@ read_file_test(struct _sword_file_descriptor *fdp){
 	size_t       cnt;
 
 	do{
-
+		cnt = 0;
 		rc = fs_vfs_read(fdp, &buf[0], BUFSIZ, &cnt, &res);
-		if ( rc != 0 )
+		if ( ( rc != 0 ) || ( cnt == 0 ) )
 			break;
 		printf("Read:%lu byte\n", cnt);
 	}while( res == 0 );

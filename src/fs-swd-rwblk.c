@@ -162,6 +162,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 	fs_blk_num                blk;
 	size_t                 cpylen;
 	size_t                remains;
+	size_t                 blklen;
 	fs_off_t              pos_off;
 	fs_off_t              blk_off;
 	fs_off_t              blk_pos;
@@ -180,15 +181,41 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 
 		/* Get the block number and allocate a block if it is needed. */
 		rc = fs_swd_get_block_number(fib, blk_pos, mode, &blk);
+		if ( rc != 0 ) {
+
+			if ( ( !FS_VFS_IODIR_WRITE(mode) ) && ( rc == SOS_ERROR_NOENT ) )
+				rc = 0;  /* End of file */
+
+			goto error_out;
+		}
+
+		/* Get block length */
+		rc = fs_swd_get_used_size_in_block(fib, blk_pos, &blklen);
 		if ( rc != 0 )
 			goto error_out;
+
+		/*
+		 * If the size of the block is smaller than current position,
+		 * return the end of file.
+		 */
+		if ( ( (pos + pos_off) % SOS_CLUSTER_SIZE ) >= blklen ) {
+
+			sos_assert( !FS_VFS_IODIR_WRITE(mode) );
+			rc = 0;  /* End of file */
+			goto error_out;
+		}
 
 		/* Read block into local buffer */
 		rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_RD,
 		    &blkbuf[0], blk, SOS_CLUSTER_SIZE);
+		if ( rc != 0 )
+			goto error_out;
 
 		/* copy length from the buffer */
 		cpylen = SOS_MIN( SOS_CLUSTER_SIZE - blk_off, remains);
+
+		/* Adjust copy length according to the block length */
+		cpylen = SOS_MIN( cpylen, blklen );
 
 		/* copy from the buffer for the contents of the cluster */
 		if ( !FS_VFS_IODIR_WRITE(mode) )  /* Read */
@@ -209,6 +236,11 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		bufp += cpylen;
 		pos_off += cpylen;
 		remains -= cpylen;
+		if ( blk_off > 0 )
+			blk_off -= SOS_CLUSTER_SIZE - cpylen;
+
+		if ( SOS_CLUSTER_SIZE > blklen )
+			break;  /* No more records */
 	}
 
 	rc = 0;
