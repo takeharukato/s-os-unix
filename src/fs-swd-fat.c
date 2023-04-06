@@ -412,10 +412,10 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	/*
 	 * Release records in the last cluster
 	 */
-	if ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) {
+	if ( pos > 0 ) {
 
 		/* Get the last block number of the remaining blocks. */
-		rc = fs_swd_get_block_number(fib, pos, FS_VFS_IO_DIR_RD, &cur);
+		rc = fs_swd_get_block_number(fib, pos - 1, FS_VFS_IO_DIR_RD, &cur);
 		if ( rc != 0 )
 			goto error_out;
 

@@ -39,7 +39,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	fs_blk_num                blk;
 	BYTE clsbuf[SOS_CLUSTER_SIZE];
 
-	if ( ( 0 > newpos ) || ( newpos >= SOS_MAX_FILE_SIZE ) )
+	if ( ( 0 > newpos ) || ( newpos > SOS_MAX_FILE_SIZE ) )
 		return SOS_ERROR_SYNTAX;
 
 	newsiz = newpos;
@@ -51,11 +51,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		/*
 		 * Release file blocks
 		 */
-		if ( newsiz == 0 ) /* Release all blocks */
-			rc = fs_swd_release_blocks(fib, 0, NULL);
-		else  /* Release after newsiz */
-			rc = fs_swd_release_blocks(fib, newsiz+1, NULL);
-
+		rc = fs_swd_release_blocks(fib, newsiz, NULL);
 		if ( rc != 0 )
 			goto error_out;
 	} else {
