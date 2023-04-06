@@ -33,7 +33,6 @@
 static int
 rw_cluster_sword(sos_devltr ch, int mode, void *buf, fs_blk_num blk){
 	int                        rc;
-	int                         i;
 	size_t                  rwcnt;
 	BYTE blkbuf[SOS_CLUSTER_SIZE];
 
@@ -44,23 +43,20 @@ rw_cluster_sword(sos_devltr ch, int mode, void *buf, fs_blk_num blk){
 	/*
 	 * Read/Write a cluster.
 	 */
-	for(i = 0; SOS_CLUSTER_RECS > i; ++i){
+	if ( !FS_VFS_IODIR_WRITE(mode) ) /* Read the contents of a cluster */
+		rc = storage_record_read(ch, &blkbuf[0],
+		    SOS_CLS2REC( SOS_CLS_VAL(blk) ), SOS_CLUSTER_RECS, &rwcnt);
+	else    /* Write the contents of a buffer to the cluster. */
+		rc = storage_record_write(ch, &blkbuf[0],
+		    SOS_CLS2REC( SOS_CLS_VAL(blk) ), SOS_CLUSTER_RECS, &rwcnt);
 
-		if ( !FS_VFS_IODIR_WRITE(mode) ) /* Read the contents of a cluster */
-			rc = storage_record_read(ch, &blkbuf[0] + i * SOS_RECORD_SIZE,
-			    SOS_CLS2REC( SOS_CLS_VAL(blk) ), 1, &rwcnt);
-		else    /* Write the contents of a buffer to the cluster. */
-			rc = storage_record_write(ch, &blkbuf[0] + i * SOS_RECORD_SIZE,
-				    SOS_CLS2REC( SOS_CLS_VAL(blk) ), 1, &rwcnt);
+	if ( rc != 0 )
+		goto error_out;  /* Error */
 
-		if ( rc != 0 )
-			goto error_out;  /* Error */
+	if ( rwcnt != SOS_CLUSTER_RECS ) {
 
-		if ( rwcnt != 1 ) {
-
-			rc = SOS_ERROR_IO;
-			goto error_out;  /* I/O Error */
-		}
+		rc = SOS_ERROR_IO;
+		goto error_out;  /* I/O Error */
 	}
 
 	/* copy data from the local buffer to BUF */
