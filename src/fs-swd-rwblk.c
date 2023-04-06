@@ -229,8 +229,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		/* update positions */
 		pos_off += cpylen;
 		remains -= cpylen;
-		if ( blk_off > 0 )
-			blk_off -= SOS_CLUSTER_SIZE - cpylen;
+		blk_off = ( blk_off + cpylen ) % SOS_CLUSTER_SIZE;
 
 		if ( ( !FS_VFS_IODIR_WRITE(mode) ) && ( SOS_CLUSTER_SIZE > blklen ) )
 			break;  /* No more records */

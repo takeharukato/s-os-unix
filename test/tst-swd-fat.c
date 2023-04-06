@@ -434,11 +434,19 @@ reset_fat(void){
 
 	memset(&tst_fat, 0x00, sizeof(struct _fs_sword_fat));
 
-	for(i = 0; SOS_RESERVED_FAT_NR > i; ++i) {
-		FS_SWD_SET_FAT(&tst_fat, i, 0x8f);
-	}
-	for( i = SOS_MAX_FILE_CLUSTER + 1; SOS_FAT_SIZE > i; ++i)
+	for(i = 0; SOS_RESERVED_FAT_NR > i; ++i)
+		FS_SWD_SET_FAT(&tst_fat, i, i + 1);  /* reserved FAT */
+
+	sos_assert( SOS_RESERVED_FAT_NR > 0 );
+	FS_SWD_SET_FAT(&tst_fat, SOS_RESERVED_FAT_NR - 1, 0x8f);  /* The end of the reserved FAT */
+
+	/* FAT entries which are not in a 2D disk are filled with the end of the cluster. */
+	for( i = SOS_MAX_FILE_CLUSTER + 1; SOS_FAT_SIZE/2 > i; ++i)
 		FS_SWD_SET_FAT(&tst_fat, i, SOS_FAT_ENT_UNAVAILABLE);
+
+	/* The upper half of the FAT are filled by SOS_FAT_ENT_FREE */
+	for( i = SOS_FAT_SIZE/2; SOS_FAT_SIZE > i; ++i)
+		FS_SWD_SET_FAT(&tst_fat, i, SOS_FAT_ENT_FREE);
 }
 
 int
