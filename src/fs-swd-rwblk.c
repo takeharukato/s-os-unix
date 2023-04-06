@@ -165,22 +165,16 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 	size_t                 blklen;
 	fs_off_t              pos_off;
 	fs_off_t              blk_off;
-	fs_off_t              blk_pos;
-	void                    *bufp;
 	BYTE blkbuf[SOS_CLUSTER_SIZE];
 
 	pos_off = 0;                       /* offset from current file position */
 	blk_off = pos % SOS_CLUSTER_SIZE;  /* copy offset in the cluster */
 	remains = bufsiz;                  /* remaining bytes of request size */
-	bufp = buf;                        /* The destination address of data */
 
 	while( remains > 0 ) {
 
-		/* Calculate block position */
-		blk_pos = SOS_CALC_ALIGN(pos + pos_off, SOS_CLUSTER_SIZE);
-
 		/* Get the block number and allocate a block if it is needed. */
-		rc = fs_swd_get_block_number(fib, blk_pos, mode, &blk);
+		rc = fs_swd_get_block_number(fib, pos + pos_off, mode, &blk);
 		if ( rc != 0 ) {
 
 			if ( ( !FS_VFS_IODIR_WRITE(mode) ) && ( rc == SOS_ERROR_NOENT ) )
@@ -190,7 +184,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		}
 
 		/* Get block length */
-		rc = fs_swd_get_used_size_in_block(fib, blk_pos, &blklen);
+		rc = fs_swd_get_used_size_in_block(fib, pos + pos_off, &blklen);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -219,11 +213,11 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 
 		/* copy from the buffer for the contents of the cluster */
 		if ( !FS_VFS_IODIR_WRITE(mode) )  /* Read */
-			memcpy(bufp + pos_off, &blkbuf[0] + blk_off, cpylen);
+			memcpy(buf + pos_off, &blkbuf[0] + blk_off, cpylen);
 		else { /* Write */
 
 			/* Modify the block */
-			memcpy(&blkbuf[0] + blk_off, bufp + pos_off, cpylen);
+			memcpy(&blkbuf[0] + blk_off, buf + pos_off, cpylen);
 
 			/* Write block */
 			rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_WR,
@@ -233,13 +227,12 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		}
 
 		/* update positions */
-		bufp += cpylen;
 		pos_off += cpylen;
 		remains -= cpylen;
 		if ( blk_off > 0 )
 			blk_off -= SOS_CLUSTER_SIZE - cpylen;
 
-		if ( SOS_CLUSTER_SIZE > blklen )
+		if ( ( !FS_VFS_IODIR_WRITE(mode) ) && ( SOS_CLUSTER_SIZE > blklen ) )
 			break;  /* No more records */
 	}
 
