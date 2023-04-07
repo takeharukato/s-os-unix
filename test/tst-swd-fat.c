@@ -625,12 +625,42 @@ main(int argc, char *argv[]){
 	sos_assert( rc != 0 );
 	sos_assert( rc == SOS_ERROR_NOENT );
 
+	/*
+	 * Allocated record boundary
+	 */
+	blk=0;
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_VFS_IO_DIR_WR, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 3 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
+
+	blk=0;
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + ( SOS_RECORD_SIZE - 1 ),
+	    FS_VFS_IO_DIR_WR, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 3 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
+
 	blk=0;
 	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + SOS_RECORD_SIZE,
 	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 3 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x81 );
+
+	blk=0;
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + ( SOS_CLUSTER_SIZE - 1 ),
+	    FS_VFS_IO_DIR_WR, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 3 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	blk=0;
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + SOS_CLUSTER_SIZE,
+	    FS_VFS_IO_DIR_WR, &blk);
+	sos_assert( rc == 0 );
+	sos_assert( blk == 4 );
+	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
 	/*
 	 * Max size file
