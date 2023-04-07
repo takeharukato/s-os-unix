@@ -323,9 +323,9 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		if ( rc != 0 )
 			goto error_out;
 
-		/* First, we assume that the new block will be placed at
-		 * the end of the cluster. If this assumption is incorrect,
-		 * the FAT entry will be altered in this loop.
+		/* First, we assume that the new block will be placed at the end of
+		 * the cluster. If this assumption is incorrect, the FAT entry
+		 * will be altered in the subsequent iteration.
 		 */
 		handle_last_cluster(&fat, pos, new_blk);
 
