@@ -20,3 +20,6 @@ prepare_data
 ./tst-swd-fs4.out ${DATA_DIR}/rw-test.2d
 
 prepare_data
+./tst-swd-fat.out
+
+prepare_data
