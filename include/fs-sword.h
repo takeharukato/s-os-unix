@@ -46,11 +46,19 @@
 	}while(0)
 
 /** Determine whether the cluster is the cluster at the end of file.
-    @param[in] _nxt_cls the next cluster number of the cluster to examine
+    @param[in] _nxt_cls the next cluster number of the cluster to examine.
     @retval TRUE   The cluster is placed at the end of file.
     @retval FALSE  The cluster is NOT placed at the end of file.
  */
 #define FS_SWD_IS_END_CLS(_nxt_cls) ( ( (_nxt_cls) & SOS_FAT_ENT_EOF_MASK ) != 0 )
+
+/** Determine whether the cluster number is valid.
+    @param[in] _nxt_cls the next cluster number of the cluster to examine
+    @retval TRUE   The cluster is valid.
+    @retval FALSE  The cluster is valid.
+ */
+#define FS_SWD_IS_VALID(_cls) \
+	( ( (_cls) >= SOS_RESERVED_FAT_NR ) && ( SOS_MAX_FILE_CLUSTER >= (_cls) ) )
 
 /** Calculate how many records are used in the cluster at the end of the file
     @param[in] _ent The value of the file allocation table entry at the end of the file

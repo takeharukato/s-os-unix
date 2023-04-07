@@ -395,6 +395,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	fs_off_t         rel_pos;
 	fs_blk_num          next;
 	fs_blk_num           cur;
+	fs_blk_num  remained_blk;
 	fs_blk_num      rel_blks;
 	struct _fs_sword_fat fat;
 
@@ -412,17 +413,18 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	/*
 	 * Release records in the last cluster
 	 */
+	remained_blk = SOS_FAT_ENT_UNAVAILABLE;
 	if ( pos > 0 ) {
 
 		/* Get the last block number of the remaining blocks. */
-		rc = fs_swd_get_block_number(fib, pos - 1, FS_VFS_IO_DIR_RD, &cur);
+		rc = fs_swd_get_block_number(fib, pos - 1, FS_VFS_IO_DIR_RD, &remained_blk);
 		if ( rc != 0 )
 			goto error_out;
 
 		/* Mark the end of cluster */
 		FS_SWD_SET_FAT(&fat, cur, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
 		/* Shrink the cluster */
-		handle_last_cluster(&fat, pos, FS_VFS_IO_DIR_RD, cur);
+		handle_last_cluster(&fat, pos, FS_VFS_IO_DIR_RD, remained_blk);
 	}
 
 	rel_blks = 0;   /* Initialize the number of released blocks */
@@ -435,7 +437,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	if ( rc != 0 ) {
 
 		if ( ( rc == SOS_ERROR_NOENT )
-		    && ( ( pos == 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) )
+		    && ( ( pos == 0 ) || ( remained_blk != SOS_FAT_ENT_UNAVAILABLE ) ) )
 			goto release_end;  /* Some records might be released. */
 
 		goto error_out;

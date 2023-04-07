@@ -16,13 +16,22 @@ struct _fs_sword_fat tst_fat;
     @param[in]  ch  The device letter of the device
     @param[out] fatbuf Memory buffer for the FAT
     @param[in]  mode   The number to specify the behavior.
-    * FS_IO_DIR_RD Get block to read
-    * FS_IO_DIR_WR Get block to write
+    * FS_VFS_IO_DIR_RD Get block to read
+    * FS_VFS_IO_DIR_WR Get block to write
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
 rw_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat, int mode){
+
+#if 1
+	if ( !FS_VFS_IODIR_WRITE( mode ) )
+		memcpy(&fat[0], &tst_fat.fat[0], SOS_FAT_SIZE);
+	else
+		memcpy(&tst_fat.fat[0], &fat[0], SOS_FAT_SIZE);
+
+	return 0;
+#else
 	int                 rc;
 	size_t           rwcnt;
 	fs_fatpos       fatrec;
@@ -35,7 +44,7 @@ rw_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat, int mode){
 	/*
 	 * Read/Write the file allocation table
 	 */
-	if ( mode & FS_IO_DIR_WR )
+	if ( FS_VFS_IODIR_WRITE( mode ) )
 		rc = storage_record_write(ch, FS_SWD_REF_FAT_TBL(fat),
 		    fatrec, SOS_FAT_SIZE/SOS_RECORD_SIZE, &rwcnt);
 	else
@@ -52,38 +61,77 @@ rw_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat, int mode){
 
 error_out:
 	return rc;
+#endif
 }
 static int
 read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
 
-	memcpy(&fat[0], &tst_fat.fat[0], SOS_FAT_SIZE);
-	return 0;
-#if 0
-	return rw_fat_sword(ch, fat, FS_IO_DIR_RD);
-#endif
+	return rw_fat_sword(ch, fat, FS_VFS_IO_DIR_RD);
 }
 
 static int
 write_fat_sword(sos_devltr ch, const struct _fs_sword_fat *fat){
 
-	memcpy(&tst_fat.fat[0], &fat[0], SOS_FAT_SIZE);
+	return rw_fat_sword(ch, (struct _fs_sword_fat *)fat, FS_VFS_IO_DIR_WR);
+}
+
+/** Clear a file block
+    @param[in]  fib      The file information block of the file contains the block.
+    @param[in]  blkno    The block number
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+ */
+static int
+clear_block_sword(struct _storage_fib *fib, fs_cls blkno){
+
+#if 1
 	return 0;
-#if 0
-	return rw_fat_sword(ch, fat, FS_IO_DIR_WR);
+#else
+	int                     rc;
+	fs_rec                 rec;
+	size_t               rwcnt;
+	size_t             remains;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	memset(&buf[0], 0x0, SOS_RECORD_SIZE); /* clear data */
+	for(rec = SOS_CLS2REC(blkno), remains = SOS_CLUSTER_RECS;
+	    remains > 0; ++rec, --remains) {
+
+		/*
+		 * clear records in the cluster
+		 */
+		rc = storage_record_write(fib->fib_devltr, &buf[0], rec, 1, &rwcnt);
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rwcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+	}
+
+	return 0;
+
+error_out:
+	return rc;
 #endif
 }
 
 /** Allocate new block on the disk.
+    @param[in]  fib      The file information block of the file contains the block.
     @param[in]  fat      The pointer to the file allocation table cache.
     @param[in]  pos      The file offset position
     @param[in]  use_recs The used record numbers at the last cluster
     @param[out] blknop   The address to store the block number of the new block.
     @retval    0                Success
     @retval    SOS_ERROR_NOSPC  Device full
+    @retval    SOS_ERROR_IO     I/O Error
   */
 static int
-alloc_newblock_sword(struct _fs_sword_fat *fat, fs_blk_num *blkp){
+alloc_newblock_sword(struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	int  i;
+	int rc;
 
 	for( i = SOS_RESERVED_FAT_NR; SOS_MAX_FILE_CLUSTER >= i; ++i)
 		if ( FS_SWD_GET_FAT(fat, i) == SOS_FAT_ENT_FREE )
@@ -92,6 +140,10 @@ alloc_newblock_sword(struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	return SOS_ERROR_NOSPC;  /* Device full */
 
 found:
+	rc = clear_block_sword(fib, SOS_CLS_VAL(i));  /* clear the new block */
+	if ( rc != 0 )
+		return rc;
+
 	if ( blkp != NULL )
 		*blkp = i;
 
@@ -102,8 +154,8 @@ found:
     @param[in]  fat    The pointer to the file allocation table cache.
     @param[in]  pos    The file offset position.
     @param[in]  mode   The number to specify the behavior.
-    * FS_IO_DIR_RD Get block to read
-    * FS_IO_DIR_WR Get block to write
+    * FS_VFS_IO_DIR_RD Get block to read
+    * FS_VFS_IO_DIR_WR Get block to write
     @param[in]  blk    The block number of the last cluster.
     @retval    0                Success
     @retval    SOS_ERROR_NOSPC  Device full
@@ -137,8 +189,8 @@ handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, int mode, fs_blk_nu
 /** Set the number of used records at the last cluster in the cluster chain.
     @param[in]  fat    The pointer to the file allocation table cache.
     @param[in]  mode   The number to specify the behavior.
-    * FS_IO_DIR_RD Get block to read
-    * FS_IO_DIR_WR Get block to write
+    * FS_VFS_IO_DIR_RD Get block to read
+    * FS_VFS_IO_DIR_WR Get block to write
     @param[in]  blk    The block number of the last cluster.
     @param[out] fib    The file information block of the file to allocate the first block.
     @retval    0                Success
@@ -151,12 +203,12 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_f
 
 	sos_assert( fib->fib_cls != SOS_FAT_ENT_FREE );
 
-	/* When MODE is specified as FS_IO_DIR_RD
+	/* When MODE is specified as FS_VFS_IO_DIR_RD
 	 * and the file is empty, return SOS_ERROR_NOENT
 	 * without expanding the cluster.
 	 */
 	if ( ( FS_SWD_IS_END_CLS(fib->fib_cls) )
-	    && ( !FS_SWD_GETBLK_TO_WRITE(mode) ) ) {
+	    && ( !FS_VFS_IODIR_WRITE(mode) ) ) {
 
 		rc = SOS_ERROR_NOENT;
 		goto error_out;
@@ -165,7 +217,7 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_f
 	/*
 	 * Allocate the first cluster
 	 */
-	rc = alloc_newblock_sword(fat, &new_blk);
+	rc = alloc_newblock_sword(fib, fat, &new_blk);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -185,8 +237,8 @@ error_out:
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
     @param[in]  mode     The number to specify the behavior.
-    * FS_IO_DIR_RD Get block to read
-    * FS_IO_DIR_WR Get block to write
+    * FS_VFS_IO_DIR_RD Get block to read
+    * FS_VFS_IO_DIR_WR Get block to write
     @param[out] blkp     The address to store the cluster number in FAT.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
@@ -254,9 +306,9 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 			continue;  /* Continue searching */
 		}
 
-		if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
+		if ( !FS_VFS_IODIR_WRITE(mode) ) {
 
-			/* When MODE is specified as FS_IO_DIR_RD
+			/* When MODE is specified as FS_VFS_IO_DIR_RD
 			 * and the specified block is not found,
 			 * return SOS_ERROR_NOENT without expanding the cluster.
 			 */
@@ -267,7 +319,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		/*
 		 * Expand the cluster chain.
 		 */
-		rc = alloc_newblock_sword(&fat, &new_blk);
+		rc = alloc_newblock_sword(fib, &fat, &new_blk);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -289,7 +341,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		    >= ( FS_SWD_FAT_END_CLS_RECS( FS_SWD_GET_FAT(&fat, cur) )
 			* SOS_RECORD_SIZE ) ) ) {
 
-		if ( !FS_SWD_GETBLK_TO_WRITE(mode) ) {
+		if ( !FS_VFS_IODIR_WRITE(mode) ) {
 
 			rc = SOS_ERROR_NOENT; /* no record allocated at POS. */
 			goto error_out;
@@ -299,7 +351,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		handle_last_cluster(&fat, pos, mode, cur);
 	}
 
-	if ( FS_SWD_GETBLK_TO_WRITE(mode) ) { /* Write the file allocation table back. */
+	if ( FS_VFS_IODIR_WRITE(mode) ) { /* Write the file allocation table back. */
 
 		rc = write_fat_sword(fib->fib_devltr, &fat);
 		if ( rc != 0 )
@@ -337,6 +389,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	fs_off_t         rel_pos;
 	fs_blk_num          next;
 	fs_blk_num           cur;
+	fs_blk_num  remained_blk;
 	fs_blk_num      rel_blks;
 	struct _fs_sword_fat fat;
 
@@ -354,15 +407,18 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	/*
 	 * Release records in the last cluster
 	 */
-	if ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) {
+	remained_blk = SOS_FAT_ENT_UNAVAILABLE;
+	if ( pos > 0 ) {
 
 		/* Get the last block number of the remaining blocks. */
-		rc = fs_swd_get_block_number(fib, pos, FS_IO_DIR_RD, &cur);
+		rc = fs_swd_get_block_number(fib, pos - 1, FS_VFS_IO_DIR_RD, &remained_blk);
 		if ( rc != 0 )
 			goto error_out;
 
+		/* Mark the end of cluster */
+		FS_SWD_SET_FAT(&fat, cur, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
 		/* Shrink the cluster */
-		handle_last_cluster(&fat, pos, FS_IO_DIR_RD, cur);
+		handle_last_cluster(&fat, pos, FS_VFS_IO_DIR_RD, remained_blk);
 	}
 
 	rel_blks = 0;   /* Initialize the number of released blocks */
@@ -371,11 +427,11 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	rel_pos = SOS_CALC_NEXT_ALIGN(pos, SOS_CLUSTER_SIZE);
 
 	/* Get the start block number to release. */
-	rc = fs_swd_get_block_number(fib, rel_pos, FS_IO_DIR_RD, &next);
+	rc = fs_swd_get_block_number(fib, rel_pos, FS_VFS_IO_DIR_RD, &next);
 	if ( rc != 0 ) {
 
 		if ( ( rc == SOS_ERROR_NOENT )
-		    && ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) )
+		    && ( ( pos == 0 ) || ( remained_blk != SOS_FAT_ENT_UNAVAILABLE ) ) )
 			goto release_end;  /* Some records might be released. */
 
 		goto error_out;
@@ -404,7 +460,7 @@ release_end:
 	/* Write the file allocation table back
 	 * when some records were released.
 	 */
-	if ( ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
+	if ( ( pos == 0 ) || ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
 		rc = write_fat_sword(fib->fib_devltr, &fat);
 		if ( rc != 0 )
@@ -412,7 +468,8 @@ release_end:
 	}
 
 	/* Release the first block of the file */
-	if ( FS_SWD_GET_FAT(&fat, fib->fib_cls) == SOS_FAT_ENT_FREE )
+	if ( ( !FS_SWD_IS_END_CLS( fib->fib_cls ) )
+	    && ( FS_SWD_GET_FAT(&fat, fib->fib_cls) == SOS_FAT_ENT_FREE ) )
 		fib->fib_cls = FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1);
 
 	if ( relblkp != NULL )
@@ -425,6 +482,52 @@ error_out:
 	* writing the modified file allocation table.
 	*/
 
+	return rc;
+}
+
+/** Get used size in the block
+    @param[in]  fib      The file information block of the file contains the block.
+    @param[in]  offset   The file position where the block is placed at.
+    @param[out] usedsizp Used size in the cluster.
+    @retval    0                Success
+    @retval    SOS_ERROR_IO     I/O Error
+    @retval    SOS_ERROR_NOENT  File not found
+    @retval    SOS_ERROR_BADFAT Invalid cluster chain
+    @retval    SOS_ERROR_NOSPC  Device full
+ */
+int
+fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t *usedsizp){
+	int                   rc;
+	fs_off_t             pos;
+	fs_blk_num           blk;
+	size_t        used_bytes;
+	struct _fs_sword_fat fat;
+
+	/* Adjust the file potision. */
+	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+
+	/* Read the contents of the current FAT. */
+	read_fat_sword(fib->fib_devltr, &fat);
+
+	/* Get the last block number of the remaining blocks. */
+	rc = fs_swd_get_block_number(fib, pos, FS_VFS_IO_DIR_RD, &blk);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Get cluster size
+	 */
+	if ( !FS_SWD_IS_END_CLS( FS_SWD_GET_FAT(&fat, blk) ) )
+		used_bytes = SOS_CLUSTER_SIZE;
+	else
+		used_bytes = FS_SWD_FAT_END_CLS_RECS( FS_SWD_GET_FAT(&fat, blk) ) * SOS_RECORD_SIZE;
+
+	if ( usedsizp != NULL )
+		*usedsizp = used_bytes;
+
+	return 0;
+
+error_out:
 	return rc;
 }
 
@@ -462,35 +565,35 @@ main(int argc, char *argv[]){
 
 	fib.fib_cls = 0x00;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == SOS_ERROR_BADFAT );
 
 	FS_SWD_SET_FAT(&tst_fat,2,0x0);
 	fib.fib_cls = 0x02;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == SOS_ERROR_BADFAT );
 
 	fib.fib_cls = 0x8f;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == SOS_ERROR_NOENT );
 
 	fib.fib_cls = 0x8f;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_WR, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 255, FS_IO_DIR_WR, &blk);
+	rc = fs_swd_get_block_number(&fib, 255, FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
@@ -499,7 +602,7 @@ main(int argc, char *argv[]){
 	 * Get second cluster
 	 */
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_IO_DIR_WR, &blk);
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 3 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
@@ -508,13 +611,13 @@ main(int argc, char *argv[]){
 	 * search valid block in the chain
 	 */
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 3 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x80 );
 
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x3 );
@@ -523,20 +626,20 @@ main(int argc, char *argv[]){
 	 * search invalid block in the chain
 	 */
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE*2, FS_IO_DIR_RD,
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE*2, FS_VFS_IO_DIR_RD,
 	    &blk);
 	sos_assert( rc != 0 );
 	sos_assert( rc == SOS_ERROR_NOENT );
 
 	blk=0;
 	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + SOS_RECORD_SIZE,
-	    FS_IO_DIR_RD, &blk);
+	    FS_VFS_IO_DIR_RD, &blk);
 	sos_assert( rc != 0 );
 	sos_assert( rc == SOS_ERROR_NOENT );
 
 	blk=0;
 	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE + SOS_RECORD_SIZE,
-	    FS_IO_DIR_WR, &blk);
+	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 3 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x81 );
@@ -548,7 +651,7 @@ main(int argc, char *argv[]){
 	blk=0;
 	fib.fib_cls = 0x8f;
 	rc = fs_swd_get_block_number(&fib, SOS_MAX_FILE_SIZE - 1,
-	    FS_IO_DIR_WR, &blk);
+	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
@@ -566,11 +669,11 @@ main(int argc, char *argv[]){
 	fib.fib_cls = 0x8f;
 	blk=0;
 	rc = fs_swd_release_blocks(&fib, 0, &blk);
-	sos_assert( rc == SOS_ERROR_NOENT );
+	sos_assert( rc == 0 );
 
 	fib.fib_cls = 0x8f;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, 0, FS_IO_DIR_WR, &blk);
+	rc = fs_swd_get_block_number(&fib, 0, FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 
 	blk=0;
@@ -585,7 +688,7 @@ main(int argc, char *argv[]){
 	blk=0;
 	fib.fib_cls = 0x8f;
 	rc = fs_swd_get_block_number(&fib, SOS_MAX_FILE_SIZE - 1,
-	    FS_IO_DIR_WR, &blk);
+	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
@@ -602,7 +705,7 @@ main(int argc, char *argv[]){
 	reset_fat();
 	fib.fib_cls = 0x8f;
 	blk=0;
-	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE - 1, FS_IO_DIR_WR, &blk);
+	rc = fs_swd_get_block_number(&fib, SOS_CLUSTER_SIZE - 1, FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );

@@ -316,6 +316,7 @@
 #define SOS_FAT_ENT_FREE        (0x00)           /**< Free cluster */
 #define SOS_FAT_ENT_EOF_MASK    (0x80)           /**< End of file mask */
 #define SOS_FAT_ENT_UNAVAILABLE (0x8f)           /**< Unavailable cluster */
+
 /*
  * Drive letters
  */
