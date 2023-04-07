@@ -137,8 +137,6 @@ int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size
 int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz,
     size_t *_rwsizp);
 
-int fs_swd_get_free_block_nr(sos_devltr _ch, size_t *_free_blocks);
-
 int fs_sword2unix(const BYTE *_swordname, char **_destp);
 int fs_unix2sword(const char *_unixname, BYTE *_dest, size_t _size);
 int fs_compare_unix_and_sword(const char *_unixname, const BYTE *_sword, size_t _len);

@@ -233,6 +233,38 @@ error_out:
 	return rc;
 }
 
+/** Return the number of free blocks on the disk
+    @param[in]  ch          The device letter of the device
+    @param[out] free_blocks The address to store the number of the free blocks on the disk.
+ */
+static int
+get_free_block_nr_sword(sos_devltr ch, size_t *free_blocks){
+	int                    i;
+	int                   rc;
+	size_t          free_cnt;
+	struct _fs_sword_fat fat;
+
+	/* Read the contents of the current FAT. */
+	rc = read_fat_sword(ch, &fat);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Count free blocks
+	 */
+	for( i = SOS_RESERVED_FAT_NR, free_cnt = 0; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
+		if ( FS_SWD_GET_FAT(&fat, i) == SOS_FAT_ENT_FREE )
+			++free_cnt;
+
+	if ( free_blocks != NULL )
+		*free_blocks = free_cnt;  /* Return the number of free blocks on the disk */
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Get the cluster number of the block from the file position of the file.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
@@ -524,38 +556,6 @@ fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t 
 
 	if ( usedsizp != NULL )
 		*usedsizp = used_bytes;
-
-	return 0;
-
-error_out:
-	return rc;
-}
-
-/** Return the number of free blocks on the disk
-    @param[in]  ch          The device letter of the device
-    @param[out] free_blocks The address to store the number of the free blocks on the disk.
- */
-int
-fs_swd_get_free_block_nr(sos_devltr ch, size_t *free_blocks){
-	int                    i;
-	int                   rc;
-	size_t          free_cnt;
-	struct _fs_sword_fat fat;
-
-	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(ch, &fat);
-	if ( rc != 0 )
-		goto error_out;
-
-	/*
-	 * Count free blocks
-	 */
-	for( i = SOS_RESERVED_FAT_NR, free_cnt = 0; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
-		if ( FS_SWD_GET_FAT(&fat, i) == SOS_FAT_ENT_FREE )
-			++free_cnt;
-
-	if ( free_blocks != NULL )
-		*free_blocks = free_cnt;  /* Return the number of free blocks on the disk */
 
 	return 0;
 

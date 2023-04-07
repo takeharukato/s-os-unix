@@ -227,6 +227,38 @@ error_out:
 	return rc;
 }
 
+/** Return the number of free blocks on the disk
+    @param[in]  ch          The device letter of the device
+    @param[out] free_blocks The address to store the number of the free blocks on the disk.
+ */
+static int
+get_free_block_nr_sword(sos_devltr ch, size_t *free_blocks){
+	int                    i;
+	int                   rc;
+	size_t          free_cnt;
+	struct _fs_sword_fat fat;
+
+	/* Read the contents of the current FAT. */
+	rc = read_fat_sword(ch, &fat);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Count free blocks
+	 */
+	for( i = SOS_RESERVED_FAT_NR, free_cnt = 0; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
+		if ( FS_SWD_GET_FAT(&fat, i) == SOS_FAT_ENT_FREE )
+			++free_cnt;
+
+	if ( free_blocks != NULL )
+		*free_blocks = free_cnt;  /* Return the number of free blocks on the disk */
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Get the cluster number of the block from the file position of the file.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
@@ -525,38 +557,6 @@ error_out:
 	return rc;
 }
 
-/** Return the number of free blocks on the disk
-    @param[in]  ch          The device letter of the device
-    @param[out] free_blocks The address to store the number of the free blocks on the disk.
- */
-int
-fs_swd_get_free_block_nr(sos_devltr ch, size_t *free_blocks){
-	int                    i;
-	int                   rc;
-	size_t          free_cnt;
-	struct _fs_sword_fat fat;
-
-	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(ch, &fat);
-	if ( rc != 0 )
-		goto error_out;
-
-	/*
-	 * Count free blocks
-	 */
-	for( i = SOS_RESERVED_FAT_NR, free_cnt = 0; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
-		if ( FS_SWD_GET_FAT(&fat, i) == SOS_FAT_ENT_FREE )
-			++free_cnt;
-
-	if ( free_blocks != NULL )
-		*free_blocks = free_cnt;  /* Return the number of free blocks on the disk */
-
-	return 0;
-
-error_out:
-	return rc;
-}
-
 void
 reset_fat(void){
 	int i;
@@ -591,7 +591,7 @@ main(int argc, char *argv[]){
 	reset_fat();
 
 	fib.fib_devltr='A';
-	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	rc = get_free_block_nr_sword(fib.fib_devltr, &free_cnt);
 	sos_assert( rc == 0 );
 	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
 
@@ -718,7 +718,7 @@ main(int argc, char *argv[]){
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
 
-	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	rc = get_free_block_nr_sword(fib.fib_devltr, &free_cnt);
 	sos_assert( rc == 0 );
 	sos_assert( free_cnt == 0 );
 
@@ -747,7 +747,7 @@ main(int argc, char *argv[]){
 	sos_assert( blk == 1 );
 	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
-	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	rc = get_free_block_nr_sword(fib.fib_devltr, &free_cnt);
 	sos_assert( rc == 0 );
 	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
 
@@ -763,7 +763,7 @@ main(int argc, char *argv[]){
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
 
-	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	rc = get_free_block_nr_sword(fib.fib_devltr, &free_cnt);
 	sos_assert( rc == 0 );
 	sos_assert( free_cnt == 0 );
 
@@ -772,7 +772,7 @@ main(int argc, char *argv[]){
 	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR - SOS_RESERVED_FAT_NR + 1 );
 	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
-	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	rc = get_free_block_nr_sword(fib.fib_devltr, &free_cnt);
 	sos_assert( rc == 0 );
 	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
 
