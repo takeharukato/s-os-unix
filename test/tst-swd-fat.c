@@ -133,7 +133,7 @@ alloc_newblock_sword(struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk
 	int  i;
 	int rc;
 
-	for( i = SOS_RESERVED_FAT_NR; SOS_MAX_FILE_CLUSTER >= i; ++i)
+	for( i = SOS_RESERVED_FAT_NR; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
 		if ( FS_SWD_GET_FAT(fat, i) == SOS_FAT_ENT_FREE )
 			goto found;  /* A free entry was found. */
 
@@ -258,7 +258,9 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		return SOS_ERROR_BADFAT;  /* Bad file allocation table */
 
 	/* Read the contents of the current FAT. */
-	read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, &fat);
+	if ( rc != 0 )
+		goto error_out;
 
 	/* If the first block has not been not alocated yet,
 	 * prepare it.
@@ -395,7 +397,9 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Read the contents of the current FAT. */
-	read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, &fat);
+	if ( rc != 0 )
+		goto error_out;
 
 	/*
 	 * Release records in the last cluster
@@ -495,7 +499,9 @@ fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t 
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Read the contents of the current FAT. */
-	read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, &fat);
+	if ( rc != 0 )
+		goto error_out;
 
 	/* Get the last block number of the remaining blocks. */
 	rc = fs_swd_get_block_number(fib, pos, FS_VFS_IO_DIR_RD, &blk);
@@ -519,6 +525,38 @@ error_out:
 	return rc;
 }
 
+/** Return the number of free blocks on the disk
+    @param[in]  ch          The device letter of the device
+    @param[out] free_blocks The address to store the number of the free blocks on the disk.
+ */
+int
+fs_swd_get_free_block_nr(sos_devltr ch, size_t *free_blocks){
+	int                    i;
+	int                   rc;
+	size_t          free_cnt;
+	struct _fs_sword_fat fat;
+
+	/* Read the contents of the current FAT. */
+	rc = read_fat_sword(ch, &fat);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Count free blocks
+	 */
+	for( i = SOS_RESERVED_FAT_NR, free_cnt = 0; SOS_MAX_FILE_CLUSTER_NR >= i; ++i)
+		if ( FS_SWD_GET_FAT(&fat, i) == SOS_FAT_ENT_FREE )
+			++free_cnt;
+
+	if ( free_blocks != NULL )
+		*free_blocks = free_cnt;  /* Return the number of free blocks on the disk */
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 void
 reset_fat(void){
 	int i;
@@ -532,7 +570,7 @@ reset_fat(void){
 	FS_SWD_SET_FAT(&tst_fat, SOS_RESERVED_FAT_NR - 1, 0x8f);  /* The end of the reserved FAT */
 
 	/* FAT entries which are not in a 2D disk are filled with the end of the cluster. */
-	for( i = SOS_MAX_FILE_CLUSTER + 1; SOS_FAT_SIZE/2 > i; ++i)
+	for( i = SOS_MAX_FILE_CLUSTER_NR + 1; SOS_FAT_SIZE/2 > i; ++i)
 		FS_SWD_SET_FAT(&tst_fat, i, SOS_FAT_ENT_UNAVAILABLE);
 
 	/* The upper half of the FAT are filled by SOS_FAT_ENT_FREE */
@@ -545,11 +583,17 @@ main(int argc, char *argv[]){
 	int                  rc;
 	struct _storage_fib fib;
 	fs_blk_num          blk;
+	size_t         free_cnt;
 
 	/*
 	 * Init FAT
 	 */
 	reset_fat();
+
+	fib.fib_devltr='A';
+	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	sos_assert( rc == 0 );
+	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
 
 	fib.fib_cls = 0x00;
 	blk=0;
@@ -671,8 +715,12 @@ main(int argc, char *argv[]){
 	rc = fs_swd_get_block_number(&fib, SOS_MAX_FILE_SIZE - 1,
 	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
-	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	sos_assert( rc == 0 );
+	sos_assert( free_cnt == 0 );
 
 	/*
 	 * Release
@@ -699,6 +747,10 @@ main(int argc, char *argv[]){
 	sos_assert( blk == 1 );
 	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
+	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	sos_assert( rc == 0 );
+	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
+
 	/*
 	 * Release max size file
 	 */
@@ -708,14 +760,21 @@ main(int argc, char *argv[]){
 	rc = fs_swd_get_block_number(&fib, SOS_MAX_FILE_SIZE - 1,
 	    FS_VFS_IO_DIR_WR, &blk);
 	sos_assert( rc == 0 );
-	sos_assert( blk == SOS_MAX_FILE_CLUSTER );
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
+
+	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	sos_assert( rc == 0 );
+	sos_assert( free_cnt == 0 );
 
 	blk=0;
 	rc = fs_swd_release_blocks(&fib, 0, &blk);
-	sos_assert( blk == SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR + 1 );
+	sos_assert( blk == SOS_MAX_FILE_CLUSTER_NR - SOS_RESERVED_FAT_NR + 1 );
 	sos_assert( fib.fib_cls == FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1) );
 
+	rc = fs_swd_get_free_block_nr(fib.fib_devltr, &free_cnt);
+	sos_assert( rc == 0 );
+	sos_assert( free_cnt == SOS_MAX_FREE_CLUSTER_NR );
 
 	/*
 	 * Shirink the block
@@ -728,21 +787,21 @@ main(int argc, char *argv[]){
 	sos_assert( blk == 2 );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, blk) == 0x8f );
 
-	blk=SOS_MAX_FILE_CLUSTER+1;
+	blk=SOS_MAX_FILE_CLUSTER_NR+1;
 	rc = fs_swd_release_blocks(&fib, SOS_CLUSTER_SIZE - 1, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 0 );
 	sos_assert( !FS_SWD_IS_END_CLS(fib.fib_cls) );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, fib.fib_cls ) == 0x8f);
 
-	blk=SOS_MAX_FILE_CLUSTER+1;
+	blk=SOS_MAX_FILE_CLUSTER_NR+1;
 	rc = fs_swd_release_blocks(&fib, SOS_CLUSTER_SIZE - SOS_RECORD_SIZE - 1, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 0 );
 	sos_assert( !FS_SWD_IS_END_CLS(fib.fib_cls) );
 	sos_assert( FS_SWD_GET_FAT(&tst_fat, fib.fib_cls ) == 0x8e);
 
-	blk=SOS_MAX_FILE_CLUSTER+1;
+	blk=SOS_MAX_FILE_CLUSTER_NR+1;
 	rc = fs_swd_release_blocks(&fib, SOS_RECORD_SIZE - 1, &blk);
 	sos_assert( rc == 0 );
 	sos_assert( blk == 0 );

@@ -58,7 +58,7 @@
     @retval FALSE  The cluster is valid.
  */
 #define FS_SWD_IS_VALID(_cls) \
-	( ( (_cls) >= SOS_RESERVED_FAT_NR ) && ( SOS_MAX_FILE_CLUSTER >= (_cls) ) )
+	( ( (_cls) >= SOS_RESERVED_FAT_NR ) && ( SOS_MAX_FILE_CLUSTER_NR >= (_cls) ) )
 
 /** Calculate how many records are used in the cluster at the end of the file
     @param[in] _ent The value of the file allocation table entry at the end of the file
@@ -136,6 +136,8 @@ int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size
     size_t *_rwsizp);
 int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz,
     size_t *_rwsizp);
+
+int fs_swd_get_free_block_nr(sos_devltr _ch, size_t *_free_blocks);
 
 int fs_sword2unix(const BYTE *_swordname, char **_destp);
 int fs_unix2sword(const char *_unixname, BYTE *_dest, size_t _size);

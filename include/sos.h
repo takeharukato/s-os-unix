@@ -203,14 +203,24 @@
 #define SOS_CLUSTER_RECS        \
 	( (WORD)( ( 1 << SOS_CLUSTER_SHIFT ) & 0xff ) )  /**< 16 records */
 #define SOS_RESERVED_FAT_NR     (2)        /**< Cluster 0x00-0x01 are reserved. */
-#define SOS_MAX_FILE_CLUSTER    (0x4F)     /**< Max cluster number in Hu-Basic on 2D */
-/** Max file size on the disk (0x4d000 = 315392 bytes). */
-#define SOS_MAX_FILE_SIZE       \
-	( ( SOS_MAX_FILE_CLUSTER - SOS_RESERVED_FAT_NR + 1) * SOS_CLUSTER_SIZE )
+#define SOS_MAX_FILE_CLUSTER_NR (0x4F)     /**< Max cluster number in Hu-Basic on 2D */
+
+/** Max free clusters (0x4E = 78 clusters).
+*/
+#define SOS_MAX_FREE_CLUSTER_NR					\
+	( SOS_MAX_FILE_CLUSTER_NR - SOS_RESERVED_FAT_NR + 1 )
+
+/** Max file size on the disk (0x4d000 = 315392 bytes).
+ */
+#define SOS_MAX_FILE_SIZE				\
+	( SOS_MAX_FREE_CLUSTER_NR * SOS_CLUSTER_SIZE )
 
 #define SOS_DENTRY_SIZE         (32)  /**< Directory entry size in byte . */
-#define SOS_DENTRIES_PER_REC    \
-	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE ) /**< 8 file entries per record. */
+
+/** 8 file entries per record.
+*/
+#define SOS_DENTRIES_PER_REC			\
+	( SOS_RECORD_SIZE / SOS_DENTRY_SIZE )
 #define SOS_DENTRY_LEN         (SOS_CLUSTER_SIZE)  /**< Directory entry length */
 #define SOS_DENTRY_NR          (SOS_CLUSTER_SIZE / SOS_DENTRY_SIZE)  /**< The maximum number of directory entries */
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
