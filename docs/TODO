@@ -41,83 +41,15 @@ TODO list
   * write終了時にfibの内容に従ってヘッダを書き込んだ後にデータを書き込み
   ヘッダの読み込み:
   * open時に, RDONLYの場合に実施
+
 [DiskImages]
 * mztへの対応
 * D88フォーマット対応
 
 [fs]
-* DIRPS/FATアクセスをマクロ化してread/write誤りを防ぐようにする
-* ブロックへの読み書きIFを再考すること
-  - ブロックサイズ境界の途中のファイルポジションからの書込みを考慮する
-    =>1ブロック単位の読み書き処理を導入した方がやはりわかりやすいか?
-    =>現状のIFはread/write recと同様連続n個のクラスタに書き込む処理
-    になっているはずだが要確認
-
-* release_block_swordで独自にリリース対象ブロックを算出している[済]
-  処理をget_cluster_number_swordに置き換えること。
-  =>ロジックを書き直した方が速い
-* 1ブロック余計に割り当てられる問題を修正すること。
-  =>クラスタアライメントの時は割り当てない, NEXT_ALIGNで計算して
-  0以上の場合にのみ割り当てるように修正する。
-  =>現在のロジックを日本語にして, ロジック修正案を検討する
-  調査対象:get_cluster_number_sword
-    NEXT_ALIGNで計算して必要ブロック数を計算するように修正,
-    クラスタ内rec_size計算時も同様だが, RECORDアラインでポジションを
-    算出した場合(NEXTALIGN)に0にならないことを確認
-* ブロック割当て関数でクラスタサイズのみを伸長する場合の処理を追加
-  truncateのバッファクリア処理との重複を排除
-
----
-#4  0x0000555555556450 in main (argc=2, argv=0x7fffffffe288) at tst-swd-fs4.c:518
-(gdb) x /32b &fat[0]
-0x7fffffffcea0: 0x01    0x8f    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffcea8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb0: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-
-#4  0x0000555555556590 in main (argc=2, argv=0x7fffffffe288) at tst-swd-fs4.c:528
-(gdb) x /32b &fat[0]
-0x7fffffffcea0: 0x01    0x8f    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffcea8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb0: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-
-#4  0x0000555555556770 in main (argc=2, argv=0x7fffffffe288) at tst-swd-fs4.c:543
-(gdb) p newsiz
-$78 = 4096
-(gdb) p fib->fib_cls
-$79 = 2
-(gdb) x /32b &fat[0]
-0x7fffffffcea0: 0x01    0x8f    0x80    0x88    0x00    0x00    0x00    0x00
-                                ~~~~
-                                つながっていない
-0x7fffffffcea8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb0: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-0x7fffffffceb8: 0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
-(gdb) p /x fat[fib->fib_cls]
-$81 = 0x80
-
-        /* Truncate 0 */
-528:    rc = fs_vfs_truncate(&fd, 0, &res); <= ここまでは正しい
-        sos_assert( rc == 0 );
-        sos_assert( res == 0 );
-
-        /* Truncate 2 block (extends) */
-        rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res); (*)クラスタチェインがつながらない?
-        sos_assert( rc == 0 );
-        sos_assert( res == 0 );
-
-        /* Truncate 2.5 block without allocating blocks by shirnking  */
-        rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE + SOS_CLUSTER_SIZE/2, &res); (*)クラスタチェインがつながらない?
-        sos_assert( rc == 0 );
-        sos_assert( res == 0 );
-
-        /* Truncate 2 block without releasing blocks by shirnking */
-	543:    rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res); <=ここで解放ループが働いていない?
----
-* ファイルサイズを変えない場合にブロックの獲得や解放が起こらないことの確認
-  (念のため)
-* クラスタ内部でのファイルサイズ変更時の動作確認
+* デバイスレターをポジション情報からディレクトリストリームに移動。
+  - ファイル操作: dp_devltr使用箇所をfib_devltrに置換え
+  - ディレクトリ操作: dp_devltr使用箇所をdir_devltrに置換え
 * ファイルシステムマウント処理作成
 * ファイルシステム共通部(fs-vfs)作成
 * fatpos, dirpsをスーパブロック情報から取得するように修正
@@ -127,6 +59,8 @@ $81 = 0x80
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
 
 [fs済]
+* ファイルサイズを変えない場合にブロックの獲得や解放が起こらないことの確認[済]
+* クラスタ内部でのファイルサイズ変更時の動作確認[済]
 * fs_swd_read_block/fs_swd_write_blockに書込みバイト数を返却する機能を実装[済]
 * set/resetの為にchmodオペレーションが必要[済]
 * creatを要作成[済]
@@ -154,6 +88,13 @@ $81 = 0x80
 * クラスタの途中まで書き込む場合に, 過不足無くクラスタ内レコードを割り当てる。
   書き込み時のブロック獲得ポジションにバッファコピー処理の終端のクラスタ先頭からの
   オフセットを指定するように修正.
+* DIRPS/FATアクセスをマクロ化してread/write誤りを防ぐようにする[済]
+* ブロックへの読み書きIFを再考すること[済]
+* release_block_swordで独自にリリース対象ブロックを算出している
+  処理をget_cluster_number_swordに置き換えること[済]
+* 1ブロック余計に割り当てられる問題を修正すること[済]
+* ブロック割当て関数でクラスタサイズのみを伸長する場合の処理を追加[済]
+  truncateのバッファクリア処理との重複を排除[済]
 
 [storage]
 * マウント処理でファイルシステムを指定できるようにする
