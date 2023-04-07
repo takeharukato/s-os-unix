@@ -153,21 +153,16 @@ found:
 /** Set the number of used records at the last cluster in the cluster chain.
     @param[in]  fat    The pointer to the file allocation table cache.
     @param[in]  pos    The file offset position.
-    @param[in]  mode   The number to specify the behavior.
-    * FS_VFS_IO_DIR_RD Get block to read
-    * FS_VFS_IO_DIR_WR Get block to write
     @param[in]  blk    The block number of the last cluster.
     @retval    0                Success
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static void
-handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, int mode, fs_blk_num blk){
+handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
 	size_t       use_cls_siz;
 
-	if ( !FS_SWD_IS_END_CLS(FS_SWD_GET_FAT(fat, blk)) )
-		return ;  /* No need to calculate the size of the used records */
-
-	/* Calculate the number of the used records.
+	/*
+	 * Calculate the number of the used records.
 	 */
 
 	/* It should write at least one byte
@@ -224,8 +219,7 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_f
 	fib->fib_cls = new_blk;
 
 	/* mark the end of cluster chain */
-	FS_SWD_SET_FAT(fat, new_blk, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
-	handle_last_cluster(fat, 0, mode, new_blk);
+	handle_last_cluster(fat, 0, new_blk);
 
 	return 0;
 
@@ -323,12 +317,11 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		if ( rc != 0 )
 			goto error_out;
 
-		/* Assume all records are used. */
-		FS_SWD_SET_FAT(&fat, new_blk,
-		    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS( SOS_CLUSTER_SIZE - 1 ));
-
-		if ( blk_remains == 1 )  /* When the block is placed at the end. */
-			handle_last_cluster(&fat, pos, mode, new_blk);
+		/* First, we assume that the new block will be placed at
+		 * the end of the cluster. If this assumption is incorrect,
+		 * the FAT entry will be altered in this loop.
+		 */
+		handle_last_cluster(&fat, pos, new_blk);
 
 		/* Add the newly allocated block to the cluster chain. */
 		FS_SWD_SET_FAT(&fat, cur, new_blk); /* cur->next = new_blk */
@@ -348,7 +341,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		}
 
 		/* Expand the cluster length */
-		handle_last_cluster(&fat, pos, mode, cur);
+		handle_last_cluster(&fat, pos, cur);
 	}
 
 	if ( FS_VFS_IODIR_WRITE(mode) ) { /* Write the file allocation table back. */
@@ -415,10 +408,8 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 		if ( rc != 0 )
 			goto error_out;
 
-		/* Mark the end of cluster */
-		FS_SWD_SET_FAT(&fat, cur, FS_SWD_CALC_FAT_ENT_AT_LAST_CLS(1));
 		/* Shrink the cluster */
-		handle_last_cluster(&fat, pos, FS_VFS_IO_DIR_RD, remained_blk);
+		handle_last_cluster(&fat, pos - 1, remained_blk);
 	}
 
 	rel_blks = 0;   /* Initialize the number of released blocks */
@@ -460,12 +451,9 @@ release_end:
 	/* Write the file allocation table back
 	 * when some records were released.
 	 */
-	if ( ( pos == 0 ) || ( rel_blks > 0 ) || ( ( pos % SOS_CLUSTER_SIZE ) > 0 ) ) {
-
-		rc = write_fat_sword(fib->fib_devltr, &fat);
-		if ( rc != 0 )
-			goto error_out;
-	}
+	rc = write_fat_sword(fib->fib_devltr, &fat);
+	if ( rc != 0 )
+		goto error_out;
 
 	/* Release the first block of the file */
 	if ( ( !FS_SWD_IS_END_CLS( fib->fib_cls ) )

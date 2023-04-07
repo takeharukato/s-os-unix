@@ -323,12 +323,11 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		if ( rc != 0 )
 			goto error_out;
 
-		/* Assume all records are used. */
-		if ( blk_remains == 1 )  /* When the block is placed at the end. */
-			handle_last_cluster(&fat, pos, new_blk);
-		else
-			FS_SWD_SET_FAT(&fat, new_blk,
-			    FS_SWD_CALC_FAT_ENT_AT_LAST_CLS( SOS_CLUSTER_SIZE - 1 ) );
+		/* First, we assume that the new block will be placed at
+		 * the end of the cluster. If this assumption is incorrect,
+		 * the FAT entry will be altered in this loop.
+		 */
+		handle_last_cluster(&fat, pos, new_blk);
 
 		/* Add the newly allocated block to the cluster chain. */
 		FS_SWD_SET_FAT(&fat, cur, new_blk); /* cur->next = new_blk */
