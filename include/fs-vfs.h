@@ -141,10 +141,17 @@ struct _fs_fs_manager{
 	int                   fsm_use_cnt;   /**< Use count                    */
 	const char              *fsm_name;   /**< File system name             */
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
-	void                 *fsm_private;   /**< Private information          */
 	int (*fsm_fill_super)(struct _fs_super_block *_super); /**< fill super block  */
+	void                 *fsm_private;   /**< Private information          */
 };
 
-void fs_vfs_init_fd(sos_devltr _ch, struct _sword_file_descriptor *_fdp);
-void fs_vfs_init_dir_stream(sos_devltr _ch, struct _sword_dir *_dir);
+/** File system table
+ */
+struct _fs_filesystem_table{
+	struct _queue head;   /**< Queue head */
+};
+
+int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
+int fs_vfs_unregister_filesystem(const char *_name);
+
 #endif  /*  _FS_VFS_H  */

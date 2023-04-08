@@ -22,6 +22,7 @@
 #include "compat.h"
 #include "sos.h"
 #include "storage.h"
+#include "fs-vfs.h"
 #include "list.h"
 #include "queue.h"
 
@@ -55,7 +56,7 @@
 	    ( (_idx) + SOS_DL_DRIVE_A ) : STORAGE_IDX2TAPEDEV_LTR((_idx)) )
 
 /** Convert from a drive letter to the disk image index
-    @param[in] _ch a device letter
+    @param[in] _ch a drive letter
     @return The disk image index of STORAGE array coresponding to _CH
  */
 #define STORAGE_DEVLTR2IDX(_ch)						\
@@ -70,16 +71,26 @@
     @retval    True   The handler can not be called.
     @retval    False  The handler can be called.
  */
-#define STORAGE_HANDLER_IS_INVALID(_inf,_hdlr)		\
-	( ( (_inf)->di_manager == NULL ) ||		\
-	    ( (_inf)->di_manager->sm_ops == NULL ) ||	\
+#define STORAGE_HANDLER_IS_INVALID(_inf,_hdlr)			\
+	( ( (_inf)->di_manager == NULL ) ||			\
+	    ( (_inf)->di_manager->sm_ops == NULL ) ||		\
 	    ( (_inf)->di_manager->sm_ops->_hdlr == NULL ) )
+
+/** Determine whether the storage is a block device
+    @param[in] _inf A pointer for storage disk image sturcture
+    @retval    True   The handler can not be called.
+    @retval    False  The handler can be called.
+ */
+#define STORAGE_IS_BLOCK_DEVICE(_inf)					\
+	( !STORAGE_HANDLER_IS_INVALID( (_inf), record_read)		\
+	    && !STORAGE_HANDLER_IS_INVALID( (_inf), record_write) )
 
 /*
  * Variables
  */
 /** Storage table (Storage mount table) */
 static struct _storage_disk_image storage[STORAGE_NR];
+
 /** Disk image operation table */
 static struct _storage_diops_table diops_tbl = {__QUEUE_INITIALIZER(&diops_tbl.head)};
 
@@ -87,15 +98,15 @@ static struct _storage_diops_table diops_tbl = {__QUEUE_INITIALIZER(&diops_tbl.h
  * Internal functions
  */
 
-/** Determine whether a device letter is valid.
-    @param[in] ch    the device letter of a device on SWORD
+/** Determine whether a drive letter is valid.
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] idxp  the address to store a device index.
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
  */
 static int
-check_device_letter_common(const sos_devltr ch, int *idxp){
+check_drive_letter_common(const sos_devltr ch, int *idxp){
 	int  rc;
 	int dev;
 	int idx;
@@ -106,13 +117,13 @@ check_device_letter_common(const sos_devltr ch, int *idxp){
 	dev = toupper((int)ch);
 	if ( !STORAGE_DEVLTR_IS_VALID(dev) ) {
 
-		rc = ENODEV;  /* Invalid device letter */
+		rc = ENODEV;  /* Invalid drive letter */
 		goto out;
 	}
 
 	if ( !STORAGE_DEVLTR_IS_STD_DISK(dev) && !STORAGE_DEVLTR_IS_TAPE(dev) ) {
 
-		/* The device letter does not point to a supported device. */
+		/* The drive letter does not point to a supported device. */
 		rc = EINVAL;
 		goto out;
 	}
@@ -153,6 +164,7 @@ init_storage_disk_image_info(struct _storage_disk_image *inf){
 
 	clear_position_info(&inf->di_pos);  /* clear position info */
 	inf->di_manager = NULL;
+	inf->di_filesys = NULL;
 	inf->di_private = NULL;
 }
 
@@ -195,7 +207,7 @@ storage_init_fib(struct _storage_fib *fibp){
     @retval    0     success
     @retval    EINVAL The manager might be linked.
     @retval    EBUSY The operation has already registered.
-    @remark    Set the name of the operation manager to ops->sm_name
+    @remark    Set the name of the operation manager to ops->sm_name, ops->sm_ops, ops->sm_private
     before calling this function.
 */
 int
@@ -265,12 +277,12 @@ unregister_storage_operation(const char *name){
 }
 
 /** mount a storage image file
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] fname the file name (file path) of a storage image file.
     @retval  0 success
     @retval ENODEV No such device
     @retval ENXIO  The image file is not supported.
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval EBUSY  The device has already been mounted.
     @retval EIO    I/O Error.
@@ -286,7 +298,7 @@ storage_mount_image(const sos_devltr ch, const char *const fname){
 	struct _storage_manager    *mgr;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -322,11 +334,11 @@ out:
 }
 
 /** unmount a storage image file
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] fname the file name (file path) of a storage image file.
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval EBUSY  The device is busy.
@@ -340,7 +352,7 @@ storage_unmount_image(const sos_devltr ch){
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -372,11 +384,11 @@ out:
 }
 
 /** Get storage image information
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] resp  the address to store storage disk image information.
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval EIO    I/O Error.
@@ -389,7 +401,7 @@ storage_get_image_info(const sos_devltr ch, struct _storage_disk_image *resp){
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -408,11 +420,11 @@ out:
 }
 
 /** Read a file information block
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] fib  the address to store a file information block
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -426,7 +438,7 @@ storage_fib_read(const sos_devltr ch, const BYTE dirno, struct _storage_fib *fib
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -446,11 +458,11 @@ out:
 }
 
 /** Write a file information block
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] fib  the address of the file information block
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -466,7 +478,7 @@ storage_fib_write(const sos_devltr ch, const BYTE dirno,
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -486,12 +498,12 @@ out:
 }
 
 /** Sequential read from a storage
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[out] dest  The destination address of the data from a storage
     @param[in]  len   Transfer size
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -505,7 +517,7 @@ storage_seq_read(const sos_devltr ch, BYTE *dest, const WORD len){
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -525,12 +537,12 @@ out:
 }
 
 /** Sequential write to a storage
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[in]  src   The source address of the data to write
     @param[in]  len   Transfer size
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -546,7 +558,7 @@ storage_seq_write(const sos_devltr ch, const BYTE *src, const WORD len){
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -566,14 +578,14 @@ out:
 }
 
 /** Read sectors from a disk
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[out] dest  The destination address of the data from a storage
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
     @param[out] rdcntp The number how many records read
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -589,7 +601,7 @@ storage_record_read(const sos_devltr ch, BYTE *dest, const fs_rec rec,
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -609,14 +621,14 @@ out:
 }
 
 /** Write sectors to a disk
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[in]  src   The source address of the data to write
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
     @param[out] wrcntp The number how many records written
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -634,7 +646,7 @@ storage_record_write(const sos_devltr ch, const BYTE *src, const fs_rec rec,
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -654,10 +666,10 @@ out:
 }
 
 /** Set the directory entry position on the device
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[in]  dirps The #DIRPS to set
     @retval  0 success
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
  */
@@ -669,7 +681,7 @@ storage_set_dirps(const sos_devltr ch, const fs_dirps dirps){
 	struct _storage_disk_pos   *pos;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -685,10 +697,10 @@ storage_set_dirps(const sos_devltr ch, const fs_dirps dirps){
 }
 
 /** Set the file allocation table position on the device
-    @param[in]  ch     The device letter of a device on SWORD
+    @param[in]  ch     The drive letter of a device on SWORD
     @param[in]  fatpos The #FATPOS to set
     @retval  0 success
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
  */
@@ -700,7 +712,7 @@ storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
 	struct _storage_disk_pos   *pos;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -716,10 +728,10 @@ storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
 }
 
 /** Get the directory entry position on the device
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[out] dirpsp The address to store #DIRPS
     @retval  0 success
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
  */
@@ -731,7 +743,7 @@ storage_get_dirps(const sos_devltr ch, fs_dirps *dirpsp){
 	struct _storage_disk_pos   *pos;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -748,10 +760,10 @@ storage_get_dirps(const sos_devltr ch, fs_dirps *dirpsp){
 }
 
 /** Get the file allocation table position on the device
-    @param[in]   ch    The device letter of a device on SWORD
+    @param[in]   ch    The drive letter of a device on SWORD
     @param[out]  fatposp The address to store #FATPOS
     @retval  0 success
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
  */
@@ -763,7 +775,7 @@ storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
 	struct _storage_disk_pos   *pos;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -779,10 +791,10 @@ storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
 	return 0;
 }
 /** Determine whether the device is online
-    @param[in]   ch    The device letter of a device on SWORD
+    @param[in]   ch    The drive letter of a device on SWORD
     @retval 0      success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENXIO  The device has not been mounted(offline).
  */
 int
@@ -792,7 +804,7 @@ storage_check_status(const sos_devltr ch){
 	struct _storage_disk_image *inf;
 
 	/* Get device index */
-	rc = check_device_letter_common(ch, &idx);
+	rc = check_drive_letter_common(ch, &idx);
 	if ( rc != 0 )
 		return rc;
 
@@ -803,6 +815,117 @@ storage_check_status(const sos_devltr ch){
 		return ENXIO;  /* not mounted */
 
 	return 0;
+}
+
+/**
+    @param[in]   ch The drive letter of a device on SWORD
+    @retval 0       success
+    @retval ENODEV  No such device
+    @retval EINVAL  The drive letter is not supported.
+    @retval ENXIO   The device has not been mounted(offline).
+    @retval ENOTBLK Block device required
+    @retval EBUSY   Already mounted.
+*/
+int
+storage_mount_filesystem(const sos_devltr ch, struct _fs_fs_manager *fs_mgr){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_manager    *mgr;
+
+	rc = storage_check_status(ch);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get device index */
+	rc = check_drive_letter_common(ch, &idx);
+	if ( rc != 0 )
+		goto error_out;
+
+	inf = &storage[idx]; /* get disk image info */
+	if ( inf->di_manager == NULL ) {
+
+		rc = ENXIO;  /* not mounted */
+		goto error_out;
+	}
+
+	if ( !STORAGE_IS_BLOCK_DEVICE(inf) ) {
+
+		rc = ENOTBLK; /* Block device required */
+		goto error_out;
+	}
+
+	if ( inf->di_filesys != NULL ){
+
+		rc = EBUSY; /* Already mounted. */
+		goto error_out;
+	}
+
+	inf->di_filesys = fs_mgr; /* Mount the file system */
+
+	mgr = inf->di_manager; /* Storage manager */
+	++mgr->sm_use_cnt;     /* Inc use count */
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Unmount a file system
+    @param[in] ch The drive letter of a device on SWORD
+    @retval 0       success
+    @retval ENODEV  No such device
+    @retval EINVAL  The drive letter is not supported.
+    @retval ENXIO   The device has not been mounted(offline).
+    @retval ENOTBLK Block device required
+    @retval ENOENTY No file system mounted
+*/
+int
+storage_unmount_filesystem(const sos_devltr ch){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+	struct _storage_manager    *mgr;
+
+	rc = storage_check_status(ch);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get device index */
+	rc = check_drive_letter_common(ch, &idx);
+	if ( rc != 0 )
+		goto error_out;
+
+	inf = &storage[idx]; /* get disk image info */
+	if ( inf->di_manager == NULL ) {
+
+		rc = ENXIO;  /* not mounted */
+		goto error_out;
+	}
+
+	if ( !STORAGE_IS_BLOCK_DEVICE(inf) ) {
+
+		rc = ENOTBLK; /* Block device required */
+		goto error_out;
+	}
+
+	if ( inf->di_filesys == NULL ){
+
+		rc = ENOENT; /* No file system mounted. */
+		goto error_out;
+	}
+
+	inf->di_filesys = NULL; /* Unmount the file system */
+
+	mgr = inf->di_manager; /* Storage manager */
+
+	--mgr->sm_use_cnt;     /* Dec use count */
+
+	return 0;
+
+error_out:
+	return rc;
 }
 
 /** Initialize storages

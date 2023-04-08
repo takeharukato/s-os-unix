@@ -63,7 +63,7 @@ extern char	*dio_disk[SOS_MAXIMAGEDRIVES];
     @param[in] index of sos_tape_device_info array
     @return drive letter
  */
-#define sos_tape_device_letter(_idx) 				\
+#define sos_tape_drive_letter(_idx) 				\
 	( (_idx) == SOS_TAPE_COMMON_IDX ? SOS_DL_COM_CMT :	\
 	    ( (_idx) == SOS_TAPE_MONITOR_IDX ? SOS_DL_MON_CMT : SOS_DL_QD ) )
 

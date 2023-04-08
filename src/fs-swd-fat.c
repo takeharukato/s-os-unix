@@ -21,7 +21,7 @@
 #include "fs-sword.h"
 
 /** Read/Write file allocation table (FAT)
-    @param[in]  ch  The device letter of the device
+    @param[in]  ch  The drive letter of the device
     @param[out] fatbuf Memory buffer for the FAT
     @param[in]  mode   The number to specify the behavior.
     * FS_VFS_IO_DIR_RD Get block to read
@@ -63,7 +63,7 @@ error_out:
 }
 
 /** Read File Allocation Table
-    @param[in]  ch     The device letter of the device
+    @param[in]  ch     The drive letter of the device
     @param[in]  fat    The address to store the read file allocation table into.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
@@ -75,7 +75,7 @@ read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
 }
 
 /** Write File Allocation Table
-    @param[in]  ch     The device letter of the device
+    @param[in]  ch     The drive letter of the device
     @param[in]  fat    The file allocation table to write.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
@@ -234,7 +234,7 @@ error_out:
 }
 
 /** Return the number of free blocks on the disk
-    @param[in]  ch          The device letter of the device
+    @param[in]  ch          The drive letter of the device
     @param[out] free_blocks The address to store the number of the free blocks on the disk.
  */
 static int

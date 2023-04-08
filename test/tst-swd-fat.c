@@ -13,7 +13,7 @@
 struct _fs_sword_fat tst_fat;
 
 /** Read/Write file allocation table (FAT)
-    @param[in]  ch  The device letter of the device
+    @param[in]  ch  The drive letter of the device
     @param[out] fatbuf Memory buffer for the FAT
     @param[in]  mode   The number to specify the behavior.
     * FS_VFS_IO_DIR_RD Get block to read
@@ -228,7 +228,7 @@ error_out:
 }
 
 /** Return the number of free blocks on the disk
-    @param[in]  ch          The device letter of the device
+    @param[in]  ch          The drive letter of the device
     @param[out] free_blocks The address to store the number of the free blocks on the disk.
  */
 static int

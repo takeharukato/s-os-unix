@@ -33,7 +33,7 @@
  */
 #define DISK_2D_DEVLTR_IS_VALID(_ch) (STORAGE_DEVLTR_IS_STD_DISK((_ch)))
 
-/** Convert from a device letter to index of the disk image array.
+/** Convert from a drive letter to index of the disk image array.
     @remark 2D disk images can be mounted on a standard disk.
  */
 #define DISK_2D_DEVLTR2IDX(_ch) ( (_ch) - SOS_DL_DRIVE_A )
@@ -107,7 +107,7 @@ init_private_info_2dimg(void){
 }
 
 /** mount a storage image file
-    @param[in] ch        The device letter of a device on SWORD
+    @param[in] ch        The drive letter of a device on SWORD
     @param[in] fname     The file name (file path) of a storage image file.
     @param[out] ref_priv the poiner to the pointer variable for the private information.
     @retval  0 success
@@ -154,7 +154,7 @@ close_out:
 }
 
 /** unmount a storage image file
-    @param[in] ch        The device letter of a device on SWORD
+    @param[in] ch        The drive letter of a device on SWORD
     @retval  0 success
     @retval  ENOENT The device is not supported by this module
  */
@@ -185,7 +185,7 @@ umount_2dimg(const sos_devltr ch){
 }
 
 /** Get storage image information
-    @param[in]  ch    the device letter of a device on SWORD
+    @param[in]  ch    the drive letter of a device on SWORD
     @param[out] posp  the address to store storage position information.
     @retval  0 success
     @retval ENOENT The device is not supported.
@@ -200,7 +200,7 @@ get_image_info_2dimg(const sos_devltr ch, struct _storage_disk_pos *posp){
 }
 
 /** Read a file information block
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] dirno the #DIRNO of the file
     @param[out] fib  the address to store a file information block
     @param[out] posp the address to store storage position information
@@ -216,7 +216,7 @@ fib_read_2dimg(const sos_devltr ch, const BYTE dirno,
 }
 
 /** Read a file information block
-    @param[in] ch    the device letter of a device on SWORD
+    @param[in] ch    the drive letter of a device on SWORD
     @param[in] dirno the #DIRNO of the file
     @param[out] fib  the address to store a file information block
     @param[out] posp the address to store storage position information
@@ -232,7 +232,7 @@ fib_write_2dimg(const sos_devltr ch, const BYTE dirno,
 }
 
 /** Read sequential data
-    @param[in]  ch    the device letter of a device on SWORD
+    @param[in]  ch    the drive letter of a device on SWORD
     @param[out] dest  the destination address to transfer data to
     @param[in]  len   transfer length
     @param[out] posp the address to store storage position information
@@ -248,7 +248,7 @@ seq_read_2dimg(const sos_devltr ch, BYTE *dest,
 }
 
 /** Write sequential data
-    @param[in]  ch    the device letter of a device on SWORD
+    @param[in]  ch    the drive letter of a device on SWORD
     @param[out] dest  the destination address to transfer data to
     @param[in]  len   transfer length
     @param[out] posp the address to store storage position information
@@ -264,13 +264,13 @@ seq_write_2dimg(const sos_devltr ch, const BYTE *src,
 }
 
 /** Read sectors from a disk
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[out] dest  The destination address of the data from a storage
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found
@@ -338,13 +338,13 @@ out:
 }
 
 /** Write sectors from a disk
-    @param[in]  ch    The device letter of a device on SWORD
+    @param[in]  ch    The drive letter of a device on SWORD
     @param[out] dest  The destination address of the data from a storage
     @param[in]  rec   The start record number to read
     @param[in]  count The number how many records to read
     @retval  0 success
     @retval ENODEV No such device
-    @retval EINVAL The device letter is not supported.
+    @retval EINVAL The drive letter is not supported.
     @retval ENOENT The device is not supported.
     @retval ENXIO  The device has not been mounted.
     @retval ENOSPC File not found

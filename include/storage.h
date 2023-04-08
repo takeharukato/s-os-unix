@@ -157,9 +157,10 @@
 	}while(0)
 
 /*
- * Foward declaration
+ * Foward declarations
  */
 struct _storage_di_ops;
+struct  _fs_fs_manager;
 
 /** File Information Block of the file
  */
@@ -192,6 +193,7 @@ struct _storage_disk_pos{
 struct _storage_disk_image{
 	struct _storage_disk_pos     di_pos; /**< Position information               */
 	struct _storage_manager *di_manager; /**< Device manager                     */
+	struct  _fs_fs_manager	*di_filesys; /**< File system                        */
 	void                    *di_private; /**< Private information for the device */
 };
 
@@ -231,7 +233,6 @@ struct _storage_diops_table{
 	struct _queue head;   /**< Queue head */
 };
 
-
 void storage_init(void);
 int register_storage_operation(struct _storage_manager *_ops);
 int unregister_storage_operation(const char *_name);
@@ -254,4 +255,6 @@ int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
 int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
 int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
 int storage_check_status(const sos_devltr _ch);
+int storage_mount_filesystem(const sos_devltr _ch, struct _fs_fs_manager *_fs_mgr);
+int storage_unmount_filesystem(const sos_devltr _ch);
 #endif  /*  _STORAGE_H  */

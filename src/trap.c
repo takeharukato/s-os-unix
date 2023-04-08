@@ -260,7 +260,7 @@ init_tape_devices(void){
 	for( i = 0; SOS_TAPE_NR > i; ++i) {
 
 		inf = &tapes[i];
-		inf->dsk = sos_tape_device_letter(i); /* device letter */
+		inf->dsk = sos_tape_drive_letter(i); /* drive letter */
 		inf->dirno = 0;  /* initialize DIRNO of this device */
 		inf->retpoi = 0; /* initialize RETPOI of this device */
 	}
@@ -568,7 +568,7 @@ trap_write_workarea_without_sync(WORD addr, BYTE val){
 	return 0;
 }
 /** Notify tape change
-    @param[in] dev the device letter of the tape.
+    @param[in] dev the drive letter of the tape.
  */
 void
 trap_change_tape(char dev){
@@ -1252,7 +1252,7 @@ int sos_fcb(void){
 	 */
 	if ( sos_device_is_tape( GetBYTE(SOS_DSK) ) ) {
 
-		PutBYTE(SOS_DSK, trdvsw_internal());    /* Set device letter into #DSK */
+		PutBYTE(SOS_DSK, trdvsw_internal());    /* Set drive letter into #DSK */
 		return sos_rdi();          /* Call RDI */
 	}
 
