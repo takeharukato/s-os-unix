@@ -72,47 +72,54 @@ print_sword_filename(BYTE *name){
 	fflush(stdout);
 }
 
-void
+static void
 fd_init(sos_devltr ch, struct _sword_file_descriptor *fdp){
-	BYTE dent[SOS_DENTRY_SIZE];
+	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
 
+	memset(fdp, 0x0, sizeof(struct _sword_file_descriptor));   /* just in case */
+
+	storage_init_fib(&fdp->fd_fib);       /* Initialize the file information block */
+	storage_init_position(&fdp->fd_pos);  /* Initialize position */
+
+	fib = &fdp->fd_fib;
 	pos = &fdp->fd_pos;
 
-	memset(&dent[0],0x0,SOS_DENTRY_SIZE);
+	fib->fib_devltr = ch;  /* Device letter */
 
-	memset(fdp, 0x0, sizeof(struct _sword_file_descriptor));
+	storage_get_dirps(ch, &pos->dp_dirps);    /* FIXME: Set #DIRPS of the device */
+	storage_get_fatpos(ch, &pos->dp_fatpos);  /* FIXME: Set #FATPOS of the device */
 
+	/*
+	 * Clear flags
+	 */
 	fdp->fd_flags = 0;
 	fdp->fd_sysflags = 0;
 
-	storage_init_position(&fdp->fd_pos);
-
-	pos->dp_devltr = ch;
-
-	storage_get_dirps(ch, &pos->dp_dirps);
-
-	storage_get_fatpos(ch, &pos->dp_fatpos);
-
-	STORAGE_FILL_FIB(&fdp->fd_fib, ch, 0, &dent[0]);
-	fdp->fd_private=NULL;
+	fdp->fd_private=NULL;  /* Initialize private information */
 }
 
-static int
+static void
 init_dir_stream(sos_devltr ch, struct _sword_dir *dir){
+	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
 
+	storage_init_fib(&dir->dir_fib);      /* Initialize the file information block */
+	storage_init_position(&dir->dir_pos); /* Initialize position */
+
+	fib = &dir->dir_fib;
 	pos = &dir->dir_pos;
 
-	storage_init_position(pos);
+	fib->fib_devltr = ch;  /* Device letter */
 
-	pos->dp_devltr = ch;
-	storage_get_dirps(ch, &pos->dp_dirps);
-	storage_get_fatpos(ch, &pos->dp_fatpos);
+	storage_get_dirps(ch, &pos->dp_dirps);    /* FIXME: DIRPS  */
+	storage_get_fatpos(ch, &pos->dp_fatpos);  /* FIXME: FATPOS */
+
+	/*
+	 * Clear flags
+	 */
 	dir->dir_sysflags = 0;
 	dir->dir_private = NULL;
-
-	return 0;
 }
 
 static int

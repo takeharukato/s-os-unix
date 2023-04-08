@@ -177,7 +177,6 @@ struct _storage_fib{
 /** Position information
  */
 struct _storage_disk_pos{
-	sos_devltr            dp_devltr;   /**< Device letter                     */
 	WORD                   dp_dirps;   /**< First directory entry record      */
 	WORD                  dp_fatpos;   /**< File allocation table record      */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
@@ -237,6 +236,7 @@ void storage_init(void);
 int register_storage_operation(struct _storage_manager *_ops);
 int unregister_storage_operation(const char *_name);
 void storage_init_position(struct _storage_disk_pos *_dpp);
+void storage_init_fib(struct _storage_fib *_fibp);
 int storage_mount_image(const sos_devltr _ch, const char *_fname);
 int storage_unmount_image(const sos_devltr _ch);
 int storage_get_image_info(const sos_devltr _ch, struct _storage_disk_image *_resp);

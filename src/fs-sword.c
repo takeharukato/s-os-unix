@@ -86,7 +86,7 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 	 */
 	fib->fib_size = STORAGE_FIB_FIX_SIZE( newsiz );  /* update size */
 
-	rc = fs_swd_write_dent(pos->dp_devltr, fib); /* write back */
+	rc = fs_swd_write_dent(fib->fib_devltr, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
 
@@ -417,7 +417,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	if ( rc == 0 ) {
 
 		/* Update the directory entry. */
-		rc = fs_swd_write_dent(pos->dp_devltr, fib);
+		rc = fs_swd_write_dent(fib->fib_devltr, fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -618,11 +618,13 @@ fops_opendir_sword(struct _sword_dir *dir, BYTE *resp){
 int
 fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp){
 	int                        rc;
+	struct _storage_fib  *dir_fib;
 	struct _storage_disk_pos *pos;
 	fs_dirno                dirno;
 	fs_sword_dirno       swddirno;
 
 	pos = &dir->dir_pos;  /* Position information */
+	dir_fib = &dir->dir_fib;  /* File Information Block of the directory */
 
 	/*
 	 * read current entry
@@ -641,7 +643,7 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 		/*
 		 * Fill the file information block
 		 */
-		rc = fs_swd_search_dent_by_dirno(pos->dp_devltr, swddirno, fib);
+		rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr, swddirno, fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -782,10 +784,12 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib        old_fib;
 	struct _storage_fib        new_fib;
+	struct _storage_fib       *dir_fib;
 	BYTE    old_swdname[SOS_FNAME_LEN];
 	BYTE    new_swdname[SOS_FNAME_LEN];
 
-	pos = &dir->dir_pos;  /* Position information */
+	pos     = &dir->dir_pos;  /* Position information */
+	dir_fib = &dir->dir_fib;  /* File Information Block of the directory */
 
 	/* Get the filename of oldpath in SWORD representation. */
 	rc = fs_unix2sword(oldpath, &old_swdname[0], SOS_FNAME_LEN);
@@ -796,7 +800,7 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(pos->dp_devltr, &old_swdname[0], &old_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &old_swdname[0], &old_fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -810,7 +814,7 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 
 	/* Confirm the new filename doesn't exist.
 	 */
-	rc = fs_swd_search_dent_by_name(pos->dp_devltr, &new_swdname[0], &new_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &new_swdname[0], &new_fib);
 	if ( rc == 0 ) {
 
 		rc = SOS_ERROR_EXIST;
@@ -821,7 +825,7 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	memcpy(&old_fib.fib_sword_name[0],&new_swdname[0],SOS_FNAME_LEN);
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(pos->dp_devltr, &old_fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, &old_fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -853,9 +857,11 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
+	struct _storage_fib       *dir_fib;
 	BYTE        swdname[SOS_FNAME_LEN];
 
-	pos = &dir->dir_pos;  /* Position information */
+	pos     = &dir->dir_pos;  /* Position information */
+	dir_fib = &dir->dir_fib;  /* File Information Block of the directory */
 
 	/* Get the filename of oldpath in SWORD representation. */
 	rc = fs_unix2sword(path, &swdname[0], SOS_FNAME_LEN);
@@ -866,7 +872,7 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(pos->dp_devltr, &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &swdname[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -877,7 +883,7 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 		fib.fib_attr |= SOS_FATTR_RDONLY;  /* set readonly bit */
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(pos->dp_devltr, &fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -908,9 +914,11 @@ fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
+	struct _storage_fib       *dir_fib;
 	BYTE        swdname[SOS_FNAME_LEN];
 
 	pos = &dir->dir_pos;  /* Position information */
+	dir_fib = &dir->dir_fib;  /* File Information Block of the directory */
 
 	/* Get the filename of path in SWORD representation. */
 	rc = fs_unix2sword(path, &swdname[0], SOS_FNAME_LEN);
@@ -921,7 +929,7 @@ fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
 	}
 
 	/* Obtain a directory entry for the file to unlink. */
-	rc = fs_swd_search_dent_by_name(pos->dp_devltr, &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &swdname[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -929,7 +937,7 @@ fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
 	fib.fib_attr = SOS_FATTR_FREE;
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(pos->dp_devltr, &fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, &fib);
 	if ( rc != 0 )
 		goto error_out;
 

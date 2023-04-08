@@ -137,7 +137,6 @@ clear_position_info(struct _storage_disk_pos *dpp){
 	if ( dpp == NULL )
 		return;
 
-	dpp->dp_devltr = 0;
 	dpp->dp_dirps = 0;
 	dpp->dp_fatpos = 0;
 	dpp->dp_dirno = 0;
@@ -163,18 +162,32 @@ init_storage_disk_image_info(struct _storage_disk_image *inf){
 
 /** Initialize storage position information (interface function)
     @param[in] dpp The pointer to storage position information
-    @remark dp_devltr, dp_dirps, dp_fatpos are initialized by clear_position_info.
  */
 void
 storage_init_position(struct _storage_disk_pos *dpp){
-
-	if ( dpp == NULL )
-		return;
 
 	dpp->dp_dirno = 0;
 	dpp->dp_retpoi = 0;
 	dpp->dp_pos = 0;
 	dpp->dp_private = NULL;
+}
+
+/** Initialize the file information block (interface function)
+    @param[in] fibp The pointer to the file information block.
+ */
+void
+storage_init_fib(struct _storage_fib *fibp){
+
+	memset(fibp, 0x0, sizeof(struct _storage_fib)); /* Just in case */
+
+	fibp->fib_devltr = 0;
+	fibp->fib_attr = SOS_FATTR_EODENT; /* Initial value is the end of directory entry */
+	fibp->fib_dirno = 0; /* Initial position */
+	fibp->fib_size = 0;  /* SIZE */
+	fibp->fib_dtadr = 0; /* DTADR */
+	fibp->fib_exadr = 0; /* EXADR */
+	fibp->fib_cls = SOS_FAT_ENT_UNAVAILABLE;  /* No block are allocated. */
+	memset(&fibp->fib_sword_name[0], 0x0, SOS_FNAME_LEN); /* Clear the file name */
 }
 
 /** Register a storage operation
@@ -298,7 +311,6 @@ storage_mount_image(const sos_devltr ch, const char *const fname){
 			continue;
 		++mgr->sm_use_cnt;     /* Inc use count */
 		clear_position_info(&inf->di_pos);  /* clear position info */
-		inf->di_pos.dp_devltr = ch;  /* set device letter */
 		inf->di_manager = mgr; /* Set manager */
 		inf->di_private = private;
 		rc = 0;

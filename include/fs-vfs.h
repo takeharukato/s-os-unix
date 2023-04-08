@@ -77,6 +77,7 @@ struct _sword_file_descriptor{
 struct _sword_dir{
 	struct _storage_disk_pos dir_pos;  /**< Position Information */
 	fs_fd_flags         dir_sysflags;  /**< Internal flags       */
+	struct _storage_fib      dir_fib;  /**< File Information Block */
 	void                *dir_private;  /**< Private Information  */
 };
 
@@ -144,4 +145,6 @@ struct _fs_fs_manager{
 	int (*fsm_fill_super)(struct _fs_super_block *_super); /**< fill super block  */
 };
 
+void fs_vfs_init_fd(sos_devltr _ch, struct _sword_file_descriptor *_fdp);
+void fs_vfs_init_dir_stream(sos_devltr _ch, struct _sword_dir *_dir);
 #endif  /*  _FS_VFS_H  */
