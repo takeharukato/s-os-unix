@@ -21,7 +21,7 @@
     @retval     SOS_ERROR_NOENT File not found
  */
 static int
-search_dent_by_dirno(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
+search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, fs_rec *recp,
     BYTE *dentp, size_t bufsiz){
 	int                      i;
 	int                     rc;
@@ -72,7 +72,7 @@ search_dent_by_dirno(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
 				goto error_out;
 			}
 
-			if ( cur == dirno ) {
+			if ( cur == SOS_DIRNO_VAL(dirno) ) {
 
 				if ( recp != NULL )
 					*recp = rec;
@@ -268,7 +268,8 @@ fs_swd_write_dent(sos_devltr ch, struct _storage_fib *fib){
 	/*
 	 * Read directory entry
 	 */
-	rec = fib->fib_dirno / SOS_DENTRIES_PER_REC + SOS_DIRPS_VAL(dirps_rec);
+	rec = SOS_DIRNO_VAL(fib->fib_dirno) / SOS_DENTRIES_PER_REC +
+		SOS_DIRPS_VAL(dirps_rec);
 	rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rwcnt);
 	if ( rc != 0 )
 		goto error_out;  /* Error */
@@ -280,7 +281,7 @@ fs_swd_write_dent(sos_devltr ch, struct _storage_fib *fib){
 	}
 
 	/* Calculate dirno offset in the record */
-	dirno_offset = SOS_DIRNO_VAL(fib->fib_dirno % SOS_DENTRIES_PER_REC);
+	dirno_offset = SOS_DIRNO_VAL(fib->fib_dirno) % SOS_DENTRIES_PER_REC;
 	/* refer the directory entry to modify */
 	dent = (BYTE *)&buf[0] +  FS_SWD_DIRNO2OFF( SOS_DIRNO_VAL(dirno_offset) );
 	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */

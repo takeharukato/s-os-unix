@@ -30,40 +30,6 @@
  * Macros
  */
 
-/*
- * storage index for tape device
- */
-#define STORAGE_FIRST_CMT_IDX ( ( SOS_DL_RESV_MAX - SOS_DL_DRIVE_A ) + 1 )
-#define STORAGE_DSKIMG_IDX_T  ( STORAGE_FIRST_CMT_IDX )
-#define STORAGE_DSKIMG_IDX_S  ( STORAGE_FIRST_CMT_IDX + 1 )
-#define STORAGE_DSKIMG_IDX_Q  ( STORAGE_FIRST_CMT_IDX + 2 )
-
-/** Convert from a disk image index to the drive letter of a tape device
-    @param[in] _idx disk image index of STORAGE array
-    @return The drive letter of _IDX
- */
-#define STORAGE_IDX2TAPE_DEVLTR(_idx)					\
-	( (_idx) == STORAGE_DSKIMG_IDX_T ? SOS_DL_COM_CMT :		\
-	    ( (_idx) == STORAGE_DSKIMG_IDX_S ? SOS_DL_MON_CMT : SOS_DL_QD ) )
-
-/** Convert from a disk image index to a drive letter
-    @param[in] _idx disk image index of STORAGE array
-    @return The drive letter of _IDX
- */
-#define STORAGE_IDX2DRVLTR(_idx)					\
-	( ( ( (_idx) >= STORAGE_DSKIMG_IDX_A )				\
-	    && ( STORAGE_DSKIMG_IDX_A >= (_idx) ) ) ?			\
-	    ( (_idx) + SOS_DL_DRIVE_A ) : STORAGE_IDX2TAPEDEV_LTR((_idx)) )
-
-/** Convert from a drive letter to the disk image index
-    @param[in] _ch a drive letter
-    @return The disk image index of STORAGE array coresponding to _CH
- */
-#define STORAGE_DEVLTR2IDX(_ch)						\
-	( STORAGE_DEVLTR_IS_DISK(_ch) ? ( (_ch) - SOS_DL_DRIVE_A ) :	\
-	    ( ( (_ch) == SOS_DL_COM_CMT ) ? STORAGE_DSKIMG_IDX_T :	\
-		( ( (_ch) == SOS_DL_COM_CMT ) ? STORAGE_DSKIMG_IDX_S :	\
-		    STORAGE_DSKIMG_IDX_Q ) ) )
 
 /** Determine whether the storage handler is invalid
     @param[in] _inf A pointer for storage disk image sturcture
@@ -790,6 +756,7 @@ storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
 
 	return 0;
 }
+
 /** Determine whether the device is online
     @param[in]   ch    The drive letter of a device on SWORD
     @retval 0      success
@@ -817,21 +784,32 @@ storage_check_status(const sos_devltr ch){
 	return 0;
 }
 
-/**
-    @param[in]   ch The drive letter of a device on SWORD
+/** Mount file system on the drive.
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  ch     The drive letter of a device on SWORD
+    @param[in]  fs_mgr The file system manager to register
     @retval 0       success
     @retval ENODEV  No such device
-    @retval EINVAL  The drive letter is not supported.
+    @retval EINVAL  The drive letter is not supported or FS_MGR is invalid.
     @retval ENXIO   The device has not been mounted(offline).
     @retval ENOTBLK Block device required
     @retval EBUSY   Already mounted.
 */
 int
-storage_mount_filesystem(const sos_devltr ch, struct _fs_fs_manager *fs_mgr){
+storage_mount_filesystem(struct _fs_ioctx *ioctx, const sos_devltr ch,
+    struct _fs_fs_manager *fs_mgr){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;
 	struct _storage_manager    *mgr;
+	struct _storage_fib        *fib;
+	struct _fs_super_block    super;
+
+	if ( !FS_FSMGR_IS_VALID(fs_mgr) ) {
+
+		rc = EINVAL;
+		goto error_out;
+	}
 
 	rc = storage_check_status(ch);
 	if ( rc != 0 )
@@ -861,7 +839,27 @@ storage_mount_filesystem(const sos_devltr ch, struct _fs_fs_manager *fs_mgr){
 		goto error_out;
 	}
 
+	rc = fs_mgr->fsm_fill_super(&super); /* Read super block */
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Set ROOT directory in the file system.
+	 */
+	fib = &ioctx->ioc_root[idx];
+
+	fib->fib_devltr = ch;  /* Drive letter */
+	fib->fib_attr = SOS_FATTR_DIR; /* The file type is a directory. */
+	fib->fib_dirno = 0; /* no directory contains the root directory. */
+	fib->fib_size = SOS_CLUSTER_SIZE;  /* One cluster at maximum. */
+	fib->fib_dtadr = 0;  /* No load addresss */
+	fib->fib_exadr = 0;  /* No exec addresss */
+	fib->fib_cls = SOS_CLS_VAL(super.sb_dirps); /* Directory record */
+	memset(&fib->fib_sword_name[0], 0x0, SOS_FNAME_LEN);
+
 	inf->di_filesys = fs_mgr; /* Mount the file system */
+
+	++fs_mgr->fsm_use_cnt;  /* Inc file system use count */
 
 	mgr = inf->di_manager; /* Storage manager */
 	++mgr->sm_use_cnt;     /* Inc use count */
@@ -873,7 +871,8 @@ error_out:
 }
 
 /** Unmount a file system
-    @param[in] ch The drive letter of a device on SWORD
+    @param[in] ioctx The current I/O context.
+    @param[in] ch    The drive letter of a device on SWORD
     @retval 0       success
     @retval ENODEV  No such device
     @retval EINVAL  The drive letter is not supported.
@@ -882,11 +881,13 @@ error_out:
     @retval ENOENTY No file system mounted
 */
 int
-storage_unmount_filesystem(const sos_devltr ch){
+storage_unmount_filesystem(struct _fs_ioctx *ioctx, const sos_devltr ch){
 	int                          rc;
 	int                         idx;
 	struct _storage_disk_image *inf;
 	struct _storage_manager    *mgr;
+	struct _storage_fib        *fib;
+	struct _fs_fs_manager   *fs_mgr;
 
 	rc = storage_check_status(ch);
 	if ( rc != 0 )
@@ -898,6 +899,7 @@ storage_unmount_filesystem(const sos_devltr ch){
 		goto error_out;
 
 	inf = &storage[idx]; /* get disk image info */
+
 	if ( inf->di_manager == NULL ) {
 
 		rc = ENXIO;  /* not mounted */
@@ -916,16 +918,77 @@ storage_unmount_filesystem(const sos_devltr ch){
 		goto error_out;
 	}
 
+	fs_mgr = inf->di_filesys;
+
+	if ( fs_mgr->fsm_use_cnt == 0 ) {
+
+		rc = ENXIO;  /* not mounted */
+		goto error_out;
+	}
+
+	sos_assert( fs_mgr->fsm_use_cnt > 0 );
+
+	--fs_mgr->fsm_use_cnt;  /* Dec file system use count */
+
+	/*
+	 * Reset the root file information block
+	 */
+	fib = &ioctx->ioc_root[idx];
+
+	fib->fib_devltr = 0;  /* Drive letter */
+	fib->fib_attr = SOS_FATTR_FREE; /* None */
+	fib->fib_dirno = 0; /* no directory contains the root directory. */
+	fib->fib_size = 0;  /* Clear */
+	fib->fib_dtadr = 0;  /* No load addresss */
+	fib->fib_exadr = 0;  /* No exec addresss */
+	fib->fib_cls = SOS_FAT_ENT_EOF_MASK; /* No cluster is allocated. */
+	memset(&fib->fib_sword_name[0], 0x0, SOS_FNAME_LEN);
+
 	inf->di_filesys = NULL; /* Unmount the file system */
 
 	mgr = inf->di_manager; /* Storage manager */
 
+	sos_assert( mgr->sm_use_cnt > 0 );
 	--mgr->sm_use_cnt;     /* Dec use count */
 
 	return 0;
 
 error_out:
 	return rc;
+}
+
+/** Refer a file system manager
+    @param[in]   ch      The drive letter of a device on SWORD
+    @param[out]  fs_mgrp The address of a pointer to store a file system manager reference.
+    @retval 0      Success
+    @retval ENODEV No such device
+    @retval EINVAL The drive letter is not supported.
+    @retval ENXIO  The device has not been mounted(offline).
+ */
+int
+ref_filesystem(const sos_devltr ch, struct _fs_fs_manager **fs_mgrp){
+	int                          rc;
+	int                         idx;
+	struct _storage_disk_image *inf;
+
+	/* Get device index */
+	rc = check_drive_letter_common(ch, &idx);
+	if ( rc != 0 )
+		return rc;
+
+	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
+
+	inf = &storage[idx]; /* get disk image info */
+	if ( inf->di_manager == NULL )
+		return ENXIO;  /* not mounted */
+
+	if ( inf->di_filesys == NULL )
+		return ENXIO;  /* not mounted */
+
+	if ( fs_mgrp != NULL )
+		*fs_mgrp = inf->di_filesys;
+
+	return 0;
 }
 
 /** Initialize storages

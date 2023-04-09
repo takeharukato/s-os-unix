@@ -18,7 +18,7 @@ int fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
     size_t count, size_t *wrsizp, BYTE *resp);
 int fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp);
 int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
-int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
+int fops_opendir_sword(const char *path, struct _sword_dir *dir, BYTE *resp);
 int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 int fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp);
 int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
@@ -123,8 +123,8 @@ init_dir_stream(sos_devltr ch, struct _sword_dir *dir){
 }
 
 static int
-fs_vfs_opendir(sos_devltr ch, struct _sword_dir *dirp,
-    BYTE *resp){
+fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
+    struct _sword_dir *dirp, BYTE *resp){
 	int                rc;
 	struct _sword_dir dir;
 	BYTE              res;
@@ -143,7 +143,7 @@ fs_vfs_opendir(sos_devltr ch, struct _sword_dir *dirp,
 
 	init_dir_stream(ch, &dir);
 
-	rc = fops_opendir_sword(&dir, &res);
+	rc = fops_opendir_sword(path, &dir, &res);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -395,7 +395,7 @@ show_dir(sos_devltr ch){
 	struct _sword_dir dir;
 	BYTE res;
 
-	rc = fs_vfs_opendir('A', &dir, &res);
+	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
 	if ( rc != 0 )
 		return res;
 
@@ -536,7 +536,7 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res != 0 );
 
-	rc = fs_vfs_opendir('A', &dir, &res);
+	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
 	sos_assert( res == 0 );
 
 	rc = fs_vfs_closedir(&dir, &res);
@@ -558,7 +558,7 @@ main(int argc, char *argv[]){
 	printf("After create\n");
 	show_dir('A');
 
-	rc = fs_vfs_opendir('A', &dir, &res);
+	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
 	sos_assert( res == 0 );
 
 	rc = fs_vfs_unlink(&dir, "NOEXISTS.ASM", &res);
@@ -624,7 +624,7 @@ main(int argc, char *argv[]){
 	rc = memcmp(&buf1[0],&buf2[0],len);
 	sos_assert( rc == 0 );
 
-	rc = fs_vfs_opendir('A', &dir, &res);
+	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
 	sos_assert( res == 0 );
 
 	rc = fs_vfs_unlink(&dir, "TST-SWD.TXT", &res);

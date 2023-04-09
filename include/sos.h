@@ -43,7 +43,7 @@
 /*
  * File attributes
  */
-#define SOS_FATTR_FREE    (0x0)   /* Free entry */
+#define SOS_FATTR_FREE    (0x0)   /* None/Free entry */
 #define SOS_FATTR_BIN     (0x1)   /* Binary */
 #define SOS_FATTR_BAS     (0x2)   /* Basic  */
 #define SOS_FATTR_ASC     (0x4)   /* Ascii  */
@@ -225,7 +225,7 @@
 #define SOS_DENTRY_NR          (SOS_CLUSTER_SIZE / SOS_DENTRY_SIZE)  /**< The maximum number of directory entries */
 #define SOS_DIRPS_DEFAULT      (0x10)   /**< Directory entry record */
 #define SOS_FATPOS_DEFAULT     (0x0e)   /**< FAT record */
-#define SOS_FAT_CLSNUM_MASK    (0xff)   /**< FAT entry size in Sword is BYTE */
+#define SOS_FAT_CLSNUM_MASK    (0xffff) /**< FAT entry size in Sword/Hu-Basic is WORD */
 
 /** Convert from a cluster number to a record number
     @param[in] _clsno The cluster number
@@ -431,9 +431,6 @@ typedef WORD              fs_dirps;  /**< DIRPS for vfs */
 typedef WORD             fs_fatpos;  /**< FATPOS for vfs */
 typedef WORD            fs_blk_num;  /**< block numbers for vfs */
 
-typedef BYTE        fs_sword_dirps; /**< #DIRPS  in the sword file system. */
-typedef BYTE        fs_sword_dirno; /**< #DIRNO  in the sword file system. */
-typedef BYTE       fs_sword_fatpos; /**< #FATPOS in the sword file system. */
 typedef BYTE       fs_sword_fatent; /**< The FAT entry of the sword file system. */
 typedef BYTE         fs_sword_attr; /**< File Attribute */
 #endif  /*  _ASM  */

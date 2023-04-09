@@ -31,7 +31,7 @@
     @retval     SOS_ERROR_NOENT File not found
  */
 static int
-search_dent_by_dirno(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
+search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, fs_rec *recp,
     BYTE *dentp, size_t bufsiz){
 	int                      i;
 	int                     rc;
@@ -82,7 +82,7 @@ search_dent_by_dirno(sos_devltr ch, fs_sword_dirno dirno, fs_rec *recp,
 				goto error_out;
 			}
 
-			if ( cur == dirno ) {
+			if ( cur == SOS_DIRNO_VAL(dirno) ) {
 
 				if ( recp != NULL )
 					*recp = rec;
@@ -118,13 +118,15 @@ error_out:
     @retval    SOS_ERROR_NOENT File not found
  */
 int
-fs_swd_search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, struct _storage_fib *fib){
+fs_swd_search_dent_by_dirno(sos_devltr ch, fs_dirno dirno,
+    struct _storage_fib *fib){
 	int                      rc;
 	fs_rec                  rec;
 	BYTE  dent[SOS_DENTRY_SIZE];
 
 	/* Read a directory entry. */
-	rc = search_dent_by_dirno(ch, SOS_DIRNO_VAL(dirno), &rec, &dent[0], SOS_DENTRY_SIZE);
+	rc = search_dent_by_dirno(ch, SOS_DIRNO_VAL(dirno),
+	    &rec, &dent[0], SOS_DENTRY_SIZE);
 	if ( rc != 0 )
 		goto error_out; /* File not found */
 
@@ -132,7 +134,7 @@ fs_swd_search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, struct _storage_fib *
 	 * Fill the file information block
 	 */
 	if ( fib != NULL )
-		STORAGE_FILL_FIB(fib, ch, dirno, &dent[0]);
+		STORAGE_FILL_FIB(fib, ch, SOS_DIRNO_VAL(dirno), &dent[0]);
 
 	return 0;
 
@@ -149,7 +151,8 @@ error_out:
     @retval    SOS_ERROR_NOENT File not found
  */
 int
-fs_swd_search_dent_by_name(sos_devltr ch, const BYTE *swd_name, struct _storage_fib *fib){
+fs_swd_search_dent_by_name(sos_devltr ch, const BYTE *swd_name,
+    struct _storage_fib *fib){
 	int                         rc;
 	fs_rec                     rec;
 	fs_dirno                 dirno;
@@ -158,7 +161,8 @@ fs_swd_search_dent_by_name(sos_devltr ch, const BYTE *swd_name, struct _storage_
 	for(dirno = 0; SOS_DENTRY_NR > SOS_DIRNO_VAL(dirno); ++dirno) {
 
 		/* Read each directory entry. */
-		rc = search_dent_by_dirno(ch, SOS_DIRNO_VAL(dirno), &rec, &dent[0], SOS_DENTRY_SIZE);
+		rc = search_dent_by_dirno(ch, SOS_DIRNO_VAL(dirno),
+		    &rec, &dent[0], SOS_DENTRY_SIZE);
 		if ( rc != 0 )
 			goto error_out; /* File not found */
 
@@ -183,7 +187,7 @@ error_out:
 }
 
 /** Search a free directory entry on the disk.
-    @param[in] ch     The drive letter
+    @param[in] ch      The drive letter
     @param[out] dirnop The the address to store #DIRNO of the found entry.
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
@@ -208,7 +212,8 @@ fs_swd_search_free_dent(sos_devltr ch, fs_dirno *dirnop){
 	/*
 	 * Search a free entry
 	 */
-	for(rec = SOS_DIRPS_VAL(dirps_rec), dirno = 0; SOS_DENTRY_NR > SOS_DIRNO_VAL(dirno); ++rec) {
+	for(rec = SOS_DIRPS_VAL(dirps_rec), dirno = 0;
+	    SOS_DENTRY_NR > SOS_DIRNO_VAL(dirno); ++rec) {
 
 		/*
 		 * Read a directory entry
@@ -278,7 +283,9 @@ fs_swd_write_dent(sos_devltr ch, struct _storage_fib *fib){
 	/*
 	 * Read directory entry
 	 */
-	rec = fib->fib_dirno / SOS_DENTRIES_PER_REC + SOS_DIRPS_VAL(dirps_rec);
+	rec = SOS_DIRNO_VAL(fib->fib_dirno) / SOS_DENTRIES_PER_REC
+		+ SOS_DIRPS_VAL(dirps_rec);
+
 	rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rwcnt);
 	if ( rc != 0 )
 		goto error_out;  /* Error */
@@ -290,7 +297,7 @@ fs_swd_write_dent(sos_devltr ch, struct _storage_fib *fib){
 	}
 
 	/* Calculate dirno offset in the record */
-	dirno_offset = SOS_DIRNO_VAL(fib->fib_dirno % SOS_DENTRIES_PER_REC);
+	dirno_offset = SOS_DIRNO_VAL(fib->fib_dirno) % SOS_DENTRIES_PER_REC;
 	/* refer the directory entry to modify */
 	dent = (BYTE *)&buf[0] +  FS_SWD_DIRNO2OFF( SOS_DIRNO_VAL(dirno_offset) );
 	STORAGE_FIB2DENT(fib, dent); 	/* Modify the entry */

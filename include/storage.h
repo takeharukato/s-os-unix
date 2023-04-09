@@ -91,9 +91,59 @@
 #define STORAGE_DEVLTR_IS_VALID(_ch)					\
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
-/** Foward declarations
+/*
+ * storage index for tape device
+ */
+#define STORAGE_FIRST_CMT_IDX ( ( SOS_DL_RESV_MAX - SOS_DL_DRIVE_A ) + 1 )
+#define STORAGE_DSKIMG_IDX_T  ( STORAGE_FIRST_CMT_IDX )
+#define STORAGE_DSKIMG_IDX_S  ( STORAGE_FIRST_CMT_IDX + 1 )
+#define STORAGE_DSKIMG_IDX_Q  ( STORAGE_FIRST_CMT_IDX + 2 )
+
+/** Convert from a disk image index to the drive letter of a tape device
+    @param[in] _idx disk image index of STORAGE array
+    @return The drive letter of _IDX
+ */
+#define STORAGE_IDX2TAPE_DEVLTR(_idx)					\
+	( (_idx) == STORAGE_DSKIMG_IDX_T ? SOS_DL_COM_CMT :		\
+	    ( (_idx) == STORAGE_DSKIMG_IDX_S ? SOS_DL_MON_CMT : SOS_DL_QD ) )
+
+/** Convert from a disk image index to a drive letter
+    @param[in] _idx disk image index of STORAGE array
+    @return The drive letter of _IDX
+ */
+#define STORAGE_IDX2DRVLTR(_idx)					\
+	( ( ( (_idx) >= STORAGE_DSKIMG_IDX_A )				\
+	    && ( STORAGE_DSKIMG_IDX_A >= (_idx) ) ) ?			\
+	    ( (_idx) + SOS_DL_DRIVE_A ) : STORAGE_IDX2TAPEDEV_LTR((_idx)) )
+
+/** Convert from a drive letter to the disk image index
+    @param[in] _ch a drive letter
+    @return The disk image index of STORAGE array coresponding to _CH
+ */
+#define STORAGE_DEVLTR2IDX(_ch)						\
+	( STORAGE_DEVLTR_IS_DISK(_ch) ? ( (_ch) - SOS_DL_DRIVE_A ) :	\
+	    ( ( (_ch) == SOS_DL_COM_CMT ) ? STORAGE_DSKIMG_IDX_T :	\
+		( ( (_ch) == SOS_DL_COM_CMT ) ? STORAGE_DSKIMG_IDX_S :	\
+		    STORAGE_DSKIMG_IDX_Q ) ) )
+
+/** Determine whether the file system manager is valid
+    @param[in] _mgr     The pointer to the file system manager
+    @param[in] _name    The pointer to the file system name
+    @param[in] _ops     The pointer to the file system operations
+    @param[in] _private The pointer to the private information
+ */
+#define STORAGE_FILL_MGR(_mgr, _name, _ops, _private) do{	\
+		list_init(&((struct _storage_manager *)(_mgr)->sm_node)); \
+		(struct _storage_manager *)(_mgr)->sm_use_cnt = 0;	\
+		(struct _storage_manager *)(_mgr)->sm_name = (_name);	\
+		(struct _storage_manager *)(_mgr)->sm_ops = (_ops);	\
+		(struct _storage_manager *)(_mgr)->sm_private = (_private); \
+	}while(0)
+
+/** Forward declarations
  */
 struct _storage_fib;
+struct    _fs_ioctx;
 
 /** Type definitions
  */
@@ -111,12 +161,22 @@ struct _storage_disk_pos{
 	void                *dp_private;   /**< Private information  */
 };
 
+/** Storage manager
+ */
+struct _storage_manager{
+	struct _list             sm_node;   /**< List node                          */
+	int                   sm_use_cnt;   /**< Use count                          */
+	const char              *sm_name;   /**< Storage manager name               */
+	struct _storage_di_ops   *sm_ops;   /**< Pointer to disk image operations   */
+	void                 *sm_private;   /**< Private information for the device */
+};
+
 /** Disk Image File
  */
 struct _storage_disk_image{
 	struct _storage_disk_pos     di_pos; /**< Position information               */
 	struct _storage_manager *di_manager; /**< Device manager                     */
-	struct  _fs_fs_manager	*di_filesys; /**< File system                        */
+	struct _fs_fs_manager	*di_filesys; /**< File system                        */
 	void                    *di_private; /**< Private information for the device */
 };
 
@@ -138,16 +198,6 @@ struct _storage_di_ops{
 	    const size_t _count, size_t *_rdcntp);
 	int (*record_write)(const sos_devltr _ch, const BYTE *_src, const fs_rec _rec,
 	    const size_t _count, size_t *_wrcntp);
-};
-
-/** Storage manager
- */
-struct _storage_manager{
-	struct _list             sm_node;   /**< List node                          */
-	int                   sm_use_cnt;   /**< Use count                          */
-	const char              *sm_name;   /**< Storage manager name               */
-	struct _storage_di_ops   *sm_ops;   /**< Pointer to disk image operations   */
-	void                 *sm_private;   /**< Private information for the device */
 };
 
 /** Disk image operations
@@ -178,6 +228,7 @@ int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
 int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
 int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
 int storage_check_status(const sos_devltr _ch);
-int storage_mount_filesystem(const sos_devltr _ch, struct _fs_fs_manager *_fs_mgr);
-int storage_unmount_filesystem(const sos_devltr _ch);
+int storage_mount_filesystem(struct _fs_ioctx *_ioctx, const sos_devltr _ch,
+    struct _fs_fs_manager *_fs_mgr);
+int storage_unmount_filesystem(struct _fs_ioctx *ioctx, const sos_devltr _ch);
 #endif  /*  _STORAGE_H  */

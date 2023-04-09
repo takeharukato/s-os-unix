@@ -43,8 +43,7 @@
 #define FS_VFS_FD_FLAG_MAY_WRITE					\
 	( FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT )
 
-
-/** seek
+/** Seek
  */
 #define FS_VFS_SEEK_SET	(0)	/**< Seek from beginning of file.  */
 #define FS_VFS_SEEK_CUR	(1)	/**< Seek from current position.   */
@@ -121,21 +120,60 @@
 		    ( (BYTE *)(_dent) + SOS_FIB_OFF_FNAME ), SOS_FNAME_LEN); \
 	}while(0)
 
+
+/** File Descriptor
+ */
+#define FS_PROC_FDTBL_NR    (1)  /**< Max file decriptors for a process */
+
+/** Determine whether the file system manager is valid
+    @param[in] _fs_mgr The pointer to the file system manager
+    @retval    True   The handler can not be called.
+    @retval    False  The handler can be called.
+ */
+#define FS_FSMGR_IS_VALID(_fs_mgr)			\
+	( ( (_fs_mgr) != NULL )				\
+	    && ( (_fs_mgr)->fsm_name != NULL )		\
+	    && ( (_fs_mgr)->fsm_fops != NULL )		\
+	    && ( (_fs_mgr)->fsm_fill_super != NULL ) )
+
+/** Determine whether the file operation is defined.
+    @param[in] _fs_mgr The pointer to the file system manager
+    @param[in] _fop     The pointer to the file system operations
+ */
+#define FS_FSMGR_FOP_IS_DEFINED(_fs_mgr, _fop)		\
+	( FS_FSMGR_IS_VALID( (_fs_mgr) )		\
+	    && ( (_fs_mgr)->fsm_fops->_fop != NULL ) )
+
+/** Determine whether the file system manager is valid
+    @param[in] _fs_mgr The pointer to the file system manager
+    @param[in] _name   The pointer to the file system name
+    @param[in] _fops   The pointer to the file system operations
+    @param[in] _fill_super The pointer to the fill_super function.
+
+ */
+#define FS_FILL_MGR(_fs_mgr, _name, _fops, _fill_super) do{		\
+		(struct _fs_fs_manager *)(_fs_mgr)->fsm_name = (_name);	\
+		(struct _fs_fs_manager *)(_fs_mgr)->fsm_fops = (_fops);	\
+		(struct _fs_fs_manager *)(_fs_mgr)->fsm_fill_super = (_fill_super); \
+		list_init(&((struct _fs_fs_manager *)(_fs_mgr)->fsm_node)); \
+	}while(0)
+
 /** Foward declarations
  */
+struct _fs_ioctx;
 struct _storage_di_ops;
 
 /** Type definitions
  */
-typedef uint16_t     fs_perm;   /** permission bit map */
-typedef uint16_t fs_fd_flags;   /** fd flags           */
+typedef uint16_t     fs_perm;   /**< permission bit map */
+typedef uint16_t fs_fd_flags;   /**< fd flags           */
 
 /** File Information Block of the file
  */
 struct _storage_fib{
 	sos_devltr               fib_devltr;  /**< Device letter     */
 	fs_sword_attr              fib_attr;  /**< File attribute    */
-	fs_sword_dirno            fib_dirno;  /**< DIRNO of the file */
+	fs_dirno                  fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
 	WORD                      fib_exadr;  /**< File exec address */
@@ -150,6 +188,7 @@ struct _sword_file_descriptor{
 	fs_fd_flags         fd_sysflags;  /**< Internal flags */
 	struct _storage_disk_pos fd_pos;  /**< Position Information */
 	struct _storage_fib      fd_fib;  /**< File Information Block */
+	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
 	void                *fd_private;  /**< Private Information */
 };
 
@@ -159,6 +198,7 @@ struct _sword_dir{
 	struct _storage_disk_pos dir_pos;  /**< Position Information */
 	fs_fd_flags         dir_sysflags;  /**< Internal flags       */
 	struct _storage_fib      dir_fib;  /**< File Information Block */
+	struct _fs_ioctx      *dir_ioctx;  /**< I/O context */
 	void                *dir_private;  /**< Private Information  */
 };
 
@@ -174,23 +214,26 @@ struct _sword_header_packet{
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
+	int (*fops_get_fib)(struct _storage_fib *_dir_fib,
+		const char *_fname, struct _storage_fib *_fibp);
 	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, BYTE *_resp);
-	int (*fops_open)(sos_devltr _ch, const char *_filepath,
+	int (*fops_open)(sos_devltr _ch, const char *_fname,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, void **_privatep, BYTE *_resp);
-	int (*fops_close)(struct _sword_file_descriptor *_fdp, BYTE *_resp);
-	int (*fops_read)(struct _sword_file_descriptor *_fdp, void *_dest,
-	    size_t _count, size_t *_rdsizp, BYTE *_resp);
-	int (*fops_write)(struct _sword_file_descriptor *_fdp, const void *_src,
-	    size_t _count, size_t *_wrsizp, BYTE *_resp);
+	int (*fops_close)(struct _sword_file_descriptor *_fdp,
+	    BYTE *_resp);
+	int (*fops_read)(struct _sword_file_descriptor *_fdp,
+	    void *_dest, size_t _count, size_t *_rdsizp, BYTE *_resp);
+	int (*fops_write)(struct _sword_file_descriptor *_fdp,
+	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
 	    struct _storage_fib *_fibp, BYTE *_resp);
-	int (*fops_seek)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
-	    int _whence, fs_off_t *_newposp, BYTE *_resp);
-	int (*fops_truncate)(struct _sword_file_descriptor *_fdp, fs_off_t _offset,
-	    BYTE *_resp);
+	int (*fops_seek)(struct _sword_file_descriptor *_fdp,
+	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
+	int (*fops_truncate)(struct _fs_ioctx *_ioctx,
+	    struct _sword_file_descriptor *_fdp, fs_off_t _offset, BYTE *_resp);
 	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
 	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp,
 	    BYTE *_resp);
@@ -202,8 +245,8 @@ struct _fs_fops{
 	    const char *_newpath, BYTE *_resp);
 	int (*fops_chmod)(struct _sword_dir *_dir, const char *_path,
 	    const fs_perm _perm, BYTE *_resp);
-	int (*fops_unlink)(struct _sword_dir *_dir, const char *_path,
-	    BYTE *_resp);
+	int (*fops_unlink)(struct _sword_dir *_dir,
+	    const char *_path, BYTE *_resp);
 };
 
 /** Superblock
@@ -229,8 +272,16 @@ struct _fs_fs_manager{
 /** I/O Context
  */
 struct _fs_ioctx{
-	struct _storage_fib fib;
-
+	/** The file information block of the root directory */
+	struct _storage_fib                ioc_root[STORAGE_NR];
+	/** The file information block of the current directory */
+	struct _storage_fib                 ioc_cwd[STORAGE_NR];
+	/** The file descriptor table */
+	struct _sword_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
+	/** Current #DIRPS */
+	fs_dirps                                      ioc_dirps;
+	/** Current #FATPOS */
+	fs_fatpos                                    ioc_fatpos;
 };
 
 /** File system table
@@ -241,5 +292,8 @@ struct _fs_filesystem_table{
 
 int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
 int fs_vfs_unregister_filesystem(const char *_name);
+int ref_filesystem(const sos_devltr _ch, struct _fs_fs_manager **_fs_mgrp);
 
+int fs_vfs_opendir(sos_devltr _ch, struct _fs_ioctx *_ioctx,
+    const char *_fname, struct _sword_dir *_dirp, BYTE *_resp);
 #endif  /*  _FS_VFS_H  */

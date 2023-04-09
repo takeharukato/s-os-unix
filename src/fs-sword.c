@@ -31,7 +31,8 @@
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
+change_filesize_sword(struct _storage_fib *fib,
+    struct _storage_disk_pos *pos,
     fs_off_t newpos){
 	int                        rc;
 	fs_off_t               newsiz;
@@ -66,15 +67,18 @@ change_filesize_sword(struct _storage_fib *fib, struct _storage_disk_pos *pos,
 		 */
 		if ( ( newsiz > 0) && ( ( ( newsiz + 1 ) % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
-			rc = fs_swd_read_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
-			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
+			rc = fs_swd_read_block(fib, SOS_CALC_ALIGN(newsiz,
+				SOS_CLUSTER_SIZE), &clsbuf[0],
+			    SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
 				goto error_out;
 
 			memset((void *)&clsbuf[0] + ( newsiz + 1) % SOS_CLUSTER_SIZE,
-			    0x0, SOS_CLUSTER_SIZE - ( ( newsiz + 1) % SOS_CLUSTER_SIZE ) );
+			    0x0,
+			    SOS_CLUSTER_SIZE - ( ( newsiz + 1) % SOS_CLUSTER_SIZE ) );
 
-			rc = fs_swd_write_block(fib, SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
+			rc = fs_swd_write_block(fib,
+			    SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
 			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
 				goto error_out;
@@ -121,9 +125,9 @@ error_out:
     *    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_creat_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
-    const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
-    BYTE *resp){
+fops_creat_sword(sos_devltr ch,
+    const char *fname, fs_fd_flags flags, const struct _sword_header_packet *pkt,
+    struct _storage_fib *fibp, BYTE *resp){
 	int                           rc;
 	fs_dirno                   dirno;
 	struct _storage_fib          fib;
@@ -228,9 +232,9 @@ error_out:
     * SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
-    const struct _sword_header_packet *pkt, struct _storage_fib *fibp,
-    void **privatep, BYTE *resp){
+fops_open_sword(sos_devltr ch,
+    const char *filepath, fs_fd_flags flags, const struct _sword_header_packet *pkt,
+    struct _storage_fib *fibp, void **privatep, BYTE *resp){
 	int                           rc;
 	struct _storage_fib          fib;
 	BYTE                         res;
@@ -254,7 +258,7 @@ fops_open_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
 
-		rc = fops_creat_sword(ch, fname, flags, pkt, fibp, &res);
+		rc = fops_creat_sword(ch, filepath, flags, pkt, fibp, &res);
 		if ( rc != 0 ) {
 
 			rc = res;
@@ -267,7 +271,7 @@ fops_open_sword(sos_devltr ch, const char *fname, fs_fd_flags flags,
 	 * convert the filename which was inputted from the console to
 	 * the sword filename format.
 	 */
-	rc = fs_unix2sword(fname, &swd_name[0], SOS_FNAME_LEN);
+	rc = fs_unix2sword(filepath, &swd_name[0], SOS_FNAME_LEN);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -322,7 +326,8 @@ error_out:
     @retval      0  Success
  */
 int
-fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp){
+fops_close_sword(struct _sword_file_descriptor *fdp,
+    BYTE *resp){
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(0);  /* return code */
@@ -447,8 +452,8 @@ error_out:
     * SOS_ERROR_NOSPC  Device full
  */
 int
-fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib,
-    BYTE *resp){
+fops_stat_sword(struct _sword_file_descriptor *fdp,
+    struct _storage_fib *fib, BYTE *resp){
 
 	/* Copy the file infomation block */
 	memmove(fib, &fdp->fd_fib, sizeof(struct _storage_fib));
@@ -474,8 +479,8 @@ fops_stat_sword(struct _sword_file_descriptor *fdp, struct _storage_fib *fib,
     @retval    -EINVAL           Invalid whence
  */
 int
-fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
-    fs_off_t *new_posp, BYTE *resp){
+fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset,
+    int whence, fs_off_t *new_posp, BYTE *resp){
 	fs_off_t                  new;
 	fs_off_t                  cur;
 	fs_off_t                  off;
@@ -543,7 +548,8 @@ fops_seek_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, int whence,
     * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
+fops_truncate_sword(struct _sword_file_descriptor *fdp,
+    fs_off_t offset, BYTE *resp){
 	int                        rc;
 	fs_off_t               newpos;
 	struct _storage_fib      *fib;
@@ -585,7 +591,7 @@ error_out:
     variable in DIR  and the private information.
  */
 int
-fops_opendir_sword(struct _sword_dir *dir, BYTE *resp){
+fops_opendir_sword(const char *filepath, struct _sword_dir *dir, BYTE *resp){
 	struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
@@ -621,7 +627,6 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 	struct _storage_fib  *dir_fib;
 	struct _storage_disk_pos *pos;
 	fs_dirno                dirno;
-	fs_sword_dirno       swddirno;
 
 	pos = &dir->dir_pos;  /* Position information */
 	dir_fib = &dir->dir_fib;  /* File Information Block of the directory */
@@ -636,14 +641,13 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 		goto error_out;
 	}
 
-	swddirno = SOS_DIRNO_VAL(dirno);
-
 	if ( fib != NULL ) {
 
 		/*
 		 * Fill the file information block
 		 */
-		rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr, swddirno, fib);
+		rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr,
+		    SOS_DIRNO_VAL(dirno), fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -722,7 +726,8 @@ fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno, BYTE *resp){
     an array of directory entries.
  */
 int
-fops_telldir_sword(const struct _sword_dir *dir, fs_dirno *dirnop, BYTE *resp){
+fops_telldir_sword(const struct _sword_dir *dir,
+    fs_dirno *dirnop, BYTE *resp){
 	const struct _storage_disk_pos *pos;
 
 	pos = &dir->dir_pos;  /* Position information */
@@ -800,7 +805,8 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &old_swdname[0], &old_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
+	    &old_swdname[0], &old_fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -814,7 +820,8 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 
 	/* Confirm the new filename doesn't exist.
 	 */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &new_swdname[0], &new_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
+	    &new_swdname[0], &new_fib);
 	if ( rc == 0 ) {
 
 		rc = SOS_ERROR_EXIST;
@@ -872,7 +879,8 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
+	    &swdname[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -910,7 +918,8 @@ error_out:
     * SOS_ERROR_BADFAT Invalid cluster chain
  */
 int
-fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
+fops_unlink_sword(struct _sword_dir *dir,
+    const char *path, BYTE *resp){
 	int                             rc;
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
@@ -929,7 +938,8 @@ fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp){
 	}
 
 	/* Obtain a directory entry for the file to unlink. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
+	    &swdname[0], &fib);
 	if ( rc != 0 )
 		goto error_out;
 

@@ -80,11 +80,11 @@ static struct _storage_di_ops diops_2dimg={
 static struct _disk2d_private disk_2d_private;  /* Private information */
 
 static struct _storage_manager disk_2d_manager = {
-	__LIST_INITIALIZER(&disk_2d_manager.sm_node),
-	0,
-	"2D",
-	&diops_2dimg,
-	&disk_2d_private
+	.sm_node = __LIST_INITIALIZER(&disk_2d_manager.sm_node),
+	.sm_use_cnt = 0,
+	.sm_name = "2D",
+	.sm_ops = &diops_2dimg,
+	.sm_private = &disk_2d_private
 };
 
 /*
