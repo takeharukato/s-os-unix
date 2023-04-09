@@ -3,10 +3,10 @@
 #include <string.h>
 #include <errno.h>
 
-#include "storage.h"
 #include "sim-type.h"
 #include "misc.h"
 #include "fs-vfs.h"
+#include "storage.h"
 #include "fs-sword.h"
 #include "tst-swd-swdfs.h"
 

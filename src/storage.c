@@ -21,8 +21,8 @@
 #include "misc.h"
 #include "compat.h"
 #include "sos.h"
-#include "storage.h"
 #include "fs-vfs.h"
+#include "storage.h"
 #include "list.h"
 #include "queue.h"
 

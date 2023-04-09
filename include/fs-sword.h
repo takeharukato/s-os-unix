@@ -111,8 +111,12 @@
         ( ( ( (_f) & FS_VFS_FD_FLAG_MAY_WRITE ) == FS_VFS_FD_FLAG_O_CREAT ) || \
 	    !SOS_FATTR_IS_VALID(_attr) )
 
-/*
- * Data types
+
+/** Foward declarations
+ */
+struct _storage_fib;
+
+/** Data types
  */
 
 /** File Allocation Table
@@ -120,8 +124,6 @@
 struct _fs_sword_fat{
 	fs_sword_fatent fat[SOS_FAT_SIZE];  /**< File Allocation Table */
 };
-
-struct _storage_fib;
 
 int fs_swd_get_block_number(struct _storage_fib *_fib, fs_off_t _offset, int _mode, fs_blk_num *_blkp);
 int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset, fs_blk_num *_relblkp);

@@ -56,11 +56,92 @@
 #define FS_PERM_WR    (2)    /**< writable */
 #define FS_PERM_EX    (4)    /**< execute */
 
-/*
- * Type definitions
+/** File Information block
+ */
+
+#define STORAGE_FIB_SIZE_MAX   (0xffff)  /**< Max size of SIZE/DTADR/EXADR */
+
+/** Fix the file size up
+    @param[in] _v The size to fix.
+    @return  fixed size.
+ */
+#define STORAGE_FIB_FIX_SIZE(_v) \
+	( ( (_v) > STORAGE_FIB_SIZE_MAX ) ? (STORAGE_FIB_SIZE_MAX) : (_v) )
+
+/** Fill the file information block on the directory entry
+    @param[in] _fib    The pointer to the file information block
+    @param[in] _dent   The directory entry to copy the FIB to
+ */
+#define STORAGE_FIB2DENT(_fib, _dent) do{				\
+		*(BYTE *)( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR ) =	\
+			((struct _storage_fib *)(_fib))->fib_attr;	\
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_SIZE ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_size); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_DTADR ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_dtadr); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_EXADR ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_exadr); \
+		*(WORD *)( (BYTE *)(_dent) + SOS_FIB_OFF_CLS ) =	\
+			bswap_word_host_to_z80(				\
+				((struct _storage_fib *)(_fib))->fib_cls); \
+		memcpy(( (BYTE *)(_dent) + SOS_FIB_OFF_FNAME ),		\
+		    &((struct _storage_fib *)(_fib))->fib_sword_name[0], \
+		    SOS_FNAME_LEN);					\
+		memset((BYTE *)( (BYTE *)(_dent) + SOS_FIB_OFF_DATE ), 0x0, \
+		    SOS_FIB_SIZE - SOS_FIB_OFF_DATE - sizeof(WORD));	\
+	}while(0)
+
+/** Fill the file information block
+    @param[in] _fib    The pointer to the file information block
+    @param[in] _ch     The device letter
+    @param[in] _dirno  The #DIRNO of the file from the beginning of the directory entry
+    @param[in] _dent   The directory entry to copy the FIB from
+ */
+#define STORAGE_FILL_FIB(_fib, _ch, _dirno, _dent) do{		\
+		((struct _storage_fib *)(_fib))->fib_devltr = (_ch);	\
+		((struct _storage_fib *)(_fib))->fib_attr =		\
+			*( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR );	\
+		((struct _storage_fib *)(_fib))->fib_dirno = (_dirno);	\
+		((struct _storage_fib *)(_fib))->fib_size =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_SIZE ) );			\
+		((struct _storage_fib *)(_fib))->fib_dtadr =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_DTADR ) );		\
+		((struct _storage_fib *)(_fib))->fib_exadr =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_EXADR ) );		\
+		((struct _storage_fib *)(_fib))->fib_cls =		\
+			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
+				+ SOS_FIB_OFF_CLS ) );			\
+		memcpy(&((struct _storage_fib *)(_fib))->fib_sword_name[0], \
+		    ( (BYTE *)(_dent) + SOS_FIB_OFF_FNAME ), SOS_FNAME_LEN); \
+	}while(0)
+
+/** Foward declarations
+ */
+struct _storage_di_ops;
+
+/** Type definitions
  */
 typedef uint16_t     fs_perm;   /** permission bit map */
 typedef uint16_t fs_fd_flags;   /** fd flags           */
+
+/** File Information Block of the file
+ */
+struct _storage_fib{
+	sos_devltr               fib_devltr;  /**< Device letter     */
+	fs_sword_attr              fib_attr;  /**< File attribute    */
+	fs_sword_dirno            fib_dirno;  /**< DIRNO of the file */
+	WORD                       fib_size;  /**< File size         */
+	WORD                      fib_dtadr;  /**< File load address */
+	WORD                      fib_exadr;  /**< File exec address */
+	WORD                        fib_cls;  /**< The first cluster on a disk */
+	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< SWORD file name (Not C string) */
+};
 
 /** File descriptor
  */
@@ -143,6 +224,13 @@ struct _fs_fs_manager{
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
 	int (*fsm_fill_super)(struct _fs_super_block *_super); /**< fill super block  */
 	void                 *fsm_private;   /**< Private information          */
+};
+
+/** I/O Context
+ */
+struct _fs_ioctx{
+	struct _storage_fib fib;
+
 };
 
 /** File system table

@@ -16,7 +16,9 @@
 #include "sim-type.h"
 #include "misc.h"
 #include "sos.h"
+#include "fs-vfs.h"
 #include "storage.h"
+#include "fs-sword.h"
 
 /** convert from a SWORD file name to the UNIX file name
     @param[in]  swordname The file name on SWORD

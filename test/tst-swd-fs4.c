@@ -3,11 +3,12 @@
 #include <string.h>
 #include <errno.h>
 
-#include "storage.h"
+
 #include "disk-2d.h"
 #include "sim-type.h"
 #include "misc.h"
 #include "fs-vfs.h"
+#include "storage.h"
 #include "fs-sword.h"
 
 int fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
