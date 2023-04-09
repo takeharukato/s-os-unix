@@ -294,6 +294,4 @@ int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
 int fs_vfs_unregister_filesystem(const char *_name);
 int ref_filesystem(const sos_devltr _ch, struct _fs_fs_manager **_fs_mgrp);
 
-int fs_vfs_opendir(sos_devltr _ch, struct _fs_ioctx *_ioctx,
-    const char *_fname, struct _sword_dir *_dirp, BYTE *_resp);
 #endif  /*  _FS_VFS_H  */

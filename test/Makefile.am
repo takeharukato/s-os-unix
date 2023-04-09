@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = tst-swd-fs1.out #tst-swd-fs2.out tst-swd-fs3.out tst-swd-fs4.out tst-swd-fat.out
+noinst_PROGRAMS = tst-swd-fs1.out tst-swd-fs2.out tst-swd-fs3.out tst-swd-fs4.out tst-swd-fat.out
 
 tst_swd_fs1_out_CPPFLAGS = -DVERSION=\"${VERSION}\" -DDATADIR=\"$(pkgdatadir)\"
 tst_swd_fs1_out_CFLAGS = ${NCURSES_CFLAGS}
