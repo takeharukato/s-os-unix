@@ -143,7 +143,6 @@
 /** Forward declarations
  */
 struct _storage_fib;
-struct    _fs_ioctx;
 
 /** Type definitions
  */
@@ -176,7 +175,6 @@ struct _storage_manager{
 struct _storage_disk_image{
 	struct _storage_disk_pos     di_pos; /**< Position information               */
 	struct _storage_manager *di_manager; /**< Device manager                     */
-	struct _fs_fs_manager	*di_filesys; /**< File system                        */
 	void                    *di_private; /**< Private information for the device */
 };
 
@@ -228,7 +226,4 @@ int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
 int storage_get_dirps(const sos_devltr _ch, fs_dirps *_dirpsp);
 int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
 int storage_check_status(const sos_devltr _ch);
-int storage_mount_filesystem(struct _fs_ioctx *_ioctx, const sos_devltr _ch,
-    struct _fs_fs_manager *_fs_mgr);
-int storage_unmount_filesystem(struct _fs_ioctx *ioctx, const sos_devltr _ch);
 #endif  /*  _STORAGE_H  */

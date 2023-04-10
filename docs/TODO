@@ -47,6 +47,13 @@ TODO list
 * D88フォーマット対応
 
 [fs]
+* storage管理とは別にマウントテーブルを管理する方針に方針変更。
+  root_fibを保持できるようにする必要があるため。
+  _fs_fopsにfib比較処理を追加して, SWORDの場合, fibのfib_clsで比較する。
+  SWORDの場合は, root i-nodeのfib->fib_clsを0に設定することで, root i-nodeだった場合,
+  ioctxのdirpsに設定されているレコードの内容を元にlooupを実行することで, FAT12/Hu-Basic
+  のようなディレクトリエントリを一貫してクラスタ番号で管理するファイルシステムと
+  共存可能にする。
 * fatpos/dirpsはioctxを参照するようにする
 * ファイルシステムマウント処理作成
 * ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する

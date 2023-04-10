@@ -30,6 +30,8 @@
  */
 #define FS_VFS_IODIR_WRITE(_mod) ( (_mod) & FS_VFS_IO_DIR_WR )
 
+#define FS_VFS_PATH_DELIM '/'   /**< Path delimiter */
+
 /** file decriptor flags
  */
 #define FS_VFS_FD_FLAG_O_RDONLY   (0x0)     /**< ReadOnly   */
@@ -167,11 +169,12 @@ struct _storage_di_ops;
  */
 typedef uint16_t     fs_perm;   /**< permission bit map */
 typedef uint16_t fs_fd_flags;   /**< fd flags           */
+typedef uint32_t vfs_mnt_flags; /**< mount flags        */
 
 /** File Information Block of the file
  */
 struct _storage_fib{
-	sos_devltr               fib_devltr;  /**< Device letter     */
+	sos_devltr               fib_devltr;  /**< Drive letter      */
 	fs_sword_attr              fib_attr;  /**< File attribute    */
 	fs_dirno                  fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
@@ -210,12 +213,42 @@ struct _sword_header_packet{
 	WORD hdr_exadr; /**< File exec address */
 };
 
+/** Superblock
+ */
+struct _fs_super_block{
+	fs_blk_num     sb_blk_nr;  /**< The block numbers which the device contains */
+	fs_blk_num   sb_freeblks;  /**< The block numbers of free blocks */
+	fs_dirps        sb_dirps;  /**< The the first directory entry record */
+	fs_fatpos      sb_fatpos;  /**< The allocation table record */
+};
+
+/** I/O Context
+ */
+struct _fs_ioctx{
+	/** The file information block of the root directory */
+	struct _storage_fib                ioc_root[STORAGE_NR];
+	/** The file information block of the current directory */
+	struct _storage_fib                 ioc_cwd[STORAGE_NR];
+	/** The file descriptor table */
+	struct _sword_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
+	/** Current #DIRPS */
+	fs_dirps                                      ioc_dirps;
+	/** Current #FATPOS */
+	fs_fatpos                                    ioc_fatpos;
+};
+
 /** File operations
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
-	int (*fops_get_fib)(struct _storage_fib *_dir_fib,
-		const char *_fname, struct _storage_fib *_fibp);
+	int (*fops_mount)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const struct _storage_fib *_dir_fib,
+	    const char *_fname, struct _fs_super_block *_superp,
+	    vfs_mnt_flags *_mnt_flagsp, struct _storage_fib *_root_fibp);
+	int (*fops_unmount)(sos_devltr _ch, const struct _fs_super_block *_super);
+	int (*fops_lookup)(struct _fs_ioctx *_ioctx, struct _fs_super_block *_super,
+	    const struct _storage_fib *_dir_fib,
+	    const char *_fname, struct _storage_fib *_fibp);
 	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
 	    struct _storage_fib *_fibp, BYTE *_resp);
@@ -232,8 +265,8 @@ struct _fs_fops{
 	    struct _storage_fib *_fibp, BYTE *_resp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
-	int (*fops_truncate)(struct _fs_ioctx *_ioctx,
-	    struct _sword_file_descriptor *_fdp, fs_off_t _offset, BYTE *_resp);
+	int (*fops_truncate)(struct _sword_file_descriptor *_fdp,
+	    fs_off_t _offset, BYTE *_resp);
 	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
 	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp,
 	    BYTE *_resp);
@@ -249,15 +282,6 @@ struct _fs_fops{
 	    const char *_path, BYTE *_resp);
 };
 
-/** Superblock
- */
-struct _fs_super_block{
-	fs_blk_num     sb_blk_nr;  /**< The block numbers which the device contains */
-	fs_blk_num   sb_freeblks;  /**< The block numbers of free blocks */
-	fs_dirps        sb_dirps;  /**< The the first directory entry record */
-	fs_fatpos      sb_fatpos;  /**< The allocation table record */
-};
-
 /** File system manager
  */
 struct _fs_fs_manager{
@@ -265,23 +289,9 @@ struct _fs_fs_manager{
 	int                   fsm_use_cnt;   /**< Use count                    */
 	const char              *fsm_name;   /**< File system name             */
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
-	int (*fsm_fill_super)(struct _fs_super_block *_super); /**< fill super block  */
+	int (*fsm_fill_super)(struct _fs_ioctx *_ioctx,
+	    struct _fs_super_block *_super); /**< fill super block  */
 	void                 *fsm_private;   /**< Private information          */
-};
-
-/** I/O Context
- */
-struct _fs_ioctx{
-	/** The file information block of the root directory */
-	struct _storage_fib                ioc_root[STORAGE_NR];
-	/** The file information block of the current directory */
-	struct _storage_fib                 ioc_cwd[STORAGE_NR];
-	/** The file descriptor table */
-	struct _sword_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
-	/** Current #DIRPS */
-	fs_dirps                                      ioc_dirps;
-	/** Current #FATPOS */
-	fs_fatpos                                    ioc_fatpos;
 };
 
 /** File system table
