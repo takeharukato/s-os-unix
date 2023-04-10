@@ -3,12 +3,11 @@
 #include <string.h>
 #include <errno.h>
 
-
+#include "storage.h"
 #include "disk-2d.h"
 #include "sim-type.h"
 #include "misc.h"
 #include "fs-vfs.h"
-#include "storage.h"
 #include "fs-sword.h"
 
 int fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
@@ -24,7 +23,6 @@ int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
 int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 int fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp);
 int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
-int fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp);
 
 const char *ftype_name_tbl[]={
 	"???",
@@ -289,29 +287,6 @@ error_out:
 }
 
 static int
-fs_vfs_truncate(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
-	BYTE res;
-
-	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
-
-		res = SOS_ERROR_NOTOPEN;
-		goto error_out;
-	}
-
-	fops_truncate_sword(fdp, offset, &res);
-	if ( res != 0 )
-		goto error_out;
-
-	return 0;
-
-error_out:
-	if ( resp != NULL )
-		*resp = res;
-
-	return -1;
-}
-
-static int
 fs_vfs_unlink(struct _sword_dir *dir, const char *path, BYTE *resp){
 	int   rc;
 	BYTE res;
@@ -335,6 +310,83 @@ error_out:
 	if ( resp != NULL )
 		*resp = res;
 	return -1;
+}
+
+static int
+fs_vfs_read(struct _sword_file_descriptor *fdp, void *buf, size_t count,
+    size_t *rwcntp, BYTE *resp){
+	int                        rc;
+	size_t                  rdsiz;
+	BYTE                      res;
+	struct _storage_disk_pos *pos;
+
+	pos = &fdp->fd_pos;
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	rdsiz = 0;  /* Init read size */
+	rc = fops_read_sword(fdp, buf, count, &rdsiz, &res);
+	if ( rc != 0 )
+		goto error_out;
+
+	pos->dp_pos += rdsiz;  /* update position */
+
+	res = 0;
+
+error_out:
+	if ( rwcntp != NULL )
+		*rwcntp = rdsiz;
+
+	if ( resp != NULL )
+		*resp = res;
+
+	return rc;
+}
+
+static int
+fs_vfs_write(struct _sword_file_descriptor *fdp, const void *buf, size_t count,
+    size_t *rwcntp, BYTE *resp){
+	int                        rc;
+	size_t                  wrsiz;
+	BYTE                      res;
+	struct _storage_disk_pos *pos;
+
+	pos = &fdp->fd_pos;
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	if ( !( fdp->fd_flags & FS_VFS_FD_FLAG_MAY_WRITE ) ) {
+
+		res = SOS_ERROR_NOTOPEN;  /* The file is not opend to write. */
+		goto error_out;
+	}
+
+	wrsiz = 0;  /* Init written size */
+
+	rc = fops_write_sword(fdp, buf, count, &wrsiz, &res);
+	if ( rc != 0 )
+		goto error_out;
+
+	pos->dp_pos += wrsiz;  /* update position */
+
+	res = 0;
+
+error_out:
+	if ( rwcntp != NULL )
+		*rwcntp = wrsiz;
+
+	if ( resp != NULL )
+		*resp = res;
+
+	return rc;
 }
 
 static int
@@ -381,6 +433,7 @@ show_dir(sos_devltr ch){
 
 	return 0;
 }
+
 int
 main(int argc, char *argv[]){
 	int            rc;
@@ -389,6 +442,8 @@ main(int argc, char *argv[]){
 	struct _sword_header_packet *pkt, hdr_pkt;
 	struct _sword_dir dir;
 	char *buf1;
+	char *buf2;
+	size_t cnt;
 	BYTE res;
 
 	storage_init();
@@ -399,6 +454,10 @@ main(int argc, char *argv[]){
 
 	buf1 = malloc(SOS_MAX_FILE_SIZE);
 	if ( buf1 == NULL )
+		exit(1);
+
+	buf2 = malloc(SOS_MAX_FILE_SIZE);
+	if ( buf2 == NULL )
 		exit(1);
 
 	pkt = &hdr_pkt;
@@ -426,43 +485,35 @@ main(int argc, char *argv[]){
 		memset((char*)&buf1[0] + (SOS_CLUSTER_SIZE * i), '0'+ i,
 		    SOS_CLUSTER_SIZE);
 	}
-
-	/* Truncate 0(No change) */
-	rc = fs_vfs_truncate(&fd, 0, &res);
+	rc = fs_vfs_write(&fd, buf1, SOS_MAX_FILE_SIZE, &cnt, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
-
-	/* Truncate MAX_FILE_SIZE */
-	rc = fs_vfs_truncate(&fd, SOS_MAX_FILE_SIZE, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
-
-	/* Truncate 0 */
-	rc = fs_vfs_truncate(&fd, 0, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
-
-	/* Truncate 2 block  */
-	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
-
-	/* Truncate 2.5 block without allocating blocks by shirnking  */
-	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE + SOS_CLUSTER_SIZE/2, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
-
-	/* Truncate 2 block without releasing blocks by shirnking */
-	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
+	sos_assert( cnt == SOS_MAX_FILE_SIZE );
 
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res == 0 );
 
-	printf("After Truncate\n");
+	printf("After write\n");
 	show_dir('A');
 
+	/*
+	 * Verify
+	 */
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', "MAX-SIZ.TXT",
+	    FS_VFS_FD_FLAG_O_RDWR, pkt, &fd, &res);
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_read(&fd, buf2, SOS_MAX_FILE_SIZE, &cnt, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+	sos_assert( cnt == SOS_MAX_FILE_SIZE );
+
+	rc = fs_vfs_close(&fd, &res);
+	sos_assert( res == 0 );
+
+	rc = memcmp(buf1, buf2, SOS_MAX_FILE_SIZE);
+	sos_assert( rc == 0 );
 
 	/*
 	 * remove file
@@ -481,6 +532,7 @@ main(int argc, char *argv[]){
 	show_dir('A');
 
 	free(buf1);
+	free(buf2);
 
 	return 0;
 }

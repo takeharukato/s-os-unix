@@ -1,12 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-#include "storage.h"
+
 #include "disk-2d.h"
 #include "sim-type.h"
 #include "misc.h"
 #include "fs-vfs.h"
+#include "storage.h"
 #include "fs-sword.h"
 
 int fops_open_sword(sos_devltr ch, const char *fname, WORD flags,
@@ -18,10 +20,11 @@ int fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
     size_t count, size_t *wrsizp, BYTE *resp);
 int fops_close_sword(struct _sword_file_descriptor *fdp, BYTE *resp);
 int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
-int fops_opendir_sword(const char *path, struct _sword_dir *dir, BYTE *resp);
+int fops_opendir_sword(struct _sword_dir *dir, BYTE *resp);
 int fops_closedir_sword(struct _sword_dir *_dir, BYTE *_resp);
 int fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp);
 int fops_unlink_sword(struct _sword_dir *dir, const char *path, BYTE *resp);
+int fops_truncate_sword(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp);
 
 const char *ftype_name_tbl[]={
 	"???",
@@ -123,8 +126,8 @@ init_dir_stream(sos_devltr ch, struct _sword_dir *dir){
 }
 
 static int
-fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
-    struct _sword_dir *dirp, BYTE *resp){
+fs_vfs_opendir(sos_devltr ch, struct _sword_dir *dirp,
+    BYTE *resp){
 	int                rc;
 	struct _sword_dir dir;
 	BYTE              res;
@@ -143,7 +146,7 @@ fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 
 	init_dir_stream(ch, &dir);
 
-	rc = fops_opendir_sword(path, &dir, &res);
+	rc = fops_opendir_sword(&dir, &res);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -249,6 +252,9 @@ fs_vfs_open(sos_devltr ch, const char *filepath, WORD flags,
 	fdp->fd_flags = flags; /* remember file open flags */
 	fdp->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;  /* set file opened */
 
+	if ( resp != NULL )
+		*resp = res;
+
 	return 0;
 
 error_out:
@@ -272,6 +278,29 @@ fs_vfs_close(struct _sword_file_descriptor *fdp, BYTE *resp){
 		goto error_out;
 
 	fd_init(0, fdp);  /* Clear file descriptor status */
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	return -1;
+}
+
+static int
+fs_vfs_truncate(struct _sword_file_descriptor *fdp, fs_off_t offset, BYTE *resp){
+	BYTE res;
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	fops_truncate_sword(fdp, offset, &res);
+	if ( res != 0 )
+		goto error_out;
 
 	return 0;
 
@@ -309,83 +338,6 @@ error_out:
 }
 
 static int
-fs_vfs_read(struct _sword_file_descriptor *fdp, void *buf, size_t count,
-    size_t *rwcntp, BYTE *resp){
-	int                        rc;
-	size_t                  rdsiz;
-	BYTE                      res;
-	struct _storage_disk_pos *pos;
-
-	pos = &fdp->fd_pos;
-
-	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
-
-		res = SOS_ERROR_NOTOPEN;
-		goto error_out;
-	}
-
-	rdsiz = 0;  /* Init read size */
-	rc = fops_read_sword(fdp, buf, count, &rdsiz, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	pos->dp_pos += rdsiz;  /* update position */
-
-	res = 0;
-
-error_out:
-	if ( rwcntp != NULL )
-		*rwcntp = rdsiz;
-
-	if ( resp != NULL )
-		*resp = res;
-
-	return rc;
-}
-
-static int
-fs_vfs_write(struct _sword_file_descriptor *fdp, const void *buf, size_t count,
-    size_t *rwcntp, BYTE *resp){
-	int                        rc;
-	size_t                  wrsiz;
-	BYTE                      res;
-	struct _storage_disk_pos *pos;
-
-	pos = &fdp->fd_pos;
-
-	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
-
-		res = SOS_ERROR_NOTOPEN;
-		goto error_out;
-	}
-
-	if ( !( fdp->fd_flags & FS_VFS_FD_FLAG_MAY_WRITE ) ) {
-
-		res = SOS_ERROR_NOTOPEN;  /* The file is not opend to write. */
-		goto error_out;
-	}
-
-	wrsiz = 0;  /* Init written size */
-
-	rc = fops_write_sword(fdp, buf, count, &wrsiz, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	pos->dp_pos += wrsiz;  /* update position */
-
-	res = 0;
-
-error_out:
-	if ( rwcntp != NULL )
-		*rwcntp = wrsiz;
-
-	if ( resp != NULL )
-		*resp = res;
-
-	return rc;
-}
-
-static int
 show_dir(sos_devltr ch){
 	int   rc;
 	int   idx;
@@ -395,7 +347,7 @@ show_dir(sos_devltr ch){
 	struct _sword_dir dir;
 	BYTE res;
 
-	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
+	rc = fs_vfs_opendir('A', &dir, &res);
 	if ( rc != 0 )
 		return res;
 
@@ -429,33 +381,14 @@ show_dir(sos_devltr ch){
 
 	return 0;
 }
-static int
-read_file_test(struct _sword_file_descriptor *fdp){
-	int           rc;
-	BYTE         res;
-	char buf[BUFSIZ];
-	size_t       cnt;
-
-	do{
-		cnt = 0;
-		rc = fs_vfs_read(fdp, &buf[0], BUFSIZ, &cnt, &res);
-		if ( ( rc != 0 ) || ( cnt == 0 ) )
-			break;
-		printf("Read:%lu byte\n", cnt);
-	}while( res == 0 );
-
-	return 0;
-}
 int
 main(int argc, char *argv[]){
 	int            rc;
+	int             i;
 	struct _sword_file_descriptor fd;
 	struct _sword_header_packet *pkt, hdr_pkt;
 	struct _sword_dir dir;
-	char buf1[BUFSIZ];
-	char buf2[BUFSIZ];
-	size_t len;
-	size_t cnt;
+	char *buf1;
 	BYTE res;
 
 	storage_init();
@@ -463,6 +396,10 @@ main(int argc, char *argv[]){
 
 	if ( 2 > argc )
 		return 0;
+
+	buf1 = malloc(SOS_MAX_FILE_SIZE);
+	if ( buf1 == NULL )
+		exit(1);
 
 	pkt = &hdr_pkt;
 	memset(pkt, 0, sizeof(struct _sword_header_packet));
@@ -475,159 +412,66 @@ main(int argc, char *argv[]){
 	rc = storage_set_fatpos('A', SOS_FATPOS_DEFAULT);
 	sos_assert( rc == 0 );
 
-	/*
-	 * Open/Close
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
-	/* close error (double close) */
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == SOS_ERROR_NOTOPEN );
-
-	/* Invalid file attribute */
-	pkt->hdr_attr = SOS_FATTR_BIN;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_NOENT );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file not found */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_NOENT );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file exists */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_SYNTAX );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* file name exists */
-	pkt->hdr_attr = SOS_FATTR_BIN;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_CREAT|FS_VFS_FD_FLAG_O_EXCL,
-	    pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_EXIST );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	/* offline device */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('B', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == SOS_ERROR_OFFLINE );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res != 0 );
-
-	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_closedir(&dir, &res);
-	sos_assert( res == 0 );
-
 	show_dir('A');
-
-	/*
-	 * Create test
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "NOEXISTS.ASM",
-	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
-	printf("After create\n");
-	show_dir('A');
-
-	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_unlink(&dir, "NOEXISTS.ASM", &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_closedir(&dir, &res);
-	sos_assert( res == 0 );
-
-	printf("After unlink\n");
-	show_dir('A');
-
-	/*
-	 * read ascii file
-	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "SAMPLE1.ASM",
-	    FS_VFS_FD_FLAG_O_RDONLY, pkt, &fd, &res);
-	sos_assert( res == 0 );
-
-	rc = read_file_test(&fd);
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
 	/*
 	 * write ascii file
 	 */
 	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "TST-SWD.TXT",
+	rc = fs_vfs_open('A', "MAX-SIZ.TXT",
 	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT, pkt, &fd, &res);
 	sos_assert( res == 0 );
 
-	snprintf(&buf1[0], BUFSIZ, "Sword file system test.\r");
-	len = strlen(&buf1[0]);
+	for(i = 0; SOS_MAX_FILE_SIZE / SOS_CLUSTER_SIZE > i; ++i){
 
-	rc = fs_vfs_write(&fd, &buf1[0], len, &cnt, &res);
+		memset((char*)&buf1[0] + (SOS_CLUSTER_SIZE * i), '0'+ i,
+		    SOS_CLUSTER_SIZE);
+	}
+
+	/* Truncate 0(No change) */
+	rc = fs_vfs_truncate(&fd, 0, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
-	sos_assert( cnt == len );
+
+	/* Truncate MAX_FILE_SIZE */
+	rc = fs_vfs_truncate(&fd, SOS_MAX_FILE_SIZE, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	/* Truncate 0 */
+	rc = fs_vfs_truncate(&fd, 0, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	/* Truncate 2 block  */
+	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	/* Truncate 2.5 block without allocating blocks by shirnking  */
+	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE + SOS_CLUSTER_SIZE/2, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	/* Truncate 2 block without releasing blocks by shirnking */
+	rc = fs_vfs_truncate(&fd, SOS_CLUSTER_SIZE, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
 
 	rc = fs_vfs_close(&fd, &res);
 	sos_assert( res == 0 );
 
-	printf("After write\n");
+	printf("After Truncate\n");
 	show_dir('A');
 
+
 	/*
-	 * Verify
+	 * remove file
 	 */
-	pkt->hdr_attr = SOS_FATTR_ASC;
-	rc = fs_vfs_open('A', "TST-SWD.TXT",
-	    FS_VFS_FD_FLAG_O_RDWR, pkt, &fd, &res);
+
+	rc = fs_vfs_opendir('A', &dir, &res);
 	sos_assert( res == 0 );
 
-	rc = fs_vfs_read(&fd, &buf2[0], len, &cnt, &res);
-	sos_assert( rc == 0 );
-	sos_assert( res == 0 );
-	sos_assert( cnt == len );
-
-	rc = fs_vfs_close(&fd, &res);
-	sos_assert( res == 0 );
-
-	rc = memcmp(&buf1[0],&buf2[0],len);
-	sos_assert( rc == 0 );
-
-	rc = fs_vfs_opendir('A', NULL, "/", &dir, &res);
-	sos_assert( res == 0 );
-
-	rc = fs_vfs_unlink(&dir, "TST-SWD.TXT", &res);
+	rc = fs_vfs_unlink(&dir, "MAX-SIZ.TXT", &res);
 	sos_assert( res == 0 );
 
 	rc = fs_vfs_closedir(&dir, &res);
@@ -635,6 +479,8 @@ main(int argc, char *argv[]){
 
 	printf("After unlink\n");
 	show_dir('A');
+
+	free(buf1);
 
 	return 0;
 }
