@@ -210,7 +210,7 @@
 #define SOS_MAX_FREE_CLUSTER_NR					\
 	( SOS_MAX_FILE_CLUSTER_NR - SOS_RESERVED_FAT_NR + 1 )
 
-/** Max file size on the disk (0x4d000 = 315392 bytes).
+/** Max file size on the disk (0x4e000 = 319488 bytes).
  */
 #define SOS_MAX_FILE_SIZE				\
 	( SOS_MAX_FREE_CLUSTER_NR * SOS_CLUSTER_SIZE )
