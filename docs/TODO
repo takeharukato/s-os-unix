@@ -48,12 +48,31 @@ TODO list
 
 [fs]
 * storage管理とは別にマウントテーブルを管理する方針に方針変更。
-  root_fibを保持できるようにする必要があるため。
-  _fs_fopsにfib比較処理を追加して, SWORDの場合, fibのfib_clsで比較する。
-  SWORDの場合は, root i-nodeのfib->fib_clsを0に設定することで, root i-nodeだった場合,
-  ioctxのdirpsに設定されているレコードの内容を元にlooupを実行することで, FAT12/Hu-Basic
-  のようなディレクトリエントリを一貫してクラスタ番号で管理するファイルシステムと
-  共存可能にする。
+  * root_fibを保持できるようにする必要があるため。
+  * _fs_fopsにfib比較処理を追加して, SWORDの場合, fibのfib_clsで比較する。
+  * SWORDの場合は, vnodeのvnidを以下のように指定する
+    * 上位32bitsを対象ファイルが入っているディレクトリのクラスタ番号
+      (rootディレクトリの場合は, 0)
+    * 下位32bitsを対象ファイルの先頭クラスタ番号
+    これによりvnidがマウントポイント内で一意になるようにする。
+  root i-nodeのfib->fib_clsを0に設定することで, root i-nodeだった場合,
+    ioctxのdirpsに設定されているレコードの内容を元にlooupを実行することで, FAT12/Hu-Basic
+    のようなディレクトリエントリを一貫してクラスタ番号で管理するファイルシステムと
+    共存可能にする。
+  mount_pointの定義は以下
+  struct _mount_point{
+  	 vfs_dev_id            m_dev;  /**< Device index */
+	 struct _fs_fs_manager  m_fs;  /**< File system */
+
+};
+  マウントポイントIDは, 配列のインデクスで代用する。
+
+  #define MOUNT_POINT_NR	STORAGE_NR
+
+  typedef int			vfs_dev_id;
+
+struct _mount_point mount_tbl[MOUNT_POINT_NR];
+
 * fatpos/dirpsはioctxを参照するようにする
 * ファイルシステムマウント処理作成
 * ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する

@@ -135,47 +135,91 @@
 #define FS_FSMGR_IS_VALID(_fs_mgr)			\
 	( ( (_fs_mgr) != NULL )				\
 	    && ( (_fs_mgr)->fsm_name != NULL )		\
-	    && ( (_fs_mgr)->fsm_fops != NULL )		\
-	    && ( (_fs_mgr)->fsm_fill_super != NULL ) )
+	    && ( (_fs_mgr)->fsm_fops != NULL ) )
 
 /** Determine whether the file operation is defined.
     @param[in] _fs_mgr The pointer to the file system manager
-    @param[in] _fop     The pointer to the file system operations
+    @param[in] _fop    The pointer to the file system operations
+    @retval    True    The handler is defined
+    @retval    False   The handler is not defined
  */
 #define FS_FSMGR_FOP_IS_DEFINED(_fs_mgr, _fop)		\
 	( FS_FSMGR_IS_VALID( (_fs_mgr) )		\
 	    && ( (_fs_mgr)->fsm_fops->_fop != NULL ) )
 
-/** Determine whether the file system manager is valid
+/** Fill the file system manager parameters
     @param[in] _fs_mgr The pointer to the file system manager
     @param[in] _name   The pointer to the file system name
     @param[in] _fops   The pointer to the file system operations
-    @param[in] _fill_super The pointer to the fill_super function.
-
  */
-#define FS_FILL_MGR(_fs_mgr, _name, _fops, _fill_super) do{		\
+#define FS_FILL_MGR(_fs_mgr, _name, _fops) do{		\
 		(struct _fs_fs_manager *)(_fs_mgr)->fsm_name = (_name);	\
 		(struct _fs_fs_manager *)(_fs_mgr)->fsm_fops = (_fops);	\
-		(struct _fs_fs_manager *)(_fs_mgr)->fsm_fill_super = (_fill_super); \
 		list_init(&((struct _fs_fs_manager *)(_fs_mgr)->fsm_node)); \
 	}while(0)
+
+/** v-node
+ */
+#define FS_VFS_VNODE_FREE   (0x00)  /**< Free v-node  */
+#define FS_VFS_VNODE_BUSY   (0x80)  /**< Busy v-node  */
+
+/** Determine whether the v-node is busy
+    @param[in] _v      The v-node to investigate.
+    @retval    True    The v-node is busy.
+    @retval    False   The v-node is not busy.
+ */
+#define FS_VFS_IS_VNODE_BUSY(_v) ( (_v)->vn_status & FS_VFS_VNODE_BUSY )
+
+/** Lock a v-node
+    @param[out] _v      The v-node to lock.
+ */
+#define FS_VFS_LOCK_VNODE(_v)		      \
+	do{					      \
+		(_v)->vn_status |= FS_VFS_VNODE_BUSY; \
+	}while(0)
+
+/** Unock a v-node
+    @param[out] _v      The v-node to unlock.
+ */
+#define FS_VFS_UNLOCK_VNODE_(_v)		      \
+	do{					      \
+		(_v)->vn_status &= ~FS_VFS_VNODE_BUSY; \
+	}while(0)
+
+/** Determine whether the v-node is free
+    @param[in] _v      The v-node to investigate
+    @retval    True    The v-node is free.
+    @retval    False   The v-node is not free.
+ */
+#define FS_VFS_IS_VNODE_FREE(_v) \
+	( !FS_VFS_IS_VNODE_BUSY( (_v) ) && ( (_v)->vn_mnt == NULL )  )
+
+/** The number of vnode caches
+    ( root vnode + current dir vnode ) * devices + 8 free entry
+*/
+#define FS_VFS_VNODE_NR       ( SOS_DEVICES_NR * 2 + 8 )
 
 /** Foward declarations
  */
 struct _fs_ioctx;
 struct _storage_di_ops;
+struct _fs_mount;
 
 /** Type definitions
  */
-typedef uint16_t     fs_perm;   /**< permission bit map */
-typedef uint16_t fs_fd_flags;   /**< fd flags           */
-typedef uint32_t vfs_mnt_flags; /**< mount flags        */
+typedef uint16_t       fs_perm;  /**< permission bit map */
+typedef uint16_t   fs_fd_flags;  /**< fd flags           */
+typedef uint32_t vfs_mnt_flags;  /**< mount flags        */
+typedef void     *vfs_fs_vnode;  /**< file system specific v-node */
+typedef void     *vfs_fs_super;  /**< file system specific super block */
+typedef uint32_t      vfs_vnid;  /**< v-node ID */
+typedef int       vfs_vn_state;  /**< v-node status */
 
 /** File Information Block of the file
  */
 struct _storage_fib{
 	sos_devltr               fib_devltr;  /**< Drive letter      */
-	fs_sword_attr              fib_attr;  /**< File attribute    */
+	fs_attr                    fib_attr;  /**< File attribute    */
 	fs_dirno                  fib_dirno;  /**< DIRNO of the file */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
@@ -213,22 +257,44 @@ struct _sword_header_packet{
 	WORD hdr_exadr; /**< File exec address */
 };
 
-/** Superblock
+/** vfs stat
  */
-struct _fs_super_block{
+struct _fs_vfs_stat{
 	fs_blk_num     sb_blk_nr;  /**< The block numbers which the device contains */
 	fs_blk_num   sb_freeblks;  /**< The block numbers of free blocks */
-	fs_dirps        sb_dirps;  /**< The the first directory entry record */
-	fs_fatpos      sb_fatpos;  /**< The allocation table record */
+};
+
+/** vnode
+ */
+struct _fs_vnode{
+	struct _list                 vn_node;  /**< list node                         */
+	vfs_vnid                       vn_id;  /**< v-node ID                         */
+	vfs_vn_state               vn_status;  /**< v-node status                     */
+	int                       vn_use_cnt;  /**< Use count                         */
+	struct _fs_mount             *vn_mnt;  /**< Mount point                       */
+	struct _storage_fib           vn_fib;  /**< File Information Block            */
+	vfs_fs_vnode                vn_vnode;  /**< File system specific v-node       */
+	void                     *vn_private;  /**< Private information               */
+};
+
+/** mount point
+ */
+struct _fs_mount{
+	sos_devltr                 m_devltr;  /**< mount device                      */
+	struct _queue	           m_vnodes;  /**< v-nodes in this mount point       */
+	struct _fs_fs_manager         *m_fs;  /**< File system                       */
+	struct _fs_vnode            *m_root;  /**< v-node of the root directory      */
+	vfs_fs_super                m_super;  /**< File system specific super block  */
+	vfs_mnt_flags         m_mount_flags;  /**< mount flags                       */
 };
 
 /** I/O Context
  */
 struct _fs_ioctx{
-	/** The file information block of the root directory */
-	struct _storage_fib                ioc_root[STORAGE_NR];
-	/** The file information block of the current directory */
-	struct _storage_fib                 ioc_cwd[STORAGE_NR];
+	/** The FIB of the root directory for each drive.   */
+	struct _fs_vnode                  *ioc_root[STORAGE_NR];
+	/** The FIB of the current directory for each drive. */
+	struct _fs_vnode                   *ioc_cwd[STORAGE_NR];
 	/** The file descriptor table */
 	struct _sword_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
 	/** Current #DIRPS */
@@ -242,19 +308,18 @@ struct _fs_ioctx{
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
 	int (*fops_mount)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    const struct _storage_fib *_dir_fib,
-	    const char *_fname, struct _fs_super_block *_superp,
-	    vfs_mnt_flags *_mnt_flagsp, struct _storage_fib *_root_fibp);
-	int (*fops_unmount)(sos_devltr _ch, const struct _fs_super_block *_super);
-	int (*fops_lookup)(struct _fs_ioctx *_ioctx, struct _fs_super_block *_super,
-	    const struct _storage_fib *_dir_fib,
-	    const char *_fname, struct _storage_fib *_fibp);
+	    const struct _fs_vnode *_dir_vnode,
+	    const char *_fname, void *_args, vfs_fs_super *_superp,
+	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode *_root_vnodep);
+	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super);
+	int (*fops_lookup)(const struct _fs_ioctx *_ioctx,
+	    vfs_fs_super _fs_super, vfs_vnid vnid, struct _fs_vnode *_vn);
 	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
-	    struct _storage_fib *_fibp, BYTE *_resp);
+	    struct _fs_vnode *_vnodep, BYTE *_resp);
 	int (*fops_open)(sos_devltr _ch, const char *_fname,
 	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
-	    struct _storage_fib *_fibp, void **_privatep, BYTE *_resp);
+	    struct _fs_vnode *_vnodep, void **_privatep, BYTE *_resp);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp,
 	    BYTE *_resp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp,
@@ -262,13 +327,13 @@ struct _fs_fops{
 	int (*fops_write)(struct _sword_file_descriptor *_fdp,
 	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
-	    struct _storage_fib *_fibp, BYTE *_resp);
+	    struct _fs_vnode *_vnodep, BYTE *_resp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
 	int (*fops_truncate)(struct _sword_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
 	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
-	int (*fops_readdir)(struct _sword_dir *_dir, struct _storage_fib *_fibp,
+	int (*fops_readdir)(struct _sword_dir *_dir, struct _fs_vnode *_vnodep,
 	    BYTE *_resp);
 	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno, BYTE *_resp);
 	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop,
@@ -289,8 +354,6 @@ struct _fs_fs_manager{
 	int                   fsm_use_cnt;   /**< Use count                    */
 	const char              *fsm_name;   /**< File system name             */
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
-	int (*fsm_fill_super)(struct _fs_ioctx *_ioctx,
-	    struct _fs_super_block *_super); /**< fill super block  */
 	void                 *fsm_private;   /**< Private information          */
 };
 
@@ -300,8 +363,15 @@ struct _fs_filesystem_table{
 	struct _queue head;   /**< Queue head */
 };
 
+int vfs_vnode_get_free_vnode(struct _fs_vnode **_vnodep);
+
 int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
 int fs_vfs_unregister_filesystem(const char *_name);
-int ref_filesystem(const sos_devltr _ch, struct _fs_fs_manager **_fs_mgrp);
+
+int fs_vfs_get_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    vfs_vnid _vnid, struct _fs_vnode **_vnodep);
+int vfs_put_vnode(struct _fs_vnode *_vn);
+int vfs_invalidate_vnode(struct _fs_vnode *_vn);
+void fs_vfs_init_vnode_tbl(void);
 
 #endif  /*  _FS_VFS_H  */

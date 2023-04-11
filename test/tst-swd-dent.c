@@ -28,7 +28,7 @@ search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, fs_rec *recp,
 	size_t                 cur;
 	fs_rec                 rec;
 	fs_dirps         dirps_rec;
-	fs_sword_attr         attr;
+	fs_attr               attr;
 	size_t               rdcnt;
 	BYTE                 *dent;
 	BYTE  buf[SOS_RECORD_SIZE];
@@ -61,7 +61,7 @@ search_dent_by_dirno(sos_devltr ch, fs_dirno dirno, fs_rec *recp,
 		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
 		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
 
-			attr = *( dent + SOS_FIB_OFF_ATTR );
+			attr = SOS_FATTR_VAL( *( dent + SOS_FIB_OFF_ATTR ) );
 
 			if ( attr == SOS_FATTR_FREE )
 				continue; /* Free entry */
@@ -186,7 +186,7 @@ fs_swd_search_free_dent(sos_devltr ch, fs_dirno *dirnop){
 	fs_rec                 rec;
 	fs_dirno             dirno;
 	fs_dirps         dirps_rec;
-	BYTE                  attr;
+	fs_attr               attr;
 	size_t               rdcnt;
 	BYTE                 *dent;
 	BYTE  buf[SOS_RECORD_SIZE];
@@ -219,7 +219,7 @@ fs_swd_search_free_dent(sos_devltr ch, fs_dirno *dirnop){
 		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
 		    ++i, ++dirno, dent += SOS_DENTRY_SIZE ) {
 
-			attr = *( dent + SOS_FIB_OFF_ATTR );
+			attr = SOS_FATTR_VAL( *( dent + SOS_FIB_OFF_ATTR ) );
 			if ( ( attr == SOS_FATTR_FREE ) || ( attr == SOS_FATTR_EODENT ) )
 				goto found; /* an entry was found */
 		}

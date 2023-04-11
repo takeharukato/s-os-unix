@@ -430,8 +430,8 @@ typedef long              fs_dirno;  /**< DIRNO for vfs */
 typedef WORD              fs_dirps;  /**< DIRPS for vfs */
 typedef WORD             fs_fatpos;  /**< FATPOS for vfs */
 typedef WORD            fs_blk_num;  /**< block numbers for vfs */
+typedef uint32_t           fs_attr;  /**< File Attribute */
 
-typedef BYTE       fs_sword_fatent; /**< The FAT entry of the sword file system. */
-typedef BYTE         fs_sword_attr; /**< File Attribute */
+typedef BYTE       fs_sword_fatent;  /**< The FAT entry of the sword file system. */
 #endif  /*  _ASM  */
 #endif

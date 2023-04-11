@@ -30,7 +30,6 @@
 #define STORAGE_DSKIMG_EXT_MZT2      "m12"    /**< Japanese MZT tape image */
 #define STORAGE_DSKIMG_EXT_MZT3      "mzf"    /**< Japanese MZT tape image */
 
-
 /** Determine whether the drive letter points to a tape device.
     @param[in] _ch a device letter
     @retval TRUE a device letter is a tape device on SWORD

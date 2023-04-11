@@ -93,14 +93,13 @@ init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_dir *dir){
  */
 void
 fs_vfs_init_ioctx(struct _fs_ioctx *ioctx){
-	int                    i;
+	int  i;
 
 	for( i = 0; STORAGE_NR > i; ++i) {
 
 		/* Initialize root fib and current working directory */
-		storage_init_fib(&ioctx->ioc_root[i]);
-		memcpy(&ioctx->ioc_cwd[i], &ioctx->ioc_root[i],
-		    sizeof(struct _storage_fib));
+		ioctx->ioc_root[i] = NULL;
+		ioctx->ioc_cwd[i]  = NULL;
 	}
 
 	for( i = 0; FS_PROC_FDTBL_NR > i; ++i)
@@ -183,121 +182,4 @@ fs_vfs_unregister_filesystem(const char *name){
 	}
 
 	return rc;
-}
-
-/** open a directory
-    @param[in]  ch      The drive letter
-    @param[in]  path    The path name of the directory to open
-    @param[in]  ioctx   The current I/O context.
-    @param[out] dirp    The pointer to the DIR structure (directory stream).
-    @param[out] resp    The address to store the return code for S-OS.
-    @retval      0      Success
-    @retval     -1      Error
-    @retval     EINVAL  Invalid whence
-    @retval     ENXIO   The new position exceeded the file size
- */
-int
-fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx,
-    const char *path, struct _sword_dir *dirp, BYTE *resp){
-	int                        rc;
-	struct _sword_dir         dir;
-	BYTE                      res;
-	struct _fs_fs_manager *fs_mgr;
-
-	rc = storage_check_status(ch);
-	if ( rc == ENXIO ) {
-
-		res = SOS_ERROR_OFFLINE;
-		goto error_out;
-	}
-
-	if ( rc != 0 ) {
-
-		res = SOS_ERROR_BADF;
-		goto error_out;
-	}
-
-	/*
-	 * Check whether the file operation is defined.
-	 */
-	rc = ref_filesystem(ch, &fs_mgr); /* Refer file system */
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fs_mgr, fops_opendir) ) {
-
-		res = SOS_ERROR_OFFLINE;  /* Not supported */
-		goto error_out;
-	}
-
-	init_dir_stream(ch, ioctx, &dir);  /* Init the directory stream. */
-
-	/* Call opendir */
-	rc = fs_mgr->fsm_fops->fops_opendir(&dir, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	memcpy(dirp, &dir, sizeof(struct _sword_dir));
-
-	if ( resp != NULL )
-		*resp = 0;
-
-	return 0;
-
-error_out:
-	if ( resp != NULL )
-		*resp = res;
-
-	return -1;
-}
-
-/** close a directory
-    @param[in]  ch     The drive letter
-    @param[in]  ioctx  The current I/O context.
-    @param[in]  dirp   The pointer to the DIR structure (directory stream).
-    @param[out] resp   The address to store the return code for S-OS.
-    @retval     0      Success
- */
-int
-fs_vfs_closedir(sos_devltr ch, struct _fs_ioctx *ioctx,
-    struct _sword_dir *dirp, BYTE *resp){
-	int                        rc;
-	BYTE                      res;
-	struct _fs_fs_manager *fs_mgr;
-
-	rc = storage_check_status(ch);
-	if ( rc == ENXIO ) {
-
-		res = SOS_ERROR_OFFLINE;
-		goto error_out;
-	}
-
-	if ( rc != 0 ) {
-
-		res = SOS_ERROR_BADF;
-		goto error_out;
-	}
-
-	/*
-	 * Check whether the file operation is defined.
-	 */
-	rc = ref_filesystem(ch, &fs_mgr); /* Refer file system */
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fs_mgr, fops_closedir) ) {
-
-		res = SOS_ERROR_OFFLINE;  /* Not supported */
-		goto error_out;
-	}
-
-	/* Call closedir */
-	rc = fs_mgr->fsm_fops->fops_closedir(dirp, &res);
-	if ( rc != 0 )
-		goto error_out;
-
-	if ( resp != NULL )
-		*resp = 0;
-
-	return 0;
-
-error_out:
-	if ( resp != NULL )
-		*resp = res;
-
-	return -1;
 }
