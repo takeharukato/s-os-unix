@@ -870,28 +870,6 @@ int sos_fsame(void){
     /*
      * check the buffer pointed by DE register
      */
-    saved_de = Z80_DE;
-
-    /* pass file name which is read by FILE */
-    Z80_DE = EM_NAMEBF;
-    /* parse file name */
-    r = trap_fname(buf, &dsk, GetBYTE(SOS_DSK));
-    Z80_DE = saved_de; /* restore DE */
-    if ( r != 0 )
-	    goto compare_with_de;
-
-    /* compare them */
-    if (memcmp(buf, ram + EM_IBFAD + 1, SOS_FNAMELEN) == 0){
-	    SETFLAG(Z, 1);
-	    goto out;
-    } else {
-	    SETFLAG(Z, 0);
-    }
-
-    /*
-     * Compare with DE register (MACE)
-     */
-compare_with_de:
     r = trap_fname(buf, &dsk, GetBYTE(SOS_DSK));
     if ( r != 0 ){
 
