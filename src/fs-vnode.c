@@ -23,7 +23,6 @@
 #include "queue.h"
 
 static struct _fs_vnode vnode_tbl[FS_VFS_VNODE_NR];  /* v-node table */
-static struct _fs_mount mount_tbl[SOS_DEVICES_NR];   /* mount table  */
 
 static void
 clear_vnode(struct _fs_vnode *vn){
@@ -145,39 +144,10 @@ fs_vfs_get_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
 		return SOS_ERROR_BADF;
 
-	/*
-	 * FIXME: 以下のmountポイントからvnを検索してvnを返却するまでの
-	 * 処理はmount処理部に持って行くこと
-	 */
-	mnt = &mount_tbl[STORAGE_DEVLTR2IDX(ch)];
-	rc = lookup_vnode(mnt, vnid, &vn);
-	if ( rc == 0 )
-		goto found;
-
-	if ( !FS_FSMGR_FOP_IS_DEFINED(mnt->m_fs, fops_lookup) ) {
-
-		rc = SOS_ERROR_INVAL;
-		goto error_out;
-	}
-
-	rc = vfs_vnode_get_free_vnode(&vn);
-	if ( rc != 0 ) {
-
-		rc = SOS_ERROR_NOSPC;
-		goto error_out;
-	}
-
-	/* Fill v-node */
-	rc = mnt->m_fs->fsm_fops->fops_lookup(ioctx, mnt->m_super, vnid, vn);
+	/* Look up a v-node from a mount point */
+	rc = fs_vfs_mnt_search_vnode(ch, ioctx, vnid, &vn);
 	if ( rc != 0 )
 		goto error_out;
-
-	vn->vn_mnt = mnt;
-	queue_add(&mnt->m_vnodes, &vn->vn_node);
-
-	/*
-	 * FIXME: mount処理部に移動する範囲終わり
-	 */
 
 found:
 	if ( vnodep != NULL )

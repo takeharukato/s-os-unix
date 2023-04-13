@@ -106,6 +106,36 @@ fs_vfs_init_ioctx(struct _fs_ioctx *ioctx){
 		init_fd(0, ioctx, &ioctx->ioc_fds[i]);
 }
 
+/** Look up a file system
+    @param[in]  name  The file system name
+    @param[out] fsmp  The address of the pointer variable to point the file system manager
+    @retval    0     success
+    @retval    EINVAL The manager has not been initialized.
+    @retval    EBUSY  The file system has already registered.
+    @remark    Set the name of the operation manager to
+    fsm_ops->fsm_name, fsm_ops->fsm_fops, fsm_ops->fsm_super, fsm_ops->fsm_private.
+    before calling this function.
+ */
+int
+fs_vfs_lookup_filesystem(const char *name, struct _fs_fs_manager **fsmp){
+	struct _list          *itr;
+	struct _fs_fs_manager *mgr;
+
+	queue_for_each(itr, &fs_tbl.head){
+
+		mgr = container_of(itr, struct _fs_fs_manager, fsm_node);
+		if ( !strcmp(name, mgr->fsm_name) )
+			goto found;
+	}
+
+	return ENOENT;  /* The file system is not found. */
+
+found:
+	if ( fsmp != NULL )
+		*fsmp = mgr;
+
+	return 0;
+}
 /** Register a file system
     @param[in] fsm_ops  The pointer to the file system manager to register
     @retval    0     success
@@ -116,21 +146,21 @@ fs_vfs_init_ioctx(struct _fs_ioctx *ioctx){
     before calling this function.
  */
 int
-fs_vfs_register_filesystem(struct _fs_fs_manager *fsm_ops){
+fs_vfs_register_filesystem(struct _fs_fs_manager *fsm){
 	int                     rc;
 	struct _list          *itr;
 	struct _fs_fs_manager *mgr;
 
-	if ( !FS_FSMGR_IS_VALID(fsm_ops) )
+	if ( !FS_FSMGR_IS_VALID(fsm) )
 		return EINVAL;
 
-	if ( !list_not_linked(&fsm_ops->fsm_node) )
+	if ( !list_not_linked(&fsm->fsm_node) )
 		return EBUSY;
 
 	queue_for_each(itr, &fs_tbl.head){
 
 		mgr = container_of(itr, struct _fs_fs_manager, fsm_node);
-		if ( !strcmp(mgr->fsm_name, mgr->fsm_name) ) {
+		if ( !strcmp(fsm->fsm_name, mgr->fsm_name) ) {
 
 			rc = EBUSY;  /* The file system has already been registered. */
 			goto error_out;

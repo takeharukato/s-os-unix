@@ -91,9 +91,10 @@
 	( STORAGE_DEVLTR_IS_DISK((_ch)) || STORAGE_DEVLTR_IS_TAPE((_ch)) )
 
 /*
- * storage index for tape device
+ * storage index
  */
 #define STORAGE_FIRST_CMT_IDX ( ( SOS_DL_RESV_MAX - SOS_DL_DRIVE_A ) + 1 )
+#define STORAGE_DSKIMG_IDX_A  (0)
 #define STORAGE_DSKIMG_IDX_T  ( STORAGE_FIRST_CMT_IDX )
 #define STORAGE_DSKIMG_IDX_S  ( STORAGE_FIRST_CMT_IDX + 1 )
 #define STORAGE_DSKIMG_IDX_Q  ( STORAGE_FIRST_CMT_IDX + 2 )
@@ -112,8 +113,8 @@
  */
 #define STORAGE_IDX2DRVLTR(_idx)					\
 	( ( ( (_idx) >= STORAGE_DSKIMG_IDX_A )				\
-	    && ( STORAGE_DSKIMG_IDX_A >= (_idx) ) ) ?			\
-	    ( (_idx) + SOS_DL_DRIVE_A ) : STORAGE_IDX2TAPEDEV_LTR((_idx)) )
+	    && ( (SOS_DL_DRIVE_L - SOS_DL_DRIVE_A ) >= (_idx) ) ) ?	\
+	    ( (_idx) + SOS_DL_DRIVE_A ) : STORAGE_IDX2TAPE_DEVLTR((_idx)) )
 
 /** Convert from a drive letter to the disk image index
     @param[in] _ch a drive letter

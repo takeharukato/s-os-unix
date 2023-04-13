@@ -307,11 +307,11 @@ struct _fs_ioctx{
  */
 struct _fs_fops{
 	void *fops_private;   /**< Private Information */
-	int (*fops_mount)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    const struct _fs_vnode *_dir_vnode,
-	    const char *_fname, void *_args, vfs_fs_super *_superp,
-	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode *_root_vnodep);
-	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super);
+	int (*fops_mount)(sos_devltr _ch, const void *_args,
+	    struct _fs_ioctx *_ioctx, vfs_fs_super *_superp,
+	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
+	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super,
+	    struct _fs_vnode *_root_vnode);
 	int (*fops_lookup)(const struct _fs_ioctx *_ioctx,
 	    vfs_fs_super _fs_super, vfs_vnid vnid, struct _fs_vnode *_vn);
 	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
@@ -365,6 +365,7 @@ struct _fs_filesystem_table{
 
 int vfs_vnode_get_free_vnode(struct _fs_vnode **_vnodep);
 
+int fs_vfs_lookup_filesystem(const char *_name, struct _fs_fs_manager **_fsmp);
 int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
 int fs_vfs_unregister_filesystem(const char *_name);
 
@@ -374,4 +375,10 @@ int vfs_put_vnode(struct _fs_vnode *_vn);
 int vfs_invalidate_vnode(struct _fs_vnode *_vn);
 void fs_vfs_init_vnode_tbl(void);
 
+int fs_vfs_mnt_search_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    vfs_vnid _vnid, struct _fs_vnode **_vnodep);
+int fs_vfs_mnt_mount_filesystem(sos_devltr _ch, const char *_fs_name,
+    const void *_args, struct _fs_ioctx *_ioctx);
+int fs_vfs_mnt_unmount_filesystem(sos_devltr _ch, struct _fs_ioctx *_ioctx);
+void fs_vfs_init_mount_tbl(void);
 #endif  /*  _FS_VFS_H  */

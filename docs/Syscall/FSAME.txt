@@ -1,0 +1,71 @@
+FSAME(0x1AE3)
+
+FILEで読み込んだファイル名とFCBで読み込んだファイル名が一致することを確認する
+と言うことになっているが, 実際は, 指定したファイル名とFCBで読み込んだファイル名が
+一致することを確認する
+入力: A  比較するファイルの属性
+      DE 比較するファイル名の文字列の先頭アドレス
+破壊レジスタ: AF,BC, DE, HL
+保存レジスタ:
+フラグ:Z:  正常終了
+       NZ: ファイル名不一致, Aレジスタに8(File not Found)を設定
+
+FSAME:
+	AND	$87	; Aレジスタ中のファイル属性ビットを取り出す
+	LD	B,A	; Bレジスタにファイル属性をロード
+	LD	HL, @IBUF ; モニタのFile Information BlockのアドレスをHLにロード
+	LD	A, (HL)	  ; HLの先頭(ファイル属性)をAにロード
+	AND	$87	  ; IBUFのファイル属性ビットを取り出す
+	CP	B	  ; 指定されたファイル属性とIBUFのファイル属性ビットを比較
+	JP	NZ, FSKIP ; 一致しなければ, File Not Foundを返して
+		    	  ; (キャリーを落として)正常復帰する
+
+	LD	A,(%DFDV) ; デフォルトデバイスのドライブレターを取り出す
+	PUSH	AF	  ; デフォルトデバイスのドライブレターを保存する
+	LD	A, (#DSK) ; アクセス先のドライブをAレジスタにロードする
+	LD	(%DFDV),A ; アクセス先のドライブをデフォルトドライブに設定する
+	CALL	FNAME	  ; DEレジスタに指定されたファイル名をNAMEBFにコピーする
+			  ; コントロールコードや'.'を空白に変換,末尾のコントロール
+			  ; コードおよび空白を0x0Dに変換してコピーする(0x1A2B)
+	POP	AF	  ; デフォルトデバイスのドライブレターを取り出す
+	LD	(%DFDV),A ; デフォルトデバイスのドライブレターを復元する
+	LD	DE, @IBUF  ; IBUFのアドレスをDEにロードする
+	LD	HL, NAMEBF ; NAMEBFのアドレスをHLにロードする
+	LD	B,16	   ; ファイル名長(16文字)またはファイル名の終端(0x0D)が見つかるまで
+	CALL	TCOMP	   ; IBUFとNAMEBFの内容を比較する
+	RET	Z	   ; 一致していた場合はZフラグが立ったまま(正常)復帰する
+
+FSKIP
+	LD	A,8  ; File not Foundを返す
+	OR	A    ; キャリーを落とす
+	RET
+
+TCOMP(0x1B3D)
+
+TCOMP
+	INC	DE	; IBUFを指しているDEをインクリメント
+	INC	HL	; NAMEBFを指しているHLをインクリメント
+	LD	A, (HL)	; NAMEBFの文字を取得
+	IF	A < $21 ; 空白またはコントロールコードの場合
+	XOR	A   	; キャリーを落として, Aに0をセット
+	RET		; 復帰する
+	ENDIF
+TCOMP1
+	LD	A,(HL)  ; NAMEBFの文字を取得
+	IF	A="."   ; '.'の場合は, 空白に変換
+	LD	A," "	;
+	ENDIF
+	LD	C,A	; CにNAMEBFの文字を退避
+	LD	A,(DE)	; IBUFの文字を取得
+	IF	A="."	; '.'の場合は, 空白に変換
+	LD	A," "
+	ENDIF
+	CP	C	; NAMEBFとIBUFの文字を比較
+	RET	NZ	; 一致しなければ復帰
+	CP	$0D	; ファイル名の終端(0x0D)の場合
+	RET	Z	; 正常復帰する
+	INC	HL	; 次の文字を比較
+	INC	DE	;
+	DJNZ	TCOMP1  ;
+	XOR	A	; ファイル名長比較が完了したら
+	RET		; キャリーを落とし, Zフラグを立てて, Aに0を設定して復帰
