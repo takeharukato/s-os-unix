@@ -11,6 +11,21 @@
 
 #include "sim-type.h"
 
+
+#define FS_SWD_ROOT_VNID  (0)  /**< root v-node ID */
+
+/** Get the cluster number from v-node ID
+    @param[in] vnid v-node ID
+    @return the cluster number of the file
+ */
+#define FS_SWD_GET_VNID2CLS(_vnid)	( SOS_CLS_VAL( (_vnid) ) )
+
+/** Get the directory's cluster number from v-node ID
+    @param[in] vnid v-node ID
+    @return the cluster number of the directory contains the file
+ */
+#define FS_SWD_GET_VNID2DIRCLS(_vnid)	( SOS_CLS_VAL( (_vnid) >> 16 ) )
+
 /** Refer the file allocation table array
     @return The address of the file allocation table array
  */
@@ -126,6 +141,11 @@ struct _fs_sword_fat{
 	fs_sword_fatent fat[SOS_FAT_SIZE];  /**< File Allocation Table */
 };
 
+/** Mount option
+ */
+struct _fs_sword_mnt_opt{
+	uint32_t mount_opts;
+};
 int fs_swd_get_block_number(struct _storage_fib *_fib, fs_off_t _offset, int _mode,
     fs_blk_num *_blkp);
 int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset,
@@ -133,12 +153,15 @@ int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset,
 int fs_swd_get_used_size_in_block(struct _storage_fib *_fib, fs_off_t _offset,
     size_t *_usedsizp);
 
-int fs_swd_search_dent_by_dirno(sos_devltr _ch,
-    fs_dirno _dirno, struct _storage_fib *_fib);
-int fs_swd_search_dent_by_name(sos_devltr _ch, const BYTE *_swd_name,
+int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx, fs_dirno _dirno,
     struct _storage_fib *_fib);
-int fs_swd_search_free_dent(sos_devltr _ch, fs_dirno *_dirnop);
-int fs_swd_write_dent(sos_devltr _ch, struct _storage_fib *_fib);
+int fs_swd_search_dent_by_name(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    const BYTE *_swd_name, vfs_vnid *_vnidp);
+int fs_swd_search_fib_by_vnid(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    vfs_vnid _vnid, struct _storage_fib *_fib);
+int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    vfs_vnid *_vnidp);
+int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx, struct _storage_fib *_fib);
 
 int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf,
     size_t _bufsiz, size_t *_rwsizp);

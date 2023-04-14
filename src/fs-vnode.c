@@ -59,7 +59,11 @@ found:
 
 	return 0;
 }
-
+/** Allocate new v-node
+    @param[out] vnodep The address of the pointer variable to point v-node.
+    @retval     0       Success
+    @retval     ENOSPC  No more space
+ */
 int
 vfs_vnode_get_free_vnode(struct _fs_vnode **vnodep){
 	int                         rc;
@@ -90,7 +94,9 @@ vfs_vnode_get_free_vnode(struct _fs_vnode **vnodep){
 
 	vn = vn_candidate;
 
+
 found:
+	clear_vnode(vn);  /* Clear v-node member */
 	if ( vnodep != NULL ) {
 
 		FS_VFS_LOCK_VNODE(vn); /* Mark busy */

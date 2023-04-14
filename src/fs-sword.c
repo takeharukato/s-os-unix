@@ -23,6 +23,7 @@
 
 
 /** Truncate a file to a specified length
+    @param[in]  ioctx  The current I/O context
     @param[in]  fib    The file information block of the file.
     @param[in]  pos    The file position information
     @param[in]  newpos The file position of the file to be truncated.
@@ -31,7 +32,7 @@
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize_sword(struct _storage_fib *fib,
+change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
     struct _storage_disk_pos *pos,
     fs_off_t newpos){
 	int                        rc;
@@ -90,7 +91,7 @@ change_filesize_sword(struct _storage_fib *fib,
 	 */
 	fib->fib_size = STORAGE_FIB_FIX_SIZE( newsiz );  /* update size */
 
-	rc = fs_swd_write_dent(fib->fib_devltr, fib); /* write back */
+	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
 
@@ -104,8 +105,108 @@ error_out:
  * File system operations
  */
 
+/** Mount a file system
+    @param[in] ch       The drive letter
+    @param[in] args     The file system specific mount option
+    @param[in] ioctx     The current I/O context
+    @param[out] superp    The address to store the file system specific super block information.
+    @param[out] mnt_flagsp The address to store the file system specific super block information
+    @param[out] root_vnodep The address of the pointer variable to point the root v-node.
+    @retval     0               Success
+    @retval     ENOSPC  No more space
+    @retval     SOS_ERROR_BADF  The drive is not a disk device.
+    @retval     SOS_ERROR_IO    I/O Error
+ */
+int
+fops_mount_sword(sos_devltr ch, const void *args,
+    struct _fs_ioctx *ioctx, vfs_fs_super *superp,
+    vfs_mnt_flags *mnt_flagsp, struct _fs_vnode **root_vnodep){
+	int                        rc;
+	vfs_vnid                 vnid;
+	struct _fs_vnode          *vn;
+	struct _fs_sword_mnt_opt *opt;
+	vfs_mnt_flags           flags;
+
+	vnid = 0;  /* Root v-node */
+	rc = fs_vfs_get_vnode(ch, ioctx, vnid, &vn);
+	if ( rc != 0 )
+		goto error_out;
+
+	flags = 0;
+	opt = (struct _fs_sword_mnt_opt *)args;
+
+	if ( mnt_flagsp != NULL )
+		*mnt_flagsp = opt->mount_opts;
+
+	if ( superp != NULL )
+		*superp = NULL;
+
+	if ( root_vnodep != NULL )
+		*root_vnodep = vn;
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** Unmount file system
+    @param[in] ch         The drive letter.
+    @param[in] super      The file system specific super block information.
+    @param[in] ioctx      The current I/O context.
+    @param[in] root_vnode The address of the pointer variable to point the root v-node.
+    @retval    0          Success
+ */
+int
+fops_unmount_sword(sos_devltr ch, vfs_fs_super super,
+    struct _fs_vnode *root_vnode){
+
+	return 0;
+}
+
+/** look up v-node
+    @param[in] ch         The drive letter
+    @param[in] ioctx      The current I/O context
+    @param[in] super      The file system specific super block information.
+    @param[in] vnid       The v-node ID to find
+    @param[in] vn         The address to store v-node
+    @retval    0          Success
+ */
+int
+fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+	    vfs_fs_super super, vfs_vnid vnid, struct _fs_vnode *vn){
+	int                  rc;
+	struct _storage_fib fib;
+
+	if ( vnid == FS_SWD_ROOT_VNID ) {
+
+		/*
+		 * Set root v-node up
+		 */
+		memset(vn, 0x0, sizeof(struct _fs_vnode));
+		vn->vn_id = 0;
+		storage_init_fib(&vn->vn_fib);
+	} else {
+
+		/*
+		 * Search v-node in the directory
+		 */
+		rc = fs_swd_search_fib_by_vnid(ch, ioctx, vnid, &fib);
+		if ( rc != 0 )
+			goto error_out;
+		memcpy(&vn->vn_fib, &fib, sizeof(struct _storage_fib));
+		vn->vn_id = vnid;
+	}
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
 /** Create a file
     @param[in] ch       The drive letter
+    @param[in] ioctx    The current I/O context
     @param[in] fname    The filename to open
     @param[in] flags    The open flags
     FS_VFS_FD_FLAG_O_RDONLY  Read only open
@@ -115,7 +216,7 @@ error_out:
     FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
     @param[in]  pkt      The S-OS header operation packet.
-    @param[out] fibp     The address to store the file information block
+    @param[out] vn       The v-node to store the file information block
     @param[out] resp     The address to store the return code for S-OS.
     @retval     0               Success
     @retval    -1               Error
@@ -125,11 +226,11 @@ error_out:
     *    SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_creat_sword(sos_devltr ch,
+fops_creat_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
     const char *fname, fs_fd_flags flags, const struct _sword_header_packet *pkt,
-    struct _storage_fib *fibp, BYTE *resp){
+    struct _fs_vnode *vn, BYTE *resp){
 	int                           rc;
-	fs_dirno                   dirno;
+	vfs_vnid                    vnid;
 	struct _storage_fib          fib;
 	BYTE     swd_name[SOS_FNAME_LEN];
 
@@ -147,7 +248,7 @@ fops_creat_sword(sos_devltr ch,
 	/*
 	 * Search file from directory entry.
 	 */
-	rc = fs_swd_search_dent_by_name(ch, &swd_name[0], &fib);
+	rc = fs_swd_search_dent_by_name(ch, ioctx, &swd_name[0], &vnid);
 	if ( rc == 0 ) {
 
 		if ( !( flags & FS_VFS_FD_FLAG_O_EXCL ) )
@@ -160,7 +261,7 @@ fops_creat_sword(sos_devltr ch,
 	/*
 	 * Search a free entry
 	 */
-	rc = fs_swd_search_free_dent(ch, &dirno);
+	rc = fs_swd_search_free_dent(ch, ioctx, &vnid);
 	if ( rc != 0 ) {
 
 		rc = SOS_ERROR_NOSPC;
@@ -176,7 +277,7 @@ fops_creat_sword(sos_devltr ch,
 	 */
 	fib.fib_devltr = ch;
 	fib.fib_attr = SOS_FATTR_GET_FTYPE(pkt->hdr_attr);
-	fib.fib_dirno = SOS_DIRNO_VAL(dirno);
+	fib.fib_vnid = vnid;
 	fib.fib_size = 0;
 	fib.fib_dtadr = pkt->hdr_dtadr;
 	fib.fib_exadr = pkt->hdr_exadr;
@@ -188,15 +289,14 @@ fops_creat_sword(sos_devltr ch,
 	 */
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(ch, &fib);
+	rc = fs_swd_write_dent(ch, ioctx, &fib);
 	if ( rc != 0 )
 		goto error_out;
 exists_ok:
 	/*
 	 * return file information block
 	 */
-	if ( fibp != NULL )
-		memcpy(fibp, &fib, sizeof(struct _storage_fib));
+	memcpy(&vn->vn_fib, &fib, sizeof(struct _storage_fib));
 
 	return 0;
 
@@ -208,6 +308,7 @@ error_out:
 }
 /** Open a file
     @param[in] ch       The drive letter
+    @param[in] ioctx    The current I/O context
     @param[in] fname    The filename to open
     @param[in] flags    The open flags
     FS_VFS_FD_FLAG_O_RDONLY  Read only open
@@ -217,7 +318,7 @@ error_out:
     FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
     @param[in]  pkt      The S-OS header operation packet.
-    @param[out] fibp     The address to store the file information block
+    @param[out] vn       The v-node to store the file information block
     @param[out] privatep The pointer to the pointer variable to store
     the private information
     @param[out] resp     The address to store the return code for S-OS.
@@ -232,11 +333,13 @@ error_out:
     * SOS_ERROR_SYNTAX Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch,
+fops_open_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
     const char *filepath, fs_fd_flags flags, const struct _sword_header_packet *pkt,
-    struct _storage_fib *fibp, void **privatep, BYTE *resp){
+    struct _fs_vnode *vn, void **privatep, BYTE *resp){
 	int                           rc;
 	struct _storage_fib          fib;
+	struct _fs_vnode             lvn;
+	vfs_vnid                    vnid;
 	BYTE                         res;
 	BYTE     swd_name[SOS_FNAME_LEN];
 
@@ -258,12 +361,16 @@ fops_open_sword(sos_devltr ch,
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
 
-		rc = fops_creat_sword(ch, filepath, flags, pkt, fibp, &res);
+		rc = fops_creat_sword(ch, ioctx, filepath, flags, pkt, &lvn, &res);
 		if ( rc != 0 ) {
 
 			rc = res;
 			goto error_out;
 		}
+
+		/* Copy the file information block */
+		memcpy(&fib, &lvn.vn_fib, sizeof(struct _storage_fib));
+
 		goto set_private_out;
 	}
 
@@ -278,7 +385,10 @@ fops_open_sword(sos_devltr ch,
 	/*
 	 * Search file from directory entry.
 	 */
-	rc = fs_swd_search_dent_by_name(ch, &swd_name[0], &fib);
+	rc = fs_swd_search_dent_by_name(ch, ioctx, &swd_name[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+	rc = fs_swd_search_fib_by_vnid(ch, ioctx, vnid, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -304,8 +414,7 @@ fops_open_sword(sos_devltr ch,
 	/*
 	 * return file information block
 	 */
-	if ( fibp != NULL )
-		memcpy(fibp, &fib, sizeof(struct _storage_fib));
+	memcpy(&vn->vn_fib, &fib, sizeof(struct _storage_fib));
 
 	rc = 0;
 
@@ -422,7 +531,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	if ( rc == 0 ) {
 
 		/* Update the directory entry. */
-		rc = fs_swd_write_dent(fib->fib_devltr, fib);
+		rc = fs_swd_write_dent(fib->fib_devltr, fdp->fd_ioctx, fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -441,7 +550,7 @@ error_out:
 
 /** Stat the file
     @param[in]  fdp    The file descriptor to the file.
-    @param[out] fib    The buffer to store the file information block of the file.
+    @param[out] vn     The v-node to store the file information block
     @param[out] resp   The address to store the return code for S-OS.
     @retval     0               Success
     @retval    -1               Error
@@ -453,10 +562,10 @@ error_out:
  */
 int
 fops_stat_sword(struct _sword_file_descriptor *fdp,
-    struct _storage_fib *fib, BYTE *resp){
+    struct _fs_vnode *vn, BYTE *resp){
 
 	/* Copy the file infomation block */
-	memmove(fib, &fdp->fd_fib, sizeof(struct _storage_fib));
+	memmove(&vn->vn_fib, &fdp->fd_fib, sizeof(struct _storage_fib));
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(0);  /* return code */
@@ -563,7 +672,7 @@ fops_truncate_sword(struct _sword_file_descriptor *fdp,
 	newpos = 0;
 	if ( offset > 0 )
 		newpos = offset;
-	rc = change_filesize_sword(fib, pos, newpos);
+	rc = change_filesize_sword(fdp->fd_ioctx, fib, pos, newpos);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -607,7 +716,7 @@ fops_opendir_sword(const char *filepath, struct _sword_dir *dir, BYTE *resp){
 
 /** Read the directory
     @param[in]  dir    The pointer to the DIR structure (directory stream).
-    @param[out] fib    The pointer to the file information block.
+    @param[out] vn     The v-node to store the file information block
     @param[out] resp   The address to store the return code for S-OS.
     @retval     0      Success
     @retval    -1      Error
@@ -622,9 +731,10 @@ fops_opendir_sword(const char *filepath, struct _sword_dir *dir, BYTE *resp){
     indicated by the dir_pos member of the dir_pos structured variable in DIR.
  */
 int
-fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp){
+fops_readdir_sword(struct _sword_dir *dir, struct _fs_vnode *vn, BYTE *resp){
 	int                        rc;
 	struct _storage_fib  *dir_fib;
+	struct _fs_vnode          lvn;
 	struct _storage_disk_pos *pos;
 	fs_dirno                dirno;
 
@@ -641,16 +751,15 @@ fops_readdir_sword(struct _sword_dir *dir, struct _storage_fib *fib, BYTE *resp)
 		goto error_out;
 	}
 
-	if ( fib != NULL ) {
+	/*
+	 * Fill the file information block
+	 */
+	rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr, dir->dir_ioctx,
+	    SOS_DIRNO_VAL(dirno), &lvn.vn_fib);
+	if ( rc != 0 )
+		goto error_out;
 
-		/*
-		 * Fill the file information block
-		 */
-		rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr,
-		    SOS_DIRNO_VAL(dirno), fib);
-		if ( rc != 0 )
-			goto error_out;
-	}
+	memcpy(&vn->vn_fib, &lvn.vn_fib, sizeof(struct _storage_fib));
 
 	/*
 	 * Update positions
@@ -714,7 +823,6 @@ fops_seekdir_sword(struct _sword_dir *dir, fs_dirno dirno, BYTE *resp){
 
 /** Return current location in directory stream
     @param[in]  dir    The pointer to the DIR structure (directory stream).
-    @param[in]  dirno  The position of the next fs_readdir() call
     @param[out] dirnop The address to store current location in directory stream.
     It should be a value returned by a previous call to fs_telldir.
     @param[out] resp   The address to store the return code for S-OS.
@@ -790,6 +898,7 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	struct _storage_fib        old_fib;
 	struct _storage_fib        new_fib;
 	struct _storage_fib       *dir_fib;
+	vfs_vnid                      vnid;
 	BYTE    old_swdname[SOS_FNAME_LEN];
 	BYTE    new_swdname[SOS_FNAME_LEN];
 
@@ -805,8 +914,12 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
-	    &old_swdname[0], &old_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+	    &old_swdname[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+	rc = fs_swd_search_fib_by_vnid(dir_fib->fib_devltr, dir->dir_ioctx,
+	    vnid, &old_fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -820,8 +933,8 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 
 	/* Confirm the new filename doesn't exist.
 	 */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
-	    &new_swdname[0], &new_fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+	    &new_swdname[0], &vnid);
 	if ( rc == 0 ) {
 
 		rc = SOS_ERROR_EXIST;
@@ -832,7 +945,7 @@ fops_rename_sword(struct _sword_dir *dir, const char *oldpath,
 	memcpy(&old_fib.fib_sword_name[0],&new_swdname[0],SOS_FNAME_LEN);
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(dir_fib->fib_devltr, &old_fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &old_fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -865,6 +978,7 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
 	struct _storage_fib       *dir_fib;
+	vfs_vnid                      vnid;
 	BYTE        swdname[SOS_FNAME_LEN];
 
 	pos     = &dir->dir_pos;  /* Position information */
@@ -879,8 +993,12 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 	}
 
 	/* Obtain a directory entry for the file to be renamed. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
-	    &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+	    &swdname[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+	rc = fs_swd_search_fib_by_vnid(dir_fib->fib_devltr, dir->dir_ioctx,
+	    vnid, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -891,7 +1009,7 @@ fops_chmod_sword(struct _sword_dir *dir, const char *path,
 		fib.fib_attr |= SOS_FATTR_RDONLY;  /* set readonly bit */
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(dir_fib->fib_devltr, &fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -924,6 +1042,7 @@ fops_unlink_sword(struct _sword_dir *dir,
 	struct _storage_disk_pos      *pos;
 	struct _storage_fib            fib;
 	struct _storage_fib       *dir_fib;
+	vfs_vnid                      vnid;
 	BYTE        swdname[SOS_FNAME_LEN];
 
 	pos = &dir->dir_pos;  /* Position information */
@@ -938,8 +1057,13 @@ fops_unlink_sword(struct _sword_dir *dir,
 	}
 
 	/* Obtain a directory entry for the file to unlink. */
-	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr,
-	    &swdname[0], &fib);
+	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+	    &swdname[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = fs_swd_search_fib_by_vnid(dir_fib->fib_devltr, dir->dir_ioctx,
+	    vnid, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -947,7 +1071,7 @@ fops_unlink_sword(struct _sword_dir *dir,
 	fib.fib_attr = SOS_FATTR_FREE;
 
 	/* Update the directory entry. */
-	rc = fs_swd_write_dent(dir_fib->fib_devltr, &fib);
+	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &fib);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -956,7 +1080,7 @@ fops_unlink_sword(struct _sword_dir *dir,
 	 * We should free the file allocation table after modifying the directory entry
 	 * because we should make the file invisible in such a situation.
 	 */
-	rc = change_filesize_sword(&fib, &dir->dir_pos, 0);
+	rc = change_filesize_sword(dir->dir_ioctx, &fib, &dir->dir_pos, 0);
 	if ( rc != 0 )
 		goto error_out;
 

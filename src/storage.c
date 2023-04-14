@@ -114,7 +114,6 @@ clear_position_info(struct _storage_disk_pos *dpp){
 	if ( dpp == NULL )
 		return;
 
-	dpp->dp_dirps = 0;
 	dpp->dp_fatpos = 0;
 	dpp->dp_dirno = 0;
 	dpp->dp_retpoi = 0;
@@ -159,7 +158,7 @@ storage_init_fib(struct _storage_fib *fibp){
 
 	fibp->fib_devltr = 0;
 	fibp->fib_attr = SOS_FATTR_EODENT; /* Initial value is the end of directory entry */
-	fibp->fib_dirno = 0; /* Initial position */
+	fibp->fib_vnid = 0;  /* v-node ID */
 	fibp->fib_size = 0;  /* SIZE */
 	fibp->fib_dtadr = 0; /* DTADR */
 	fibp->fib_exadr = 0; /* EXADR */
@@ -630,37 +629,6 @@ out:
 	return rc;
 }
 
-/** Set the directory entry position on the device
-    @param[in]  ch    The drive letter of a device on SWORD
-    @param[in]  dirps The #DIRPS to set
-    @retval  0 success
-    @retval EINVAL The drive letter is not supported.
-    @retval ENOENT The device is not supported.
-    @retval ENXIO  The device has not been mounted.
- */
-int
-storage_set_dirps(const sos_devltr ch, const fs_dirps dirps){
-	int                          rc;
-	int                         idx;
-	struct _storage_disk_image *inf;
-	struct _storage_disk_pos   *pos;
-
-	/* Get device index */
-	rc = check_drive_letter_common(ch, &idx);
-	if ( rc != 0 )
-		return rc;
-
-	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
-
-	inf = &storage[idx]; /* get disk image info */
-
-	pos = &inf->di_pos;  /* position information */
-
-	pos->dp_dirps = SOS_DIRPS_VAL(dirps); /* set dirps */
-
-	return 0;
-}
-
 /** Set the file allocation table position on the device
     @param[in]  ch     The drive letter of a device on SWORD
     @param[in]  fatpos The #FATPOS to set
@@ -692,37 +660,6 @@ storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
 	return 0;
 }
 
-/** Get the directory entry position on the device
-    @param[in]  ch    The drive letter of a device on SWORD
-    @param[out] dirpsp The address to store #DIRPS
-    @retval  0 success
-    @retval EINVAL The drive letter is not supported.
-    @retval ENOENT The device is not supported.
-    @retval ENXIO  The device has not been mounted.
- */
-int
-storage_get_dirps(const sos_devltr ch, fs_dirps *dirpsp){
-	int                          rc;
-	int                         idx;
-	struct _storage_disk_image *inf;
-	struct _storage_disk_pos   *pos;
-
-	/* Get device index */
-	rc = check_drive_letter_common(ch, &idx);
-	if ( rc != 0 )
-		return rc;
-
-	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
-
-	inf = &storage[idx]; /* get disk image info */
-
-	pos = &inf->di_pos;  /* position information */
-
-	if ( dirpsp != NULL )
-		*dirpsp = pos->dp_dirps;  /* return dirps */
-
-	return 0;
-}
 
 /** Get the file allocation table position on the device
     @param[in]   ch    The drive letter of a device on SWORD

@@ -45,9 +45,6 @@ init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_file_descriptor *f
 
 	fib->fib_devltr = ch;  /* Drive letter */
 
-	storage_get_dirps(ch, &pos->dp_dirps);    /* FIXME: Set #DIRPS of the device */
-	storage_get_fatpos(ch, &pos->dp_fatpos);  /* FIXME: Set #FATPOS of the device */
-
 	/*
 	 * Clear flags
 	 */
@@ -75,9 +72,6 @@ init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_dir *dir){
 	pos = &dir->dir_pos;
 
 	fib->fib_devltr = ch;  /* Drive letter */
-
-	storage_get_dirps(ch, &pos->dp_dirps);    /* FIXME: DIRPS  */
-	storage_get_fatpos(ch, &pos->dp_fatpos);  /* FIXME: FATPOS */
 
 	/*
 	 * Clear flags

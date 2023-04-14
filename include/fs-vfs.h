@@ -32,6 +32,11 @@
 
 #define FS_VFS_PATH_DELIM '/'   /**< Path delimiter */
 
+/** Mount options
+ */
+#define FS_VFS_MNT_OPT_NONE    (0)  /* None           */
+#define FS_VFS_MNT_OPT_RDONLY  (1)  /* Readonly mount */
+
 /** file decriptor flags
  */
 #define FS_VFS_FD_FLAG_O_RDONLY   (0x0)     /**< ReadOnly   */
@@ -98,14 +103,14 @@
 /** Fill the file information block
     @param[in] _fib    The pointer to the file information block
     @param[in] _ch     The device letter
-    @param[in] _dirno  The #DIRNO of the file from the beginning of the directory entry
+    @param[in] _vnid   The v-node ID of the file
     @param[in] _dent   The directory entry to copy the FIB from
  */
-#define STORAGE_FILL_FIB(_fib, _ch, _dirno, _dent) do{		\
+#define STORAGE_FILL_FIB(_fib, _ch, _vnid, _dent) do{			\
 		((struct _storage_fib *)(_fib))->fib_devltr = (_ch);	\
 		((struct _storage_fib *)(_fib))->fib_attr =		\
 			*( (BYTE *)(_dent) + SOS_FIB_OFF_ATTR );	\
-		((struct _storage_fib *)(_fib))->fib_dirno = (_dirno);	\
+		((struct _storage_fib *)(_fib))->fib_vnid = (_vnid);	\
 		((struct _storage_fib *)(_fib))->fib_size =		\
 			bswap_word_z80_to_host( *(WORD *)( (BYTE *)(_dent) \
 				+ SOS_FIB_OFF_SIZE ) );			\
@@ -220,7 +225,7 @@ typedef int       vfs_vn_state;  /**< v-node status */
 struct _storage_fib{
 	sos_devltr               fib_devltr;  /**< Drive letter      */
 	fs_attr                    fib_attr;  /**< File attribute    */
-	fs_dirno                  fib_dirno;  /**< DIRNO of the file */
+	vfs_vnid                   fib_vnid;  /**< directory entry index */
 	WORD                       fib_size;  /**< File size         */
 	WORD                      fib_dtadr;  /**< File load address */
 	WORD                      fib_exadr;  /**< File exec address */
@@ -312,14 +317,16 @@ struct _fs_fops{
 	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
 	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super,
 	    struct _fs_vnode *_root_vnode);
-	int (*fops_lookup)(const struct _fs_ioctx *_ioctx,
-	    vfs_fs_super _fs_super, vfs_vnid vnid, struct _fs_vnode *_vn);
-	int (*fops_creat)(sos_devltr _ch, const char *_filepath,
-	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
-	    struct _fs_vnode *_vnodep, BYTE *_resp);
-	int (*fops_open)(sos_devltr _ch, const char *_fname,
-	    fs_fd_flags _flags, const struct _sword_header_packet *_pkt,
-	    struct _fs_vnode *_vnodep, void **_privatep, BYTE *_resp);
+	int (*fops_lookup)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vn);
+	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const char *_filepath, fs_fd_flags _flags,
+	    const struct _sword_header_packet *_pkt,
+	    struct _fs_vnode *_vn, BYTE *_resp);
+	int (*fops_open)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const char *_fname, fs_fd_flags _flags,
+	    const struct _sword_header_packet *_pkt,
+	    struct _fs_vnode *_vn, void **_privatep, BYTE *_resp);
 	int (*fops_close)(struct _sword_file_descriptor *_fdp,
 	    BYTE *_resp);
 	int (*fops_read)(struct _sword_file_descriptor *_fdp,
@@ -327,13 +334,13 @@ struct _fs_fops{
 	int (*fops_write)(struct _sword_file_descriptor *_fdp,
 	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
-	    struct _fs_vnode *_vnodep, BYTE *_resp);
+	    struct _fs_vnode *_vn, BYTE *_resp);
 	int (*fops_seek)(struct _sword_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
 	int (*fops_truncate)(struct _sword_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
 	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
-	int (*fops_readdir)(struct _sword_dir *_dir, struct _fs_vnode *_vnodep,
+	int (*fops_readdir)(struct _sword_dir *_dir, struct _fs_vnode *_vn,
 	    BYTE *_resp);
 	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno, BYTE *_resp);
 	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop,

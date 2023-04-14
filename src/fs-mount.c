@@ -187,7 +187,7 @@ fs_vfs_mnt_search_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	}
 
 	/* Fill v-node */
-	rc = mnt->m_fs->fsm_fops->fops_lookup(ioctx, mnt->m_super, vnid, vn);
+	rc = mnt->m_fs->fsm_fops->fops_lookup(ch, ioctx, mnt->m_super, vnid, vn);
 	if ( rc != 0 )
 		goto error_out;
 

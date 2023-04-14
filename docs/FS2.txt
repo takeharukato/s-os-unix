@@ -1,0 +1,30 @@
+[1]	int (*fops_mount)(sos_devltr _ch, const void *_args,
+	    struct _fs_ioctx *_ioctx, vfs_fs_super *_superp,
+	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
+---
+	int (*fops_mount)(const struct _fs_vnode *_dir_vn, const void *_args,
+	    struct _fs_ioctx *_ioctx, vfs_fs_super *_superp,
+	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
+[2] 	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super,
+	    struct _fs_vnode *_root_vnode);
+---
+ 	int (*fops_unmount)(const struct _fs_vnode *_dir_vn, vfs_fs_super _super,
+	    struct _fs_vnode *_root_vnode);
+[3]     int (*fops_lookup)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vn);
+--
+        int (*fops_lookup)(const struct _fs_vnode *_dir_vn,
+	    const struct _fs_ioctx *_ioctx,
+	    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vn);
+[4]     int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const char *_filepath, fs_fd_flags _flags,
+	    const struct _sword_header_packet *_pkt,
+	    struct _fs_vnode *_vn, BYTE *_resp);
+---
+        int (*fops_creat)(const struct _fs_vnode *_dir_vn,
+	    const struct _fs_ioctx *_ioctx,
+	    const char *_filepath, fs_fd_flags _flags,
+	    const struct _sword_header_packet *_pkt,
+	    struct _fs_vnode *_vn, BYTE *_resp);
+
+他のIFは, IFの修正は不要で実装のみ見直し

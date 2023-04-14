@@ -47,6 +47,58 @@ TODO list
 * D88フォーマット対応
 
 [fs]
+* dir関連IF
+  fs_swd_search_dent_by_dirno
+  fs_swd_search_dent_by_name
+  fs_swd_search_free_dent
+  fs_swd_write_dent
+  は, dirのvnodeを引数に取り, ルートでなければ, そのディレクトリのクラスタのディレクトリ
+  エントリを辿り, ルートの場合は, ioctxからdirpsを取得するように修正する。
+  このためには, chの代わりにv-nodeを渡すようにfops全般に修正する
+  v-nodeを渡せば, vn->vn_fib.fib_devltrでデバイスを取得することができるので
+  chの代用になる.
+
+
+  1. fs_swd_get_block_number, fs_swd_release_blocks, fs_swd_get_used_size_in_block
+     にioctxを引き渡し, storage_set_fatpos, storage_get_fatpos,
+     struct _storage_disk_posのdp_fatposを除去
+
+  2. path名からvnodeを取得, path名からディレクトリv-nodeを取得する関数を作成
+  3. 2.をデバッグ
+
+  4. fopsのIFを見直す
+     a. struct _sword_file_descriptorのfd_fibを
+        vnodeへのポインタに置換え,
+     b. struct _sword_dirのdir_posからdir_ioctxを削除し, struct _sword_file_descriptor
+        に置換え
+  5. 今のfs-swordの実装をコピーしておき, vnodeへのポインタを渡す形式で書き直す
+     FS2.txt参照
+
+  fs_swd_search_dent_by_dirno  757 src/fs-sword.c   	rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr, dir->dir_ioctx,
+  =>  dir->dir_fibが取得できるはずなので, chの代わりにdirを使用
+
+fs_swd_search_dent_by_name  251 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(ch, ioctx, &swd_name[0], &vnid);
+fs_swd_search_dent_by_name  388 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(ch, ioctx, &swd_name[0], &vnid);
+=>createとopenなので, path_to_dir_vnode, path_to_dirを実装して, dirを得る
+
+fs_swd_search_dent_by_name  917 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+fs_swd_search_dent_by_name  936 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+fs_swd_search_dent_by_name  996 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+fs_swd_search_dent_by_name 1060 src/fs-sword.c   	rc = fs_swd_search_dent_by_name(dir_fib->fib_devltr, dir->dir_ioctx,
+  =>dir->dir_fib.fib_vnid
+ch, ioctzの代わりにdirを使用
+
+fs_swd_search_free_dent  162 include/fs-sword.h int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+fs_swd_search_free_dent  264 src/fs-sword.c   	rc = fs_swd_search_free_dent(ch, ioctx, &vnid);
+
+fs_swd_write_dent   94 src/fs-sword.c   	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, fib); /* write back */
+fs_swd_write_dent  292 src/fs-sword.c   	rc = fs_swd_write_dent(ch, ioctx, &fib);
+fs_swd_write_dent  534 src/fs-sword.c   		rc = fs_swd_write_dent(fib->fib_devltr, fdp->fd_ioctx, fib);
+fs_swd_write_dent  948 src/fs-sword.c   	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &old_fib);
+fs_swd_write_dent 1012 src/fs-sword.c   	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &fib);
+fs_swd_write_dent 1074 src/fs-sword.c   	rc = fs_swd_write_dent(dir_fib->fib_devltr, dir->dir_ioctx, &fib);
+
+
 * storage管理とは別にマウントテーブルを管理する方針に方針変更。
   * root_fibを保持できるようにする必要があるため。
   * _fs_fopsにfib比較処理を追加して, SWORDの場合, fibのfib_clsで比較する。
@@ -74,6 +126,8 @@ TODO list
 struct _mount_point mount_tbl[MOUNT_POINT_NR];
 
 * fatpos/dirpsはioctxを参照するようにする
+* dent操作にディレクトリのクラスタ番号を指定できるようにすること
+* fd/dirのfibメンバは, v-nodeにするべき
 * ファイルシステムマウント処理作成
 * ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する
 * ファイルシステム共通部(fs-vfs)作成
