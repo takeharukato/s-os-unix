@@ -22,16 +22,18 @@
 
 /** Read/Write data to the cluster
     @param[in]  ch      The drive letter
-    @param[in]  mode     The number to specify the behavior.
-    * FS_VFS_IO_DIR_RD Get block to read
-    * FS_VFS_IO_DIR_WR Get block to write
+    @param[in]  ioctx   The current I/O context.
+    @param[in]  mode    The number to specify the behavior.
+    * FS_VFS_IO_DIR_RD  Get block to read
+    * FS_VFS_IO_DIR_WR  Get block to write
     @param[out] buf     The address to store the contents of the cluster.
     @param[in]  blk     The cluster number to read from or write to.
     @retval     0             success
     @retval     SOS_ERROR_IO  I/O Error
  */
 static int
-rw_cluster_sword(sos_devltr ch, int mode, void *buf, fs_blk_num blk){
+rw_cluster_sword(sos_devltr ch, struct _fs_ioctx *ioctx, int mode, void *buf,
+    fs_blk_num blk){
 	int                        rc;
 	size_t                  rwcnt;
 	BYTE blkbuf[SOS_CLUSTER_SIZE];
@@ -70,6 +72,7 @@ error_out:
 }
 
 /** Read/Write the block in the file.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block
     @param[in]  pos      The file position where the block is placed at
     @param[in]  mode     The number to specify the behavior.
@@ -86,8 +89,8 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 static int
-rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
-    size_t bufsiz, size_t *rwsizp){
+rw_block_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+    int mode, void *buf, size_t bufsiz, size_t *rwsizp){
 	int                        rc;
 	fs_blk_num                blk;
 	size_t                 cpylen;
@@ -104,7 +107,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 	while( remains > 0 ) {
 
 		/* Get the block number and allocate a block if it is needed. */
-		rc = fs_swd_get_block_number(fib, pos + pos_off, mode, &blk);
+		rc = fs_swd_get_block_number(ioctx, fib, pos + pos_off, mode, &blk);
 		if ( rc != 0 ) {
 
 			if ( ( !FS_VFS_IODIR_WRITE(mode) ) && ( rc == SOS_ERROR_NOENT ) )
@@ -114,7 +117,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		}
 
 		/* Get block length */
-		rc = fs_swd_get_used_size_in_block(fib, pos + pos_off, &blklen);
+		rc = fs_swd_get_used_size_in_block(ioctx, fib, pos + pos_off, &blklen);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -130,7 +133,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 		}
 
 		/* Read block into local buffer */
-		rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_RD,
+		rc = rw_cluster_sword(fib->fib_devltr, ioctx, FS_VFS_IO_DIR_RD,
 		    &blkbuf[0], blk);
 		if ( rc != 0 )
 			goto error_out;
@@ -150,7 +153,7 @@ rw_block_sword(struct _storage_fib *fib, fs_off_t pos, int mode, void *buf,
 			memcpy(&blkbuf[0] + blk_off, buf + pos_off, cpylen);
 
 			/* Write block */
-			rc = rw_cluster_sword(fib->fib_devltr, FS_VFS_IO_DIR_WR,
+			rc = rw_cluster_sword(fib->fib_devltr, ioctx, FS_VFS_IO_DIR_WR,
 			    &blkbuf[0], blk);
 			if ( rc != 0 )
 				goto error_out;
@@ -175,6 +178,7 @@ error_out:
 }
 
 /** Read/Write the block in the file.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block
     @param[in]  pos      The file position where the block is placed at
     @param[in]  mode     The number to specify the behavior.
@@ -191,13 +195,15 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_read_block(struct _storage_fib *fib, fs_off_t pos, BYTE *buf,
-    size_t bufsiz, size_t *rwsizp){
+fs_swd_read_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+    BYTE *buf, size_t bufsiz, size_t *rwsizp){
 
-	return rw_block_sword(fib, pos, FS_VFS_IO_DIR_RD, (void *)buf, bufsiz, rwsizp);
+	return rw_block_sword(ioctx, fib, pos, FS_VFS_IO_DIR_RD,
+	    (void *)buf, bufsiz, rwsizp);
 }
 
 /** Write the block to the file.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block
     @param[in]  pos      The file position where the block is placed at
     @param[in]  buf      The address of the buffer to transfer the contents of
@@ -211,8 +217,9 @@ fs_swd_read_block(struct _storage_fib *fib, fs_off_t pos, BYTE *buf,
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_write_block(struct _storage_fib *fib, fs_off_t pos, const BYTE *buf,
-    size_t bufsiz, size_t *rwsizp){
+fs_swd_write_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+    const BYTE *buf, size_t bufsiz, size_t *rwsizp){
 
-	return rw_block_sword(fib, pos, FS_VFS_IO_DIR_WR, (void *)buf, bufsiz, rwsizp);
+	return rw_block_sword(ioctx, fib, pos, FS_VFS_IO_DIR_WR,
+	    (void *)buf, bufsiz, rwsizp);
 }

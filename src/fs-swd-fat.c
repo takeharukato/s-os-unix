@@ -22,6 +22,7 @@
 
 /** Read/Write file allocation table (FAT)
     @param[in]  ch  The drive letter of the device
+    @param[in]  ioctx     The current I/O context.
     @param[out] fatbuf Memory buffer for the FAT
     @param[in]  mode   The number to specify the behavior.
     * FS_VFS_IO_DIR_RD Get block to read
@@ -30,15 +31,13 @@
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-rw_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat, int mode){
+rw_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx,
+    struct _fs_sword_fat *fat, int mode){
 	int                 rc;
 	size_t           rwcnt;
 	fs_fatpos       fatrec;
 
-	rc = storage_get_fatpos(ch, &fatrec);
-	if ( rc != 0 )
-		goto error_out;
-	fatrec = SOS_FATPOS_VAL(fatrec);
+	fatrec = SOS_FATPOS_VAL(ioctx->ioc_fatpos);
 
 	/*
 	 * Read/Write the file allocation table
@@ -64,14 +63,15 @@ error_out:
 
 /** Read File Allocation Table
     @param[in]  ch     The drive letter of the device
+    @param[in]  ioctx  The current I/O context.
     @param[in]  fat    The address to store the read file allocation table into.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
+read_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat){
 
-	return rw_fat_sword(ch, fat, FS_VFS_IO_DIR_RD);
+	return rw_fat_sword(ch, ioctx, fat, FS_VFS_IO_DIR_RD);
 }
 
 /** Write File Allocation Table
@@ -81,9 +81,9 @@ read_fat_sword(sos_devltr ch, struct _fs_sword_fat *fat){
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-write_fat_sword(sos_devltr ch, const struct _fs_sword_fat *fat){
+write_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx, const struct _fs_sword_fat *fat){
 
-	return rw_fat_sword(ch, (struct _fs_sword_fat *)fat, FS_VFS_IO_DIR_WR);
+	return rw_fat_sword(ch, ioctx, (struct _fs_sword_fat *)fat, FS_VFS_IO_DIR_WR);
 }
 
 /** Clear a file block
@@ -125,6 +125,7 @@ error_out:
 }
 
 /** Allocate new block on the disk.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  fat      The pointer to the file allocation table cache.
     @param[in]  pos      The file offset position
@@ -135,7 +136,7 @@ error_out:
     @retval    SOS_ERROR_IO     I/O Error
   */
 static int
-alloc_newblock_sword(struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk_num *blkp){
+alloc_newblock_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	int  i;
 	int rc;
 
@@ -157,6 +158,7 @@ found:
 }
 
 /** Set the number of used records at the last cluster in the cluster chain.
+    @param[in]  ioctx  The current I/O context.
     @param[in]  fat    The pointer to the file allocation table cache.
     @param[in]  pos    The file offset position.
     @param[in]  blk    The block number of the last cluster.
@@ -164,7 +166,7 @@ found:
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static void
-handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
+handle_last_cluster(struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
 	size_t       use_cls_siz;
 
 	/*
@@ -188,6 +190,7 @@ handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
 }
 
 /** Set the number of used records at the last cluster in the cluster chain.
+    @param[in]  ioctx  The current I/O context.
     @param[in]  fat    The pointer to the file allocation table cache.
     @param[in]  mode   The number to specify the behavior.
     * FS_VFS_IO_DIR_RD Get block to read
@@ -198,7 +201,7 @@ handle_last_cluster(struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static int
-prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_fib *fib){
+prepare_first_block_sword(struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat, int mode, struct _storage_fib *fib){
 	int              rc;
 	fs_blk_num  new_blk;
 
@@ -218,14 +221,14 @@ prepare_first_block_sword(struct _fs_sword_fat *fat, int mode, struct _storage_f
 	/*
 	 * Allocate the first cluster
 	 */
-	rc = alloc_newblock_sword(fib, fat, &new_blk);
+	rc = alloc_newblock_sword(ioctx, fib, fat, &new_blk);
 	if ( rc != 0 )
 		goto error_out;
 
 	fib->fib_cls = new_blk;
 
 	/* mark the end of cluster chain */
-	handle_last_cluster(fat, 0, new_blk);
+	handle_last_cluster(ioctx, fat, 0, new_blk);
 
 	return 0;
 
@@ -235,17 +238,18 @@ error_out:
 
 /** Return the number of free blocks on the disk
     @param[in]  ch          The drive letter of the device
+    @param[in]  ioctx       The current I/O context.
     @param[out] free_blocks The address to store the number of the free blocks on the disk.
  */
 static int
-get_free_block_nr_sword(sos_devltr ch, size_t *free_blocks){
+get_free_block_nr_sword(sos_devltr ch, struct _fs_ioctx *ioctx, size_t *free_blocks){
 	int                    i;
 	int                   rc;
 	size_t          free_cnt;
 	struct _fs_sword_fat fat;
 
 	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(ch, &fat);
+	rc = read_fat_sword(ch, ioctx, &fat);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -266,6 +270,7 @@ error_out:
 }
 
 /** Get the cluster number of the block from the file position of the file.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
     @param[in]  mode     The number to specify the behavior.
@@ -279,7 +284,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
+fs_swd_get_block_number(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t offset, int mode,
     fs_blk_num *blkp){
 	int                   rc;
 	fs_off_t             pos;
@@ -296,7 +301,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		return SOS_ERROR_BADFAT;  /* Bad file allocation table */
 
 	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, ioctx, &fat);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -305,7 +310,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 	 */
 	if ( FS_SWD_IS_END_CLS(fib->fib_cls) ) {
 
-		rc = prepare_first_block_sword(&fat, mode, fib);
+		rc = prepare_first_block_sword(ioctx, &fat, mode, fib);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -353,7 +358,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		/*
 		 * Expand the cluster chain.
 		 */
-		rc = alloc_newblock_sword(fib, &fat, &new_blk);
+		rc = alloc_newblock_sword(ioctx, fib, &fat, &new_blk);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -361,7 +366,7 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		 * the cluster. If this assumption is incorrect, the FAT entry
 		 * will be altered in the subsequent iteration.
 		 */
-		handle_last_cluster(&fat, pos, new_blk);
+		handle_last_cluster(ioctx, &fat, pos, new_blk);
 
 		/* Add the newly allocated block to the cluster chain. */
 		FS_SWD_SET_FAT(&fat, cur, new_blk); /* cur->next = new_blk */
@@ -381,12 +386,12 @@ fs_swd_get_block_number(struct _storage_fib *fib, fs_off_t offset, int mode,
 		}
 
 		/* Expand the cluster length */
-		handle_last_cluster(&fat, pos, cur);
+		handle_last_cluster(ioctx, &fat, pos, cur);
 	}
 
 	if ( FS_VFS_IODIR_WRITE(mode) ) { /* Write the file allocation table back. */
 
-		rc = write_fat_sword(fib->fib_devltr, &fat);
+		rc = write_fat_sword(fib->fib_devltr, ioctx, &fat);
 		if ( rc != 0 )
 			goto error_out;
 	}
@@ -406,6 +411,7 @@ error_out:
 }
 
 /** Release blocks from the file position of the file.
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
     @param[in]  relblkp  The total amount of released blocks ( unit:the number of blocks ).
@@ -416,7 +422,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
+fs_swd_release_blocks(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
 	int                   rc;
 	fs_off_t             pos;
 	fs_off_t         rel_pos;
@@ -435,7 +441,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, ioctx, &fat);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -446,12 +452,13 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	if ( pos > 0 ) {
 
 		/* Get the last block number of the remaining blocks. */
-		rc = fs_swd_get_block_number(fib, pos - 1, FS_VFS_IO_DIR_RD, &remained_blk);
+		rc = fs_swd_get_block_number(ioctx, fib, pos - 1,
+		    FS_VFS_IO_DIR_RD, &remained_blk);
 		if ( rc != 0 )
 			goto error_out;
 
 		/* Shrink the cluster */
-		handle_last_cluster(&fat, pos - 1, remained_blk);
+		handle_last_cluster(ioctx, &fat, pos - 1, remained_blk);
 	}
 
 	rel_blks = 0;   /* Initialize the number of released blocks */
@@ -460,7 +467,7 @@ fs_swd_release_blocks(struct _storage_fib *fib, fs_off_t offset, fs_blk_num *rel
 	rel_pos = SOS_CALC_NEXT_ALIGN(pos, SOS_CLUSTER_SIZE);
 
 	/* Get the start block number to release. */
-	rc = fs_swd_get_block_number(fib, rel_pos, FS_VFS_IO_DIR_RD, &next);
+	rc = fs_swd_get_block_number(ioctx, fib, rel_pos, FS_VFS_IO_DIR_RD, &next);
 	if ( rc != 0 ) {
 
 		if ( ( rc == SOS_ERROR_NOENT )
@@ -493,7 +500,7 @@ release_end:
 	/* Write the file allocation table back
 	 * when some records were released.
 	 */
-	rc = write_fat_sword(fib->fib_devltr, &fat);
+	rc = write_fat_sword(fib->fib_devltr, ioctx, &fat);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -516,6 +523,7 @@ error_out:
 }
 
 /** Get used size in the block
+    @param[in]  ioctx    The current I/O context.
     @param[in]  fib      The file information block of the file contains the block.
     @param[in]  offset   The file position where the block is placed at.
     @param[out] usedsizp Used size in the cluster.
@@ -526,7 +534,8 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t *usedsizp){
+fs_swd_get_used_size_in_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
+    fs_off_t offset, size_t *usedsizp){
 	int                   rc;
 	fs_off_t             pos;
 	fs_blk_num           blk;
@@ -537,12 +546,12 @@ fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t 
 	pos = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
 
 	/* Read the contents of the current FAT. */
-	rc = read_fat_sword(fib->fib_devltr, &fat);
+	rc = read_fat_sword(fib->fib_devltr, ioctx, &fat);
 	if ( rc != 0 )
 		goto error_out;
 
 	/* Get the last block number of the remaining blocks. */
-	rc = fs_swd_get_block_number(fib, pos, FS_VFS_IO_DIR_RD, &blk);
+	rc = fs_swd_get_block_number(ioctx, fib, pos, FS_VFS_IO_DIR_RD, &blk);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -552,7 +561,9 @@ fs_swd_get_used_size_in_block(struct _storage_fib *fib, fs_off_t offset, size_t 
 	if ( !FS_SWD_IS_END_CLS( FS_SWD_GET_FAT(&fat, blk) ) )
 		used_bytes = SOS_CLUSTER_SIZE;
 	else
-		used_bytes = FS_SWD_FAT_END_CLS_RECS( FS_SWD_GET_FAT(&fat, blk) ) * SOS_RECORD_SIZE;
+		used_bytes =
+			FS_SWD_FAT_END_CLS_RECS( FS_SWD_GET_FAT(&fat, blk) )
+			* SOS_RECORD_SIZE;
 
 	if ( usedsizp != NULL )
 		*usedsizp = used_bytes;

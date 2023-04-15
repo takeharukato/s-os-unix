@@ -53,13 +53,13 @@ change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
 		/*
 		 * Release file blocks
 		 */
-		rc = fs_swd_release_blocks(fib, newsiz, NULL);
+		rc = fs_swd_release_blocks(ioctx, fib, newsiz, NULL);
 		if ( rc != 0 )
 			goto error_out;
 	} else {
 
 		/* alloc new blocks to the newsize. */
-		rc = fs_swd_get_block_number(fib, newsiz, FS_VFS_IO_DIR_WR, &blk);
+		rc = fs_swd_get_block_number(ioctx, fib, newsiz, FS_VFS_IO_DIR_WR, &blk);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -68,7 +68,7 @@ change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
 		 */
 		if ( ( newsiz > 0) && ( ( ( newsiz + 1 ) % SOS_CLUSTER_SIZE ) > 0 ) ) {
 
-			rc = fs_swd_read_block(fib, SOS_CALC_ALIGN(newsiz,
+			rc = fs_swd_read_block(ioctx, fib, SOS_CALC_ALIGN(newsiz,
 				SOS_CLUSTER_SIZE), &clsbuf[0],
 			    SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
@@ -78,7 +78,7 @@ change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
 			    0x0,
 			    SOS_CLUSTER_SIZE - ( ( newsiz + 1) % SOS_CLUSTER_SIZE ) );
 
-			rc = fs_swd_write_block(fib,
+			rc = fs_swd_write_block(ioctx, fib,
 			    SOS_CALC_ALIGN(newsiz, SOS_CLUSTER_SIZE),
 			    &clsbuf[0], SOS_CLUSTER_SIZE, NULL);
 			if ( rc != 0 )
@@ -469,7 +469,7 @@ fops_read_sword(struct _sword_file_descriptor *fdp, void *dest, size_t count,
 	pos = &fdp->fd_pos;
 	fib = &fdp->fd_fib;
 
-	rc = fs_swd_read_block(fib, pos->dp_pos, dest, count, &rwsiz);
+	rc = fs_swd_read_block(fdp->fd_ioctx, fib, pos->dp_pos, dest, count, &rwsiz);
 	if ( rc != 0 )
 		goto error_out;
 
@@ -518,7 +518,7 @@ fops_write_sword(struct _sword_file_descriptor *fdp, const void *src,
 	}
 
 	fixed = ( count > SOS_MAX_FILE_SIZE ) ? ( SOS_MAX_FILE_SIZE ) : ( count );
-	rc = fs_swd_write_block(fib, pos->dp_pos, src, fixed, &rwsiz);
+	rc = fs_swd_write_block(fdp->fd_ioctx, fib, pos->dp_pos, src, fixed, &rwsiz);
 	if ( rc != 0 )
 		goto error_out;
 	/*

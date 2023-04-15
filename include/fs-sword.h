@@ -146,15 +146,16 @@ struct _fs_sword_fat{
 struct _fs_sword_mnt_opt{
 	uint32_t mount_opts;
 };
-int fs_swd_get_block_number(struct _storage_fib *_fib, fs_off_t _offset, int _mode,
-    fs_blk_num *_blkp);
-int fs_swd_release_blocks(struct _storage_fib *_fib, fs_off_t _offset,
-    fs_blk_num *_relblkp);
-int fs_swd_get_used_size_in_block(struct _storage_fib *_fib, fs_off_t _offset,
-    size_t *_usedsizp);
 
-int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx, fs_dirno _dirno,
-    struct _storage_fib *_fib);
+int fs_swd_get_block_number(struct _fs_ioctx *ioctx, struct _storage_fib *_fib,
+    fs_off_t _offset, int _mode, fs_blk_num *_blkp);
+int fs_swd_release_blocks(struct _fs_ioctx *ioctx, struct _storage_fib *_fib,
+    fs_off_t _offset, fs_blk_num *_relblkp);
+int fs_swd_get_used_size_in_block(struct _fs_ioctx *ioctx, struct _storage_fib *_fib,
+    fs_off_t _offset, size_t *_usedsizp);
+
+int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx,
+    fs_dirno _dirno, struct _storage_fib *_fib);
 int fs_swd_search_dent_by_name(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const BYTE *_swd_name, vfs_vnid *_vnidp);
 int fs_swd_search_fib_by_vnid(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
@@ -163,10 +164,8 @@ int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_vnid *_vnidp);
 int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx, struct _storage_fib *_fib);
 
-int fs_swd_read_block(struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf,
-    size_t _bufsiz, size_t *_rwsizp);
-int fs_swd_write_block(struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf,
-    size_t _bufsiz, size_t *_rwsizp);
+int fs_swd_read_block(struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);
+int fs_swd_write_block(struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);
 
 int fs_sword2unix(const BYTE *_swordname, char **_destp);
 int fs_unix2sword(const char *_unixname, BYTE *_dest, size_t _size);

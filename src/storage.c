@@ -114,7 +114,6 @@ clear_position_info(struct _storage_disk_pos *dpp){
 	if ( dpp == NULL )
 		return;
 
-	dpp->dp_fatpos = 0;
 	dpp->dp_dirno = 0;
 	dpp->dp_retpoi = 0;
 	dpp->dp_pos = 0;
@@ -627,70 +626,6 @@ storage_record_write(const sos_devltr ch, const BYTE *src, const fs_rec rec,
 
 out:
 	return rc;
-}
-
-/** Set the file allocation table position on the device
-    @param[in]  ch     The drive letter of a device on SWORD
-    @param[in]  fatpos The #FATPOS to set
-    @retval  0 success
-    @retval EINVAL The drive letter is not supported.
-    @retval ENOENT The device is not supported.
-    @retval ENXIO  The device has not been mounted.
- */
-int
-storage_set_fatpos(const sos_devltr ch, const fs_fatpos fatpos){
-	int                          rc;
-	int                         idx;
-	struct _storage_disk_image *inf;
-	struct _storage_disk_pos   *pos;
-
-	/* Get device index */
-	rc = check_drive_letter_common(ch, &idx);
-	if ( rc != 0 )
-		return rc;
-
-	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
-
-	inf = &storage[idx]; /* get disk image info */
-
-	pos = &inf->di_pos;  /* position information */
-
-	pos->dp_fatpos = SOS_FATPOS_VAL(fatpos);
-
-	return 0;
-}
-
-
-/** Get the file allocation table position on the device
-    @param[in]   ch    The drive letter of a device on SWORD
-    @param[out]  fatposp The address to store #FATPOS
-    @retval  0 success
-    @retval EINVAL The drive letter is not supported.
-    @retval ENOENT The device is not supported.
-    @retval ENXIO  The device has not been mounted.
- */
-int
-storage_get_fatpos(const sos_devltr ch, fs_fatpos *fatposp){
-	int                          rc;
-	int                         idx;
-	struct _storage_disk_image *inf;
-	struct _storage_disk_pos   *pos;
-
-	/* Get device index */
-	rc = check_drive_letter_common(ch, &idx);
-	if ( rc != 0 )
-		return rc;
-
-	sos_assert( (STORAGE_NR > idx) && ( idx >= 0 ) );
-
-	inf = &storage[idx]; /* get disk image info */
-
-	pos = &inf->di_pos;  /* position information */
-
-	if ( fatposp != NULL )
-		*fatposp = pos->dp_fatpos;  /* return fatpos */
-
-	return 0;
 }
 
 /** Determine whether the device is online

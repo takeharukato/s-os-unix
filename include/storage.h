@@ -150,7 +150,6 @@ struct _storage_fib;
 /** Position information
  */
 struct _storage_disk_pos{
-	WORD                  dp_fatpos;   /**< File allocation table record      */
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
 	fs_off_t                 dp_pos;   /**< File or device position
@@ -220,7 +219,5 @@ int storage_record_read(const sos_devltr _ch, BYTE *_dest, const fs_rec _rec,
     const size_t _count, size_t *_rdcntp);
 int storage_record_write(const sos_devltr _ch, const BYTE *_src, const fs_rec _rec,
     const size_t _count, size_t *_wrcntp);
-int storage_set_fatpos(const sos_devltr _ch, const fs_fatpos _fatpos);
-int storage_get_fatpos(const sos_devltr _ch, fs_fatpos *_fatposp);
 int storage_check_status(const sos_devltr _ch);
 #endif  /*  _STORAGE_H  */

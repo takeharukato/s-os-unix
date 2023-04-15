@@ -58,10 +58,9 @@ TODO list
   v-nodeを渡せば, vn->vn_fib.fib_devltrでデバイスを取得することができるので
   chの代用になる.
 
-
   1. fs_swd_get_block_number, fs_swd_release_blocks, fs_swd_get_used_size_in_block
      にioctxを引き渡し, storage_set_fatpos, storage_get_fatpos,
-     struct _storage_disk_posのdp_fatposを除去
+     struct _storage_disk_posのdp_fatposを除去[済]
 
   2. path名からvnodeを取得, path名からディレクトリv-nodeを取得する関数を作成
   3. 2.をデバッグ
