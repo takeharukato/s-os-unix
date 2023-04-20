@@ -31,18 +31,20 @@ static struct _fs_filesystem_table fs_tbl = {__QUEUE_INITIALIZER(&fs_tbl.head)};
     @param[out] fdp   The address to the file descriptor (file handler) to initialize
  */
 static void
-init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_file_descriptor *fdp){
+init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp){
 	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
+	struct _fs_vnode          *vn;
 
-	memset(fdp, 0x0, sizeof(struct _sword_file_descriptor));   /* just in case */
+	memset(fdp, 0x0, sizeof(struct _fs_file_descriptor));   /* just in case */
 
-	storage_init_fib(&fdp->fd_fib);       /* Initialize the file information block */
+	vfs_vnode_init_vnode(&fdp->fd_vnode);  /* Init v-node */
 	storage_init_position(&fdp->fd_pos);  /* Initialize position */
 
-	fib = &fdp->fd_fib;
+	vn = &fdp->fd_vnode;
 	pos = &fdp->fd_pos;
 
+	fib = &vn->vn_fib;
 	fib->fib_devltr = ch;  /* Drive letter */
 
 	/*
@@ -61,25 +63,10 @@ init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_file_descriptor *f
     @param[out] dir   The address to the directory stream to initialize
  */
 static void
-init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _sword_dir *dir){
-	struct _storage_fib      *fib;
-	struct _storage_disk_pos *pos;
+init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_dir_stream *dir){
 
-	storage_init_fib(&dir->dir_fib);      /* Initialize the file information block */
-	storage_init_position(&dir->dir_pos); /* Initialize position */
-
-	fib = &dir->dir_fib;
-	pos = &dir->dir_pos;
-
-	fib->fib_devltr = ch;  /* Drive letter */
-
-	/*
-	 * Clear flags
-	 */
-	dir->dir_sysflags = 0;
+	init_fd(ch, ioctx, &dir->dir_fd);
 	dir->dir_private = NULL;
-
-	dir->dir_ioctx = ioctx;
 }
 
 /** Initialize the directory stream

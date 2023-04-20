@@ -59,6 +59,16 @@ found:
 
 	return 0;
 }
+
+/** Initialize v-node
+    @param[out] vn v-node to init
+ */
+void
+vfs_vnode_init_vnode(struct _fs_vnode *vn){
+
+	clear_vnode(vn);
+}
+
 /** Allocate new v-node
     @param[out] vnodep The address of the pointer variable to point v-node.
     @retval     0       Success

@@ -207,7 +207,6 @@
 /** Foward declarations
  */
 struct _fs_ioctx;
-struct _storage_di_ops;
 struct _fs_mount;
 
 /** Type definitions
@@ -231,27 +230,6 @@ struct _storage_fib{
 	WORD                      fib_exadr;  /**< File exec address */
 	WORD                        fib_cls;  /**< The first cluster on a disk */
 	BYTE  fib_sword_name[SOS_FNAME_LEN];  /**< SWORD file name (Not C string) */
-};
-
-/** File descriptor
- */
-struct _sword_file_descriptor{
-	fs_fd_flags            fd_flags;  /**< Open     flags */
-	fs_fd_flags         fd_sysflags;  /**< Internal flags */
-	struct _storage_disk_pos fd_pos;  /**< Position Information */
-	struct _storage_fib      fd_fib;  /**< File Information Block */
-	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
-	void                *fd_private;  /**< Private Information */
-};
-
-/** Directory stream
- */
-struct _sword_dir{
-	struct _storage_disk_pos dir_pos;  /**< Position Information */
-	fs_fd_flags         dir_sysflags;  /**< Internal flags       */
-	struct _storage_fib      dir_fib;  /**< File Information Block */
-	struct _fs_ioctx      *dir_ioctx;  /**< I/O context */
-	void                *dir_private;  /**< Private Information  */
 };
 
 /** Information packet relevant to the S-OS header operations.
@@ -293,6 +271,24 @@ struct _fs_mount{
 	vfs_mnt_flags         m_mount_flags;  /**< mount flags                       */
 };
 
+/** File descriptor
+ */
+struct _fs_file_descriptor{
+	fs_fd_flags            fd_flags;  /**< Open     flags */
+	fs_fd_flags         fd_sysflags;  /**< Internal flags */
+	struct _fs_vnode       fd_vnode;  /**< v-node for then opened file */
+	struct _storage_disk_pos fd_pos;  /**< Position Information */
+	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
+	void                *fd_private;  /**< Private Information */
+};
+
+/** Directory stream
+ */
+struct _fs_dir_stream{
+	struct _fs_file_descriptor    dir_fd;  /**< File descriptor  */
+	void                    *dir_private;  /**< Private Information  */
+};
+
 /** I/O Context
  */
 struct _fs_ioctx{
@@ -301,7 +297,7 @@ struct _fs_ioctx{
 	/** The FIB of the current directory for each drive. */
 	struct _fs_vnode                   *ioc_cwd[STORAGE_NR];
 	/** The file descriptor table */
-	struct _sword_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
+	struct _fs_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
 	/** Current #DIRPS */
 	fs_dirps                                      ioc_dirps;
 	/** Current #FATPOS */
@@ -330,30 +326,30 @@ struct _fs_fops{
 	    const char *_fname, fs_fd_flags _flags,
 	    const struct _sword_header_packet *_pkt,
 	    struct _fs_vnode *_vn, void **_privatep, BYTE *_resp);
-	int (*fops_close)(struct _sword_file_descriptor *_fdp,
+	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
-	int (*fops_read)(struct _sword_file_descriptor *_fdp,
+	int (*fops_read)(struct _fs_file_descriptor *_fdp,
 	    void *_dest, size_t _count, size_t *_rdsizp, BYTE *_resp);
-	int (*fops_write)(struct _sword_file_descriptor *_fdp,
+	int (*fops_write)(struct _fs_file_descriptor *_fdp,
 	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
-	int (*fops_stat)(struct _sword_file_descriptor *_fdp,
+	int (*fops_stat)(struct _fs_file_descriptor *_fdp,
 	    struct _fs_vnode *_vn, BYTE *_resp);
-	int (*fops_seek)(struct _sword_file_descriptor *_fdp,
+	int (*fops_seek)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
-	int (*fops_truncate)(struct _sword_file_descriptor *_fdp,
+	int (*fops_truncate)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
-	int (*fops_opendir)(struct _sword_dir *_dir, BYTE *_resp);
-	int (*fops_readdir)(struct _sword_dir *_dir, struct _fs_vnode *_vn,
+	int (*fops_opendir)(struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_readdir)(struct _fs_dir_stream *_dir, struct _fs_vnode *_vn,
 	    BYTE *_resp);
-	int (*fops_seekdir)(struct _sword_dir *_dir, fs_dirno _dirno, BYTE *_resp);
-	int (*fops_telldir)(const struct _sword_dir *_dir, fs_dirno *_dirnop,
+	int (*fops_seekdir)(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
+	int (*fops_telldir)(const struct _fs_dir_stream *_dir, fs_dirno *_dirnop,
 	    BYTE *_resp);
-	int (*fops_closedir)(struct _sword_dir *_dir, BYTE *_resp);
-	int (*fops_rename)(struct _sword_dir *_dir, const char *_oldpath,
+	int (*fops_closedir)(struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_rename)(struct _fs_dir_stream *_dir, const char *_oldpath,
 	    const char *_newpath, BYTE *_resp);
-	int (*fops_chmod)(struct _sword_dir *_dir, const char *_path,
+	int (*fops_chmod)(struct _fs_dir_stream *_dir, const char *_path,
 	    const fs_perm _perm, BYTE *_resp);
-	int (*fops_unlink)(struct _sword_dir *_dir,
+	int (*fops_unlink)(struct _fs_dir_stream *_dir,
 	    const char *_path, BYTE *_resp);
 };
 
@@ -373,6 +369,7 @@ struct _fs_filesystem_table{
 	struct _queue head;   /**< Queue head */
 };
 
+void vfs_vnode_init_vnode(struct _fs_vnode *_vn);
 int vfs_vnode_get_free_vnode(struct _fs_vnode **_vnodep);
 
 int fs_vfs_lookup_filesystem(const char *_name, struct _fs_fs_manager **_fsmp);
