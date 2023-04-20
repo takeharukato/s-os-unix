@@ -111,7 +111,7 @@ vfs_put_vnode(struct _fs_vnode *vn){
 
 	sos_assert( FS_VFS_IS_VNODE_BUSY(vn) );
 
-	FS_VFS_UNLOCK_VNODE_(vn);
+	FS_VFS_UNLOCK_VNODE(vn);
 
 	return 0;
 }

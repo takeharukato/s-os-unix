@@ -186,7 +186,7 @@
 /** Unock a v-node
     @param[out] _v      The v-node to unlock.
  */
-#define FS_VFS_UNLOCK_VNODE_(_v)		      \
+#define FS_VFS_UNLOCK_VNODE(_v)		      \
 	do{					      \
 		(_v)->vn_status &= ~FS_VFS_VNODE_BUSY; \
 	}while(0)
@@ -319,6 +319,9 @@ struct _fs_fops{
 	    struct _fs_vnode *_root_vnode);
 	int (*fops_get_vnode)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vn);
+	int (*fops_lookup)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const struct _fs_vnode *_dir_vnode, const char *_name,
+	    vfs_vnid *_vnidp);
 	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    const char *_filepath, fs_fd_flags _flags,
 	    const struct _sword_header_packet *_pkt,

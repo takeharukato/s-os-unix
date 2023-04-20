@@ -189,7 +189,7 @@ fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	} else {
 
 		/*
-		 * Search v-node in the directory
+		 * Search v-node in the mount point
 		 */
 		rc = fs_swd_search_fib_by_vnid(ch, ioctx, vnid, &fib);
 		if ( rc != 0 )
@@ -197,6 +197,44 @@ fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		memcpy(&vn->vn_fib, &fib, sizeof(struct _storage_fib));
 		vn->vn_id = vnid;
 	}
+
+	return 0;
+
+error_out:
+	return rc;
+}
+
+/** look up v-node ID from the directory
+    @param[in] ch         The drive letter
+    @param[in] ioctx      The current I/O context
+    @param[in] dir_vnode  The v-node of the directory
+    @param[in] name       The v-node ID to find
+    @param[out] vnidp     The address to store v-node ID
+    @retval    0          Success
+ */
+int
+fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const struct _fs_vnode *dir_vnode, const char *name,
+    vfs_vnid *vnidp){
+	int                       rc;
+	vfs_vnid                vnid;
+	BYTE swd_name[SOS_FNAME_LEN];
+
+	/*
+	 * convert the filename which was inputted from the console to
+	 * the sword filename format.
+	 */
+	rc = fs_unix2sword(name, &swd_name[0], SOS_FNAME_LEN);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Search file from directory entry.
+	 */
+	rc = fs_swd_search_dent_by_name(ch, ioctx, &swd_name[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+
 
 	return 0;
 

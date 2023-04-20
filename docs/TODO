@@ -47,6 +47,16 @@ TODO list
 * D88フォーマット対応
 
 [fs]
+fs_swd_search_dent_by_nameは, ディレクトリvnodeから名前を探し, v-node IDを返すよう
+修正
+- fopsのlookupの途中まで実装,
+- 残りは,
+* fs_swd_search_dent_by_nameにdir_vnodeを渡すようにする
+* fops_creatにdir_vnodeを渡すようにする(pathからdir_vnodeを割り出すのは, vfs_creatの役目)
+* fops_openにdir_vnodeを渡すようにする(pathからdir_vnodeを割り出すのは, vfs_creatの役目)
+* fops_renameのfs_swd_search_dent_by_name呼び出し時にdir->vnodeを渡すようにする
+
+
 * dir関連IF
   fs_swd_search_dent_by_dirno
   fs_swd_search_dent_by_name
