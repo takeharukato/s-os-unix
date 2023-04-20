@@ -317,7 +317,7 @@ struct _fs_fops{
 	    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
 	int (*fops_unmount)(sos_devltr _ch, vfs_fs_super _super,
 	    struct _fs_vnode *_root_vnode);
-	int (*fops_lookup)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	int (*fops_get_vnode)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vn);
 	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    const char *_filepath, fs_fd_flags _flags,

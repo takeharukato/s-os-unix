@@ -164,7 +164,7 @@ fops_unmount_sword(sos_devltr ch, vfs_fs_super super,
 	return 0;
 }
 
-/** look up v-node
+/** look up v-node from the device
     @param[in] ch         The drive letter
     @param[in] ioctx      The current I/O context
     @param[in] super      The file system specific super block information.
@@ -173,7 +173,7 @@ fops_unmount_sword(sos_devltr ch, vfs_fs_super super,
     @retval    0          Success
  */
 int
-fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	    vfs_fs_super super, vfs_vnid vnid, struct _fs_vnode *vn){
 	int                  rc;
 	struct _storage_fib fib;
