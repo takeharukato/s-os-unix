@@ -155,14 +155,13 @@ int fs_swd_get_used_size_in_block(struct _fs_ioctx *ioctx, struct _storage_fib *
     fs_off_t _offset, size_t *_usedsizp);
 
 int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx,
-    fs_dirno _dirno, struct _storage_fib *_fib);
+    const struct _fs_vnode *_dir_vnode, fs_dirno _dirno, struct _storage_fib *_fib);
 int fs_swd_search_dent_by_name(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-    const BYTE *_swd_name, vfs_vnid *_vnidp);
-int fs_swd_search_fib_by_vnid(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-    vfs_vnid _vnid, struct _storage_fib *_fib);
+    const struct _fs_vnode *_dir_vnode, const BYTE *_swd_name, vfs_vnid *_vnidp);
 int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-    vfs_vnid *_vnidp);
-int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx, struct _storage_fib *_fib);
+    const struct _fs_vnode *_dir_vnode, vfs_vnid *_vnidp);
+int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    const struct _fs_vnode *_dir_vnode, struct _storage_fib *_fib);
 
 int fs_swd_read_block(struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);
 int fs_swd_write_block(struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);

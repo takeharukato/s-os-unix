@@ -32,9 +32,8 @@
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
-    struct _storage_disk_pos *pos,
-    fs_off_t newpos){
+change_filesize_sword(struct _fs_ioctx *ioctx, const struct _fs_vnode *dir_vnode,
+    struct _storage_fib *fib, struct _storage_disk_pos *pos, fs_off_t newpos){
 	int                        rc;
 	fs_off_t               newsiz;
 	fs_off_t              extends;
@@ -91,7 +90,7 @@ change_filesize_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
 	 */
 	fib->fib_size = STORAGE_FIB_FIX_SIZE( newsiz );  /* update size */
 
-	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, fib); /* write back */
+	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, dir_vnode, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
 
