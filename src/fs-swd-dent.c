@@ -127,7 +127,7 @@ read_one_dent_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	}
 
 	/*
-	 * The end of directory entry was not found.
+	 * The end of directory entry was found.
 	 */
 	return SOS_ERROR_NOENT; /* File not found */
 
@@ -172,7 +172,7 @@ fs_swd_search_dent_by_dirno(sos_devltr ch, struct _fs_ioctx *ioctx,
 	}
 
 	/*
-	 * The end of directory entry was not found.
+	 * The end of directory entry was found.
 	 */
 	return SOS_ERROR_NOENT; /* File not found */
 
@@ -233,6 +233,92 @@ found:
 		*vnidp = FS_SWD_DENT_VNID(dir_vnode, cur);
 
 	return 0;
+}
+
+/** Get the file information block in the directory entry.
+    @param[in]  ch        The drive letter
+    @param[in]  ioctx     The current I/O context.
+    @param[in]  dir_cls   The first cluster of the directory which contains the file.
+    @param[in]  vnid      The v-node ID of the file
+    @param[out] fib       The address to store the file information block.
+    @retval    0               Success
+    @retval    SOS_ERROR_IO    I/O Error
+    @retval    SOS_ERROR_NOENT File not found
+ */
+int
+fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    fs_cls dir_cls, vfs_vnid vnid, struct _storage_fib *fib){
+	int                      i;
+	int                     rc;
+	vfs_vnid               cur;
+	fs_rec                 rec;
+	fs_attr               attr;
+	size_t               rdcnt;
+	BYTE                 *dent;
+	BYTE  buf[SOS_RECORD_SIZE];
+
+	dent = &buf[0];
+
+	/*
+	 * Calculate record number
+	 */
+	if ( vnid == FS_SWD_ROOT_VNID )
+		rec = SOS_DIRPS_VAL( ioctx->ioc_dirps );
+	else
+		rec = SOS_DIRPS_VAL( SOS_CLS2REC( dir_cls ) );
+
+	for(cur = 0; SOS_DENTRY_NR > cur; ++rec) {
+
+		/*
+		 * Read each directory entry
+		 */
+
+		/* Read a directory entry record */
+		rc = storage_record_read(ch, &buf[0], SOS_REC_VAL(rec), 1, &rdcnt);
+		if ( rc != 0 )
+			goto error_out;  /* Error */
+
+		if ( rdcnt != 1 ) {
+
+			rc = SOS_ERROR_IO;
+			goto error_out;  /* I/O Error */
+		}
+
+		/*
+		 * Search for the directory entry specified by vnid
+		 */
+		for(i = 0; SOS_DENTRIES_PER_REC > i;
+		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
+
+			attr = SOS_FATTR_VAL( *( dent + SOS_FIB_OFF_ATTR ) );
+
+			if ( attr == SOS_FATTR_FREE )
+				continue; /* Free entry */
+
+			if ( attr == SOS_FATTR_EODENT ) {
+
+				rc = SOS_ERROR_NOENT; /* File not found */
+				goto error_out;
+			}
+
+			if ( cur == SOS_CLS_VAL( FS_SWD_GET_VNID2CLS(vnid) ) )
+				goto found;
+		}
+	}
+
+	/*
+	 * The end of directory entry was found.
+	 */
+	return SOS_ERROR_NOENT; /* File not found */
+
+found:
+	if ( fib != NULL )
+		STORAGE_FILL_FIB(fib, ch, vnid, dent);
+
+	return  0;
+
+error_out:
+	return rc;
 }
 
 /** Search a free directory entry on the disk.

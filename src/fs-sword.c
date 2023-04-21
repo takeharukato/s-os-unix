@@ -162,3 +162,45 @@ fops_unmount_sword(sos_devltr ch, vfs_fs_super super,
 
 	return 0;
 }
+
+/** look up v-node in the directory entry (the v-node table)
+    @param[in] ch         The drive letter
+    @param[in] ioctx      The current I/O context
+    @param[in] super      The file system specific super block information.
+    @param[in] vnid       The v-node ID to find
+    @param[in] vnp        The address to store v-node
+    @retval    0          Success
+ */
+int
+fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    vfs_fs_super super, vfs_vnid vnid, struct _fs_vnode *vnp){
+	int                  rc;
+	struct _fs_vnode     vn;
+	struct _storage_fib fib;
+
+
+	vfs_vnode_init_vnode(&vn); /* Init v-node */
+
+	if ( vnid != FS_SWD_ROOT_VNID ) {
+
+		/* Search file information block in the directory entry */
+		rc = fs_swd_search_fib_by_vnid(ch, ioctx,
+		    FS_SWD_GET_VNID2DIRCLS(vnid), vnid, &fib);
+		if ( rc != 0 )
+			goto error_out;
+
+		/* Fill the file information block */
+		memcpy(&vn.vn_fib, &fib, sizeof(struct _storage_fib));
+	}
+
+	/*
+	 * Return v-node
+	 */
+	vn.vn_id = vnid;
+	memcpy(vnp, &vn, sizeof(struct _fs_vnode));
+
+	return 0;
+
+error_out:
+	return rc;
+}

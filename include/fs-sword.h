@@ -158,6 +158,8 @@ int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx,
     const struct _fs_vnode *_dir_vnode, fs_dirno _dirno, struct _storage_fib *_fib);
 int fs_swd_search_dent_by_name(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, const BYTE *_swd_name, vfs_vnid *_vnidp);
+int fs_swd_search_fib_by_vnid(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    fs_cls _dir_cls, vfs_vnid _vnid, struct _storage_fib *_fib);
 int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, vfs_vnid *_vnidp);
 int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
