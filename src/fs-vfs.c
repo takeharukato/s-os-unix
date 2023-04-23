@@ -68,6 +68,18 @@ init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_dir_stream *d
 	init_fd(ch, ioctx, &dir->dir_fd);
 	dir->dir_private = NULL;
 }
+/** Initialize file manager
+    @param[out] fsm file manager to init
+ */
+void
+fs_vfs_init_file_manager(struct _fs_fs_manager *fsm){
+
+	list_init(&fsm->fsm_node);
+	fsm->fsm_use_cnt = 0;
+	fsm->fsm_name = NULL;
+	fsm->fsm_fops = NULL;
+	fsm->fsm_private = NULL;
+}
 
 /** Initialize the directory stream
     @param[in]  ioctx  The current I/O context.

@@ -372,8 +372,10 @@ struct _fs_filesystem_table{
 void vfs_vnode_init_vnode(struct _fs_vnode *_vn);
 int vfs_vnode_get_free_vnode(struct _fs_vnode **_vnodep);
 
+void fs_vfs_init_file_manager(struct _fs_fs_manager *_fsm);
+
 int fs_vfs_lookup_filesystem(const char *_name, struct _fs_fs_manager **_fsmp);
-int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm_ops);
+int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm);
 int fs_vfs_unregister_filesystem(const char *_name);
 
 int fs_vfs_get_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
@@ -388,4 +390,6 @@ int fs_vfs_mnt_mount_filesystem(sos_devltr _ch, const char *_fs_name,
     const void *_args, struct _fs_ioctx *_ioctx);
 int fs_vfs_mnt_unmount_filesystem(sos_devltr _ch, struct _fs_ioctx *_ioctx);
 void fs_vfs_init_mount_tbl(void);
+
+void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
 #endif  /*  _FS_VFS_H  */

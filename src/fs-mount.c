@@ -37,7 +37,6 @@ release_vnodes_from_mount_point(struct _fs_mount *mnt){
 
 		vn = container_of(itr, struct _fs_vnode, vn_node);
 
-		--vn->vn_use_cnt;
 		sos_assert( vn->vn_use_cnt == 0 );
 
 		FS_VFS_LOCK_VNODE(vn);  /* Lock a v-node to release */
@@ -74,9 +73,9 @@ check_mount_point_is_busy(const struct _fs_mount *mnt,
 	struct _fs_vnode  *cwd;
 	struct _list      *itr;
 
-	sos_assert( mnt->m_root == ioctx->ioc_root[mnt->m_devltr] );
+	sos_assert( mnt->m_root == ioctx->ioc_root[STORAGE_DEVLTR2IDX(mnt->m_devltr)] );
 
-	cwd = ioctx->ioc_cwd[mnt->m_devltr];
+	cwd = ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(mnt->m_devltr)];
 
 	queue_for_each(itr, &mnt->m_vnodes){
 
@@ -165,7 +164,7 @@ fs_vfs_mnt_search_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	 * Look up the v-node from a mount table.
 	 */
 	idx = STORAGE_DEVLTR2IDX(ch);
-	mnt = &mount_tbl[idx];
+	mnt = &mount_tbl[STORAGE_DEVLTR2IDX(ch)];
 	rc = mnt_lookup_vnode(mnt, vnid, &vn);
 	if ( rc == 0 )
 		goto found;
@@ -236,7 +235,7 @@ fs_vfs_mnt_mount_filesystem(sos_devltr ch, const char *fs_name, const void *args
 	 * Get mount point
 	 */
 	idx = STORAGE_DEVLTR2IDX(ch);
-	mnt = &mount_tbl[idx];
+	mnt = &mount_tbl[STORAGE_DEVLTR2IDX(ch)];
 	if ( mnt->m_fs != NULL )
 		return EBUSY;
 
@@ -273,9 +272,12 @@ fs_vfs_mnt_mount_filesystem(sos_devltr ch, const char *fs_name, const void *args
 	/* Refer from the mount point and
 	 * S-OS monitor (current working directory)
 	 */
-	ioctx->ioc_root[mnt->m_devltr] = mnt->m_root;
-	ioctx->ioc_cwd[mnt->m_devltr] = mnt->m_root;
+	ioctx->ioc_root[STORAGE_DEVLTR2IDX(mnt->m_devltr)] = mnt->m_root;
+	ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(mnt->m_devltr)] = mnt->m_root;
 	root_vn->vn_use_cnt += 2;
+
+	root_vn->vn_mnt = mnt;
+	queue_add(&mnt->m_vnodes, &root_vn->vn_node);
 
 	return 0;
 }
@@ -291,7 +293,6 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	int                        rc;
 	int                       idx;
 	struct _fs_mount         *mnt;
-	struct _fs_fs_manager *fs_mgr;
 	struct _fs_vnode          *vn;
 
 	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
@@ -301,13 +302,13 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	 * Get mount point
 	 */
 	idx = STORAGE_DEVLTR2IDX(ch);
-	mnt = &mount_tbl[idx];
+	mnt = &mount_tbl[STORAGE_DEVLTR2IDX(ch)];
 	if ( mnt->m_fs == NULL )
 		return ENOENT;
 
-	sos_assert(mnt->m_root == ioctx->ioc_root[mnt->m_devltr] );
+	sos_assert(mnt->m_root == ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)] );
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fs_mgr, fops_unmount) )
+	if ( !FS_FSMGR_FOP_IS_DEFINED(mnt->m_fs, fops_unmount) )
 		return ENOENT;
 
 	/*
@@ -319,27 +320,27 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	/*
 	 * unmount a file system
 	 */
-	rc = fs_mgr->fsm_fops->fops_unmount(ch, mnt->m_super, mnt->m_root);
+	rc = mnt->m_fs->fsm_fops->fops_unmount(ch, mnt->m_super, mnt->m_root);
 	if ( rc != 0 )
 		return EIO;
 
 	/*
 	 * Clear current working directory
 	 */
-	vn = ioctx->ioc_cwd[mnt->m_devltr];
-	sos_assert( ( vn != ioctx->ioc_root[mnt->m_devltr] ) ||
-	    ( vn->vn_use_cnt == 1 ) );
+	vn = ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(ch)];
+	sos_assert( ( ( vn == ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)] )
+		&& ( vn->vn_use_cnt == 2 ) ) || ( vn->vn_use_cnt == 1 ) );
 	--vn->vn_use_cnt;
-	ioctx->ioc_cwd[mnt->m_devltr] = NULL;
+	ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(ch)] = NULL;
 
 	/*
 	 *  Clear root directory
 	 */
-	vn = ioctx->ioc_root[mnt->m_devltr];
+	vn = ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)];
 	sos_assert( vn->vn_use_cnt == 1 );
 
 	--vn->vn_use_cnt;
-	ioctx->ioc_root[mnt->m_devltr] = NULL;
+	ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)] = NULL;
 
 	/* Release v-nodes */
 	release_vnodes_from_mount_point(mnt);

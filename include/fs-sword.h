@@ -11,8 +11,8 @@
 
 #include "sim-type.h"
 
-
-#define FS_SWD_ROOT_VNID  (0)  /**< root v-node ID */
+#define FS_SWD_FSNAME     "SWORD"  /**< File system name */
+#define FS_SWD_ROOT_VNID  (0)      /**< root v-node ID */
 
 /** Get the cluster number from v-node ID
     @param[in] vnid v-node ID
@@ -172,4 +172,15 @@ int fs_sword2unix(const BYTE *_swordname, char **_destp);
 int fs_unix2sword(const char *_unixname, BYTE *_dest, size_t _size);
 int fs_compare_unix_and_sword(const char *_unixname, const BYTE *_sword, size_t _len);
 void fs_get_sos_header(const struct _storage_fib *_fib, void *_dest, size_t _bufsiz);
+
+
+int fops_mount_sword(sos_devltr _ch, const void *_args,
+    struct _fs_ioctx *_ioctx, vfs_fs_super *_superp,
+    vfs_mnt_flags *_mnt_flagsp, struct _fs_vnode **_root_vnodep);
+int fops_unmount_sword(sos_devltr _ch, vfs_fs_super _super,
+    struct _fs_vnode *_root_vnode);
+int fops_get_vnode_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vnp);
+
+void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

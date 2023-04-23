@@ -21,6 +21,12 @@
 #include "storage.h"
 #include "fs-sword.h"
 
+static struct _fs_fops sword_fops={
+	.fops_mount = fops_mount_sword,
+	.fops_unmount = fops_unmount_sword,
+	.fops_get_vnode = fops_get_vnode_sword,
+};
+static struct _fs_fs_manager sword_fsm;
 
 /** Truncate a file to a specified length
     @param[in]  ioctx  The current I/O context
@@ -123,19 +129,14 @@ fops_mount_sword(sos_devltr ch, const void *args,
 	int                        rc;
 	vfs_vnid                 vnid;
 	struct _fs_vnode          *vn;
-	struct _fs_sword_mnt_opt *opt;
-	vfs_mnt_flags           flags;
 
-	vnid = 0;  /* Root v-node */
-	rc = fs_vfs_get_vnode(ch, ioctx, vnid, &vn);
+	vnid = FS_SWD_ROOT_VNID;  /* Root v-node */
+	rc = vfs_vnode_get_free_vnode(&vn);
 	if ( rc != 0 )
 		goto error_out;
 
-	flags = 0;
-	opt = (struct _fs_sword_mnt_opt *)args;
-
 	if ( mnt_flagsp != NULL )
-		*mnt_flagsp = opt->mount_opts;
+		*mnt_flagsp = (vfs_mnt_flags)(uintptr_t)args;
 
 	if ( superp != NULL )
 		*superp = NULL;
@@ -203,4 +204,14 @@ fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 
 error_out:
 	return rc;
+}
+
+
+void
+init_sword_filesystem(void){
+
+	fs_vfs_init_file_manager(&sword_fsm);
+	sword_fsm.fsm_name = FS_SWD_FSNAME;
+	sword_fsm.fsm_fops = &sword_fops;
+	fs_vfs_register_filesystem(&sword_fsm);
 }
