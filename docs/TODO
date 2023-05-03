@@ -144,6 +144,9 @@ struct _mount_point mount_tbl[MOUNT_POINT_NR];
   (やりすぎか, システムコールで更新するべき?)
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
 
+[fs cp/m]
+* CP/Mのファイル管理方式については, 応用CP/Mの129ページ以降を参照
+
 [fs済]
 * ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する[済]
 * vnode番号の付け方を以下のように変更し, rootディレクトリとrootディレクトリの
