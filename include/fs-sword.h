@@ -14,18 +14,6 @@
 #define FS_SWD_FSNAME     "SWORD"  /**< File system name */
 #define FS_SWD_ROOT_VNID  (0)      /**< root v-node ID */
 
-/** Get the cluster number from v-node ID
-    @param[in] vnid v-node ID
-    @return the cluster number of the file
- */
-#define FS_SWD_GET_VNID2CLS(_vnid)	( SOS_CLS_VAL( (_vnid) ) )
-
-/** Get the directory's cluster number from v-node ID
-    @param[in] vnid v-node ID
-    @return the cluster number of the directory contains the file
- */
-#define FS_SWD_GET_VNID2DIRCLS(_vnid)	( SOS_CLS_VAL( (_vnid) >> 16 ) )
-
 /** Refer the file allocation table array
     @return The address of the file allocation table array
  */

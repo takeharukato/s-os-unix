@@ -56,6 +56,11 @@ fs_swd_search_dent_by_nameは, ディレクトリvnodeから名前を探し, v-n
 * fops_openにdir_vnodeを渡すようにする(pathからdir_vnodeを割り出すのは, vfs_creatの役目)
 * fops_renameのfs_swd_search_dent_by_name呼び出し時にdir->vnodeを渡すようにする
 
+* vnode番号の付け方を以下のように変更し, rootディレクトリとrootディレクトリの
+  先頭ディレクトリエントリの区別をつけられるようにする
+  - 上位16bit ディレクトリエントリのクラスタ番号(0の場合は, rootディレクトリ)
+  - 下位16bit ディレクトリエントリのオフセット(連番)+1
+
 
 * dir関連IF
   fs_swd_search_dent_by_dirno

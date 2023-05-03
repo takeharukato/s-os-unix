@@ -23,13 +23,33 @@
 #define FS_SWD_SEARCH_DENT_VNODE (0)
 #define FS_SWD_SEARCH_DENT_DIRNO (1)
 
+/** Get the cluster number from v-node ID
+    @param[in] vnid v-node ID
+    @return An index value of the file in the directory entry track.
+    It starts from 1.
+ */
+#define FS_SWD_GET_VNID2IDX(_vnid)	( SOS_CLS_VAL( (_vnid) - 1 ) )
+
+/** Get the v-node ID from the index value in the directory entry track.
+    @param[in] _idx An index value of the file in the directory entry track.
+    @return the lower 16bits value of the v-node ID.
+    It starts from 1.
+ */
+#define FS_SWD_GET_IDX2VNID(_idx)	( SOS_CLS_VAL( (_idx) + 1 ) )
+
 /** Calculate vnode from a directory v-node and v-node ID
     @param[in] _dir_vnode a directory v-node of the directory which contains the file
-    @param[in] _cls       the first cluster number of the file
+    @param[in] _vnid      a vnode ID of the file
     @return a v-node ID of the file
  */
-#define FS_SWD_DENT_VNID(_dir_vnode, _cls) \
-	( ( ( (_dir_vnode)->vn_id ) << 16 ) | FS_SWD_GET_VNID2CLS((_cls)) )
+#define FS_SWD_DENT_VNID(_dir_vnode, _vnid) \
+	( ( ( (_dir_vnode)->vn_id ) << 16 ) | (_vnid) )
+
+/** Get the directory's cluster number from v-node ID
+    @param[in] vnid v-node ID
+    @return the cluster number of the directory entry cluster.
+ */
+#define FS_SWD_GET_VNID2DIRCLS(_vnid)	( SOS_CLS_VAL( (_vnid) >> 16 ) )
 
 /** Get a cluster number in a directory entry.
     @param[in] _dent a directory entry
@@ -188,7 +208,7 @@ found:
 	/*
 	 * Fill the file information block
 	 */
-	vnid = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(&dent[0]));
+	vnid = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_IDX2VNID(cur) );
 	if ( fib != NULL )
 		STORAGE_FILL_FIB(fib, ch, vnid, &dent[0]);
 
@@ -238,7 +258,7 @@ found:
 	 */
 
 	if ( vnidp != NULL )
-		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(&dent[0]));
+		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_IDX2VNID(cur) );
 
 	return 0;
 }
@@ -308,7 +328,7 @@ fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 				goto error_out;
 			}
 
-			if ( FS_SWD_GET_CLS_IN_DENT(dent) == SOS_CLS_VAL( FS_SWD_GET_VNID2CLS(vnid) ) )
+			if ( cur == SOS_CLS_VAL( FS_SWD_GET_VNID2IDX(vnid) ) )
 				goto found;
 		}
 	}
@@ -343,7 +363,7 @@ fs_swd_search_free_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	int                     rc;
 	int                      i;
 	fs_rec                 rec;
-	vfs_vnid              vnid;
+	int                    idx;
 	fs_attr               attr;
 	size_t               rdcnt;
 	BYTE                 *dent;
@@ -354,7 +374,7 @@ fs_swd_search_free_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	/*
 	 * Search a free entry
 	 */
-	for(vnid = 0; SOS_DENTRY_NR > SOS_DIRNO_VAL(vnid); ++rec) {
+	for(idx = 0; SOS_DENTRY_NR > SOS_DIRNO_VAL(idx); ++rec) {
 
 		/*
 		 * Read a directory entry
@@ -373,7 +393,7 @@ fs_swd_search_free_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		 * Search a free entry
 		 */
 		for(i = 0, dent = &buf[0]; SOS_DENTRIES_PER_REC > i ;
-		    ++i, ++vnid, dent += SOS_DENTRY_SIZE ) {
+		    ++i, ++idx, dent += SOS_DENTRY_SIZE ) {
 
 			attr = SOS_FATTR_VAL(*( dent + SOS_FIB_OFF_ATTR ));
 			if ( ( attr == SOS_FATTR_FREE ) || ( attr == SOS_FATTR_EODENT ) )
@@ -392,7 +412,7 @@ found:
 	 * Return the vnid of the free entry.
 	 */
 	if ( vnidp != NULL )
-		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(dent));
+		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_IDX2VNID(idx) );
 
 	return 0;
 
@@ -423,7 +443,7 @@ fs_swd_write_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	rec = calc_directory_entry_record(ioctx, dir_vnode);
 
 	/* Add the offset of the record address to the directory entry  */
-	rec += SOS_DIRNO_VAL( FS_SWD_GET_VNID2CLS(fib->fib_vnid) )
+	rec += SOS_DIRNO_VAL( FS_SWD_GET_VNID2IDX(fib->fib_vnid) )
 		/ SOS_DENTRIES_PER_REC;
 
 	/*
@@ -440,7 +460,7 @@ fs_swd_write_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	}
 
 	/* Calculate dirno offset in the record */
-	dirno_offset = SOS_DIRNO_VAL( FS_SWD_GET_VNID2CLS(fib->fib_vnid) )
+	dirno_offset = SOS_DIRNO_VAL( FS_SWD_GET_VNID2IDX(fib->fib_vnid) )
 		% SOS_DENTRIES_PER_REC;
 
 	/* refer the directory entry to modify */
