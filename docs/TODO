@@ -56,12 +56,6 @@ fs_swd_search_dent_by_nameは, ディレクトリvnodeから名前を探し, v-n
 * fops_openにdir_vnodeを渡すようにする(pathからdir_vnodeを割り出すのは, vfs_creatの役目)
 * fops_renameのfs_swd_search_dent_by_name呼び出し時にdir->vnodeを渡すようにする
 
-* vnode番号の付け方を以下のように変更し, rootディレクトリとrootディレクトリの
-  先頭ディレクトリエントリの区別をつけられるようにする
-  - 上位16bit ディレクトリエントリのクラスタ番号(0の場合は, rootディレクトリ)
-  - 下位16bit ディレクトリエントリのオフセット(連番)+1
-
-
 * dir関連IF
   fs_swd_search_dent_by_dirno
   fs_swd_search_dent_by_name
@@ -69,9 +63,15 @@ fs_swd_search_dent_by_nameは, ディレクトリvnodeから名前を探し, v-n
   fs_swd_write_dent
   は, dirのvnodeを引数に取り, ルートでなければ, そのディレクトリのクラスタのディレクトリ
   エントリを辿り, ルートの場合は, ioctxからdirpsを取得するように修正する。
-  このためには, chの代わりにv-nodeを渡すようにfops全般に修正する
-  v-nodeを渡せば, vn->vn_fib.fib_devltrでデバイスを取得することができるので
-  chの代用になる.
+  このために, v-nodeを渡すようにfops全般に修正する.
+  - open/creatは, ファイル記述子テーブルからファイル記述子を割当て返却する.
+  - opendirは, 引数で指定されたアドレスに格納されているディレクトリストリーム中の
+    ファイル記述子ポインタをファイル記述子テーブルから割り当てたファイル記述子の
+    アドレスを指すように更新する.
+  - ファイル記述子を割り当てた時点で, v-nodeのuse_countをインクリメントし,
+    close時に, v-nodeのuse_countをデクリメントする.
+  - v-nodeを渡せば, vn->vn_fib.fib_devltrでデバイスを取得することができるので
+    open/creat/opendir以外のfops内でデバイスレターを参照可能.
 
   1. fs_swd_get_block_number, fs_swd_release_blocks, fs_swd_get_used_size_in_block
      にioctxを引き渡し, storage_set_fatpos, storage_get_fatpos,
@@ -116,12 +116,7 @@ fs_swd_write_dent 1074 src/fs-sword.c   	rc = fs_swd_write_dent(dir_fib->fib_dev
 * storage管理とは別にマウントテーブルを管理する方針に方針変更。
   * root_fibを保持できるようにする必要があるため。
   * _fs_fopsにfib比較処理を追加して, SWORDの場合, fibのfib_clsで比較する。
-  * SWORDの場合は, vnodeのvnidを以下のように指定する
-    * 上位32bitsを対象ファイルが入っているディレクトリのクラスタ番号
-      (rootディレクトリの場合は, 0)
-    * 下位32bitsを対象ファイルの先頭クラスタ番号
-    これによりvnidがマウントポイント内で一意になるようにする。
-  root i-nodeのfib->fib_clsを0に設定することで, root i-nodeだった場合,
+  * root i-nodeのfib->fib_clsを0に設定することで, root i-nodeだった場合,
     ioctxのdirpsに設定されているレコードの内容を元にlooupを実行することで, FAT12/Hu-Basic
     のようなディレクトリエントリを一貫してクラスタ番号で管理するファイルシステムと
     共存可能にする。
@@ -143,15 +138,18 @@ struct _mount_point mount_tbl[MOUNT_POINT_NR];
 * dent操作にディレクトリのクラスタ番号を指定できるようにすること
 * fd/dirのfibメンバは, v-nodeにするべき
 * ファイルシステムマウント処理作成
-* ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する
 * ファイルシステム共通部(fs-vfs)作成
-* fatpos, dirpsをスーパブロック情報から取得するように修正
 * WA_DIRPS, WA_FATPOSの更新を見張って, スーパーブロックの
   fatpos, dirpsのスーパブロック情報を更新
   (やりすぎか, システムコールで更新するべき?)
 * マウントテーブルの導入によりcheck_file_existsが不要になるので削除
 
 [fs済]
+* ファイルシステムマウント時にioctxにrootディレクトリエントリを設定する[済]
+* vnode番号の付け方を以下のように変更し, rootディレクトリとrootディレクトリの
+  先頭ディレクトリエントリの区別をつけられるようにする[済]
+  - 上位16bit ディレクトリエントリのクラスタ番号(0の場合は, rootディレクトリ)
+  - 下位16bit ディレクトリエントリのオフセット(連番)+1
 * デバイスレターをポジション情報からディレクトリストリームに移動[済]
   * dp_devltr使用箇所をfib_devltrに置換え, dirにfibを追加
   * 基本的な考え方は, S-OSのディレクトリはファイルとして扱われていない

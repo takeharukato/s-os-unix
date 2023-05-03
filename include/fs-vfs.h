@@ -321,11 +321,11 @@ struct _fs_fops{
 	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    const char *_filepath, fs_fd_flags _flags,
 	    const struct _sword_header_packet *_pkt,
-	    struct _fs_vnode *_vn, BYTE *_resp);
+	    struct _fs_file_descriptor **_fdp, BYTE *_resp);
 	int (*fops_open)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    const char *_fname, fs_fd_flags _flags,
 	    const struct _sword_header_packet *_pkt,
-	    struct _fs_vnode *_vn, void **_privatep, BYTE *_resp);
+	    struct _fs_file_descriptor **_fdp, void **_privatep, BYTE *_resp);
 	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
 	int (*fops_read)(struct _fs_file_descriptor *_fdp,
@@ -338,7 +338,7 @@ struct _fs_fops{
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
 	int (*fops_truncate)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
-	int (*fops_opendir)(struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_opendir)(struct _fs_dir_stream *_dirp, BYTE *_resp);
 	int (*fops_readdir)(struct _fs_dir_stream *_dir, struct _fs_vnode *_vn,
 	    BYTE *_resp);
 	int (*fops_seekdir)(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
