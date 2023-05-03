@@ -20,6 +20,7 @@ main(int argc, char *argv[]){
 	struct _fs_dir_stream                     dir;
 	struct _fs_ioctx                        ioctx;
 	vfs_mnt_flags mnt_flags=FS_VFS_MNT_OPT_RDONLY;
+	struct _fs_vnode                           *v;
 	char                                    *buf1;
 	BYTE                                      res;
 
@@ -47,8 +48,16 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_mnt_mount_filesystem('A', FS_SWD_FSNAME,
 	    (void *)(uintptr_t)mnt_flags, &ioctx);
 	sos_assert( rc == 0 );
+
+	rc = fs_vfs_path_to_vnode('A', &ioctx, "SAMPLE1.ASM", &v);
+	sos_assert( rc == 0 );
+
+	rc = vfs_put_vnode(v);
+	sos_assert( rc == 0 );
+
 	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
 	sos_assert( rc == 0 );
+
 
 	free(buf1);
 

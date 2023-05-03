@@ -31,6 +31,13 @@
 #define FS_SWD_DENT_VNID(_dir_vnode, _cls) \
 	( ( ( (_dir_vnode)->vn_id ) << 16 ) | FS_SWD_GET_VNID2CLS((_cls)) )
 
+/** Get a cluster number in a directory entry.
+    @param[in] _dent a directory entry
+    @return the first cluster number of the file
+ */
+#define FS_SWD_GET_CLS_IN_DENT(_dent) \
+	(bswap_word_z80_to_host(*((WORD *)((BYTE *)(_dent) + SOS_FIB_OFF_CLS))))
+
 /** Read the directory entry by #DIRNO
     @param[in]   ioctx     The current I/O context.
     @param[in]   dir_vnode The v-node of the directory
@@ -56,7 +63,7 @@ calc_directory_entry_record(const struct _fs_ioctx *ioctx,
     @param[in]   ch        The drive letter
     @param[in]   ioctx     The current I/O context.
     @param[in]   dir_vnode The v-node of the directory
-    @param[in]   vnid      The index of directory entry ( = lower word of v-node id ).
+    @param[in]   idx       The index of directory entry ( = lower word of v-node id ).
     @param[out]  dirnop    The address to store #DIRNO number of the directory entry
     @param[out]  dentp     The address to store the directory entry.
     @retval     0               Success
@@ -64,8 +71,8 @@ calc_directory_entry_record(const struct _fs_ioctx *ioctx,
     @retval     SOS_ERROR_NOENT File not found
  */
 static int
-read_one_dent_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
-    const struct _fs_vnode *dir_vnode, vfs_vnid vnid, fs_dirno *dirnop, BYTE *dentp){
+read_one_dent_by_idx(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const struct _fs_vnode *dir_vnode, int idx, fs_dirno *dirnop, BYTE *dentp){
 	int                      i;
 	int                     rc;
 	vfs_vnid               cur;
@@ -112,7 +119,7 @@ read_one_dent_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 				goto error_out;
 			}
 
-			if ( cur == SOS_CLS_VAL( FS_SWD_GET_VNID2CLS(vnid) ) ) {
+			if ( cur == idx ) {
 
 				if ( dirnop != NULL )
 					*dirnop = dirno;
@@ -162,7 +169,7 @@ fs_swd_search_dent_by_dirno(sos_devltr ch, struct _fs_ioctx *ioctx,
 		/*
 		 * Read a directory entry
 		 */
-		rc = read_one_dent_by_vnid(ch, ioctx, dir_vnode,
+		rc = read_one_dent_by_idx(ch, ioctx, dir_vnode,
 		    cur, &cur_dirno, &dent[0]);
 		if ( rc != 0 )
 			goto error_out;
@@ -181,7 +188,7 @@ found:
 	/*
 	 * Fill the file information block
 	 */
-	vnid = FS_SWD_DENT_VNID(dir_vnode, cur);
+	vnid = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(&dent[0]));
 	if ( fib != NULL )
 		STORAGE_FILL_FIB(fib, ch, vnid, &dent[0]);
 
@@ -213,7 +220,7 @@ fs_swd_search_dent_by_name(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		/*
 		 * Read a directory entry
 		 */
-		rc = read_one_dent_by_vnid(ch, ioctx, dir_vnode, cur, NULL, &dent[0]);
+		rc = read_one_dent_by_idx(ch, ioctx, dir_vnode, cur, NULL, &dent[0]);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -229,8 +236,9 @@ found:
 	/*
 	 * Return v-node ID.
 	 */
+
 	if ( vnidp != NULL )
-		*vnidp = FS_SWD_DENT_VNID(dir_vnode, cur);
+		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(&dent[0]));
 
 	return 0;
 }
@@ -238,7 +246,6 @@ found:
 /** Get the file information block in the directory entry.
     @param[in]  ch        The drive letter
     @param[in]  ioctx     The current I/O context.
-    @param[in]  dir_cls   The first cluster of the directory which contains the file.
     @param[in]  vnid      The v-node ID of the file
     @param[out] fib       The address to store the file information block.
     @retval    0               Success
@@ -247,7 +254,7 @@ found:
  */
 int
 fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
-    fs_cls dir_cls, vfs_vnid vnid, struct _storage_fib *fib){
+    vfs_vnid vnid, struct _storage_fib *fib){
 	int                      i;
 	int                     rc;
 	vfs_vnid               cur;
@@ -262,10 +269,10 @@ fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	/*
 	 * Calculate record number
 	 */
-	if ( vnid == FS_SWD_ROOT_VNID )
+	if ( SOS_RESERVED_FAT_NR > FS_SWD_GET_VNID2DIRCLS(vnid) )
 		rec = SOS_DIRPS_VAL( ioctx->ioc_dirps );
 	else
-		rec = SOS_DIRPS_VAL( SOS_CLS2REC( dir_cls ) );
+		rec = SOS_DIRPS_VAL( SOS_CLS2REC( FS_SWD_GET_VNID2DIRCLS(vnid) ) );
 
 	for(cur = 0; SOS_DENTRY_NR > cur; ++rec) {
 
@@ -287,7 +294,7 @@ fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		/*
 		 * Search for the directory entry specified by vnid
 		 */
-		for(i = 0; SOS_DENTRIES_PER_REC > i;
+		for(i = 0, dent=&buf[0]; SOS_DENTRIES_PER_REC > i;
 		    ++i, ++cur, dent += SOS_DENTRY_SIZE ) {
 
 			attr = SOS_FATTR_VAL( *( dent + SOS_FIB_OFF_ATTR ) );
@@ -301,7 +308,7 @@ fs_swd_search_fib_by_vnid(sos_devltr ch, const struct _fs_ioctx *ioctx,
 				goto error_out;
 			}
 
-			if ( cur == SOS_CLS_VAL( FS_SWD_GET_VNID2CLS(vnid) ) )
+			if ( FS_SWD_GET_CLS_IN_DENT(dent) == SOS_CLS_VAL( FS_SWD_GET_VNID2CLS(vnid) ) )
 				goto found;
 		}
 	}
@@ -385,7 +392,7 @@ found:
 	 * Return the vnid of the free entry.
 	 */
 	if ( vnidp != NULL )
-		*vnidp = FS_SWD_DENT_VNID(dir_vnode, vnid);
+		*vnidp = FS_SWD_DENT_VNID(dir_vnode, FS_SWD_GET_CLS_IN_DENT(dent));
 
 	return 0;
 

@@ -25,6 +25,7 @@ static struct _fs_fops sword_fops={
 	.fops_mount = fops_mount_sword,
 	.fops_unmount = fops_unmount_sword,
 	.fops_get_vnode = fops_get_vnode_sword,
+	.fops_lookup = fops_lookup_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -164,7 +165,7 @@ fops_unmount_sword(sos_devltr ch, vfs_fs_super super,
 	return 0;
 }
 
-/** look up v-node in the directory entry (the v-node table)
+/** Get v-node in the directory entry (the v-node table)
     @param[in] ch         The drive letter
     @param[in] ioctx      The current I/O context
     @param[in] super      The file system specific super block information.
@@ -185,8 +186,7 @@ fops_get_vnode_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( vnid != FS_SWD_ROOT_VNID ) {
 
 		/* Search file information block in the directory entry */
-		rc = fs_swd_search_fib_by_vnid(ch, ioctx,
-		    FS_SWD_GET_VNID2DIRCLS(vnid), vnid, &fib);
+		rc = fs_swd_search_fib_by_vnid(ch, ioctx, vnid, &fib);
 		if ( rc != 0 )
 			goto error_out;
 
@@ -206,6 +206,40 @@ error_out:
 	return rc;
 }
 
+/** look up v-node in the directory entry by name
+    @param[in] ch         The drive letter
+    @param[in] ioctx      The current I/O context
+    @param[in] dir_vnode  The directory v-node
+    @param[in] name       The file name
+    @param[out] vnidp     The address to store v-node ID.
+    @retval    0          Success
+ */
+int
+fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const struct _fs_vnode *dir_vnode, const char *name, vfs_vnid *vnidp){
+	int                       rc;
+	BYTE swd_name[SOS_FNAME_LEN];
+	vfs_vnid                vnid;
+
+	/* Convert file name */
+	rc = fs_unix2sword(name, &swd_name[0], SOS_FNAME_LEN);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Search directory entry */
+	rc = fs_swd_search_dent_by_name(ch, ioctx, dir_vnode,
+	    &swd_name[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( vnidp != NULL )
+		*vnidp = vnid;  /* Return vnid */
+
+	return 0;
+
+error_out:
+	return rc;
+}
 
 void
 init_sword_filesystem(void){

@@ -391,5 +391,8 @@ int fs_vfs_mnt_mount_filesystem(sos_devltr _ch, const char *_fs_name,
 int fs_vfs_mnt_unmount_filesystem(sos_devltr _ch, struct _fs_ioctx *_ioctx);
 void fs_vfs_init_mount_tbl(void);
 
+int fs_vfs_path_to_vnode(sos_devltr _ch, struct _fs_ioctx *_ioctx,
+    const char *_path, struct _fs_vnode **_outv);
+
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
 #endif  /*  _FS_VFS_H  */

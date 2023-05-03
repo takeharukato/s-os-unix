@@ -159,7 +159,7 @@ int fs_swd_search_dent_by_dirno(sos_devltr _ch, struct _fs_ioctx *ioctx,
 int fs_swd_search_dent_by_name(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, const BYTE *_swd_name, vfs_vnid *_vnidp);
 int fs_swd_search_fib_by_vnid(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-    fs_cls _dir_cls, vfs_vnid _vnid, struct _storage_fib *_fib);
+    vfs_vnid _vnid, struct _storage_fib *_fib);
 int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, vfs_vnid *_vnidp);
 int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
@@ -181,6 +181,7 @@ int fops_unmount_sword(sos_devltr _ch, vfs_fs_super _super,
     struct _fs_vnode *_root_vnode);
 int fops_get_vnode_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vnp);
-
+int fops_lookup_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    const struct _fs_vnode *_dir_vnode, const char *_name, vfs_vnid *_vnidp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

@@ -97,6 +97,9 @@ fs_vfs_init_ioctx(struct _fs_ioctx *ioctx){
 
 	for( i = 0; FS_PROC_FDTBL_NR > i; ++i)
 		init_fd(0, ioctx, &ioctx->ioc_fds[i]);
+
+	ioctx->ioc_dirps = SOS_DIRPS_DEFAULT;
+	ioctx->ioc_fatpos = SOS_FATPOS_DEFAULT;
 }
 
 /** Look up a file system
@@ -163,8 +166,8 @@ fs_vfs_register_filesystem(struct _fs_fs_manager *fsm){
 	/*
 	 * Register the file system
 	 */
-	queue_add(&fs_tbl.head, &mgr->fsm_node);
-	mgr->fsm_use_cnt = 0;  /* Reset use count */
+	queue_add(&fs_tbl.head, &fsm->fsm_node);
+	fsm->fsm_use_cnt = 0;  /* Reset use count */
 
 	return 0;
 

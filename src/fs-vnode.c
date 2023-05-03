@@ -166,6 +166,7 @@ fs_vfs_get_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		goto error_out;
 
 found:
+	FS_VFS_LOCK_VNODE(vn);
 	if ( vnodep != NULL )
 		*vnodep = vn;
 

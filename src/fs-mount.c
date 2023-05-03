@@ -278,6 +278,7 @@ fs_vfs_mnt_mount_filesystem(sos_devltr ch, const char *fs_name, const void *args
 
 	root_vn->vn_mnt = mnt;
 	queue_add(&mnt->m_vnodes, &root_vn->vn_node);
+	vfs_put_vnode(root_vn);
 
 	return 0;
 }
@@ -359,7 +360,7 @@ fs_vfs_init_mount_tbl(void){
 	struct _fs_mount *mnt;
 
 
-	for(i = 0; FS_VFS_VNODE_NR > i; ++i) {
+	for(i = 0; SOS_DEVICES_NR > i; ++i) {
 
 		/*
 		 * Init mount point information
