@@ -70,17 +70,8 @@ path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 	 */
 	for( ; ; ) {
 
-		if ( *p == '\0' ) { /* The end of the path string. */
-
-			rc = 0;
-
-			if ( outv != NULL ) {
-
-				FS_VFS_LOCK_VNODE(curr_v);
-				*outv = curr_v;
-			}
+		if ( *p == '\0' )  /* The end of the path string. */
 			break;
-		}
 
 		/*
 		 *  Search for string terminator or path delimiter.
@@ -130,6 +121,14 @@ path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 		 */
 		p = next_p;
 		curr_v = next_v;
+	}
+
+	rc = 0;
+
+	if ( outv != NULL ) {
+
+		FS_VFS_LOCK_VNODE(curr_v);
+		*outv = curr_v;
 	}
 
 copy_path_free_out:

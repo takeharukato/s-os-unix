@@ -130,11 +130,26 @@ fops_mount_sword(sos_devltr ch, const void *args,
 	int                        rc;
 	vfs_vnid                 vnid;
 	struct _fs_vnode          *vn;
+	struct _storage_fib      *fib;
 
 	vnid = FS_SWD_ROOT_VNID;  /* Root v-node */
 	rc = vfs_vnode_get_free_vnode(&vn);
 	if ( rc != 0 )
 		goto error_out;
+
+
+	/*
+	 * Fill File Information Block
+	 */
+	fib = &vn->vn_fib;
+
+	fib->fib_devltr = ch;
+	fib->fib_attr = SOS_FATTR_DIR;
+	fib->fib_vnid = vnid;
+	fib->fib_size = SOS_DENTRY_LEN;
+	fib->fib_cls = SOS_REC2CLS(ioctx->ioc_dirps);
+
+	memset(&fib->fib_sword_name[0], SCR_SOS_SPC, SOS_FNAME_LEN);
 
 	if ( mnt_flagsp != NULL )
 		*mnt_flagsp = (vfs_mnt_flags)(uintptr_t)args;
