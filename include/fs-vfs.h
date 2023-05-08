@@ -45,6 +45,7 @@
 #define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create     */
 #define FS_VFS_FD_FLAG_O_EXCL     (0x8)     /**< Exclusive  */
 #define FS_VFS_FD_FLAG_SYS_OPENED  (1)  /**< The file is opened */
+
 /** Write flags
  */
 #define FS_VFS_FD_FLAG_MAY_WRITE					\
@@ -130,6 +131,7 @@
 
 /** File Descriptor
  */
+#define FS_SYS_FDTBL_NR     (8)  /**< File Descriptor table */
 #define FS_PROC_FDTBL_NR    (1)  /**< Max file decriptors for a process */
 
 /** Determine whether the file system manager is valid
@@ -276,6 +278,7 @@ struct _fs_mount{
 struct _fs_file_descriptor{
 	fs_fd_flags            fd_flags;  /**< Open     flags */
 	fs_fd_flags         fd_sysflags;  /**< Internal flags */
+	int                  fd_use_cnt;  /**< Use count      */
 	struct _fs_vnode       fd_vnode;  /**< v-node for then opened file */
 	struct _storage_disk_pos fd_pos;  /**< Position Information */
 	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
@@ -297,7 +300,7 @@ struct _fs_ioctx{
 	/** The FIB of the current directory for each drive. */
 	struct _fs_vnode                   *ioc_cwd[STORAGE_NR];
 	/** The file descriptor table */
-	struct _fs_file_descriptor ioc_fds[FS_PROC_FDTBL_NR];
+	struct _fs_file_descriptor   *ioc_fds[FS_PROC_FDTBL_NR];
 	/** Current #DIRPS */
 	fs_dirps                                      ioc_dirps;
 	/** Current #FATPOS */
@@ -372,11 +375,10 @@ struct _fs_filesystem_table{
 void vfs_vnode_init_vnode(struct _fs_vnode *_vn);
 int vfs_vnode_get_free_vnode(struct _fs_vnode **_vnodep);
 
-void fs_vfs_init_file_manager(struct _fs_fs_manager *_fsm);
-
 int fs_vfs_lookup_filesystem(const char *_name, struct _fs_fs_manager **_fsmp);
 int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm);
 int fs_vfs_unregister_filesystem(const char *_name);
+void fs_vfs_init_file_manager(struct _fs_fs_manager *_fsm);
 
 int fs_vfs_get_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_vnid _vnid, struct _fs_vnode **_vnodep);
@@ -395,4 +397,6 @@ int fs_vfs_path_to_vnode(sos_devltr _ch, struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv);
 
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
+
+void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

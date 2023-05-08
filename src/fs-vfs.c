@@ -24,6 +24,7 @@
 
 /** Filesystem table */
 static struct _fs_filesystem_table fs_tbl = {__QUEUE_INITIALIZER(&fs_tbl.head)};
+static struct _fs_file_descriptor fd_tbl[FS_SYS_FDTBL_NR];
 
 /** Initialize the file descriptor
     @param[in]  ch    The drive letter
@@ -47,6 +48,8 @@ init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp)
 	fib = &vn->vn_fib;
 	fib->fib_devltr = ch;  /* Drive letter */
 
+	fdp->fd_use_cnt = 0;  /* Use count */
+
 	/*
 	 * Clear flags
 	 */
@@ -68,6 +71,68 @@ init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_dir_stream *d
 	init_fd(ch, ioctx, &dir->dir_fd);
 	dir->dir_private = NULL;
 }
+
+/** Initialize file descriptor table
+ */
+static void
+fs_vfs_init_fdtbl(void){
+	int i;
+
+	for(i = 0; FS_SYS_FDTBL_NR > i; ++i)
+		init_fd(0, NULL, &fd_tbl[i]);
+}
+
+/** Allocate global file descriptor and increment use count
+    @param[out] fdp  The address of the pointer variable to point the file descriptor.
+    @retval    0     success
+    @retval    ENOSPC No free file descriptor found.
+    @remark    The responsible for incrementing the v-node usage count of
+    the v-node in the fd is fs_vfs_open function's concern.
+ */
+static int
+alloc_fd(struct _fs_file_descriptor **fdp){
+	int                          i;
+	struct _fs_file_descriptor *fd;
+
+	for(i = 0, fd = &fd_tbl[0]; FS_SYS_FDTBL_NR > i; ++i, fd = &fd_tbl[i])
+		if ( fd->fd_use_cnt == 0 )
+			goto found;
+	return ENOSPC;
+
+found:
+	if ( fdp != NULL ) {
+
+		++fd->fd_use_cnt;
+		*fdp = fd;
+	}
+
+	return 0;
+}
+
+/** Free global file descriptor (decrement use count)
+    @param[out] fd    The file descriptor to operate.
+    @retval    0      success
+    @retval    EINVAL The file descriptor is not used.
+    @retval    EBUSY  The file descriptor is still used.
+    @remark    The responsible for decrementing the v-node usage count of
+    the v-node in the fd is fs_vfs_close function's concern.
+ */
+static int
+free_fd(struct _fs_file_descriptor *fd){
+
+	if ( fd->fd_use_cnt == 0 )
+		return EINVAL;
+
+	--fd->fd_use_cnt;
+
+	if ( fd->fd_use_cnt > 0 )
+		return EBUSY;
+
+	init_fd(0, NULL, &fd); /* clear fd */
+
+	return 0;
+}
+
 /** Initialize file manager
     @param[out] fsm file manager to init
  */
@@ -81,7 +146,7 @@ fs_vfs_init_file_manager(struct _fs_fs_manager *fsm){
 	fsm->fsm_private = NULL;
 }
 
-/** Initialize the directory stream
+/** Initialize the I/O context
     @param[in]  ioctx  The current I/O context.
  */
 void
@@ -96,7 +161,7 @@ fs_vfs_init_ioctx(struct _fs_ioctx *ioctx){
 	}
 
 	for( i = 0; FS_PROC_FDTBL_NR > i; ++i)
-		init_fd(0, ioctx, &ioctx->ioc_fds[i]);
+		ioctx->ioc_fds[i] = NULL;
 
 	ioctx->ioc_dirps = SOS_DIRPS_DEFAULT;
 	ioctx->ioc_fatpos = SOS_FATPOS_DEFAULT;
@@ -132,6 +197,7 @@ found:
 
 	return 0;
 }
+
 /** Register a file system
     @param[in] fsm_ops  The pointer to the file system manager to register
     @retval    0     success
@@ -208,4 +274,14 @@ fs_vfs_unregister_filesystem(const char *name){
 	}
 
 	return rc;
+}
+
+/** Initialize virtual file system
+ */
+void
+fs_vfs_init_vfs(void){
+
+	fs_vfs_init_vnode_tbl();
+	fs_vfs_init_mount_tbl();
+	fs_vfs_init_fdtbl();
 }

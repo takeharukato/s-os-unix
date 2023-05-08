@@ -26,7 +26,7 @@ main(int argc, char *argv[]){
 	BYTE                                      res;
 
 	storage_init();
-	fs_vfs_init_mount_tbl();
+	fs_vfs_init_vfs();
 
 	storage_2dimg_init();
 	init_sword_filesystem();
@@ -52,12 +52,14 @@ main(int argc, char *argv[]){
 
 	rc = fs_vfs_path_to_vnode('A', &ioctx, "SAMPLE1.ASM", &v);
 	sos_assert( rc == 0 );
+	sos_assert( ( v->vn_fib.fib_attr & SOS_FATTR_ASC ) != 0 );
 
 	rc = vfs_put_vnode(v);
 	sos_assert( rc == 0 );
 
 	rc = fs_vfs_path_to_vnode('A', &ioctx, "/", &dirv);
 	sos_assert( rc == 0 );
+	sos_assert( ( dirv->vn_fib.fib_attr & SOS_FATTR_DIR ) != 0 );
 
 	rc = vfs_put_vnode(dirv);
 	sos_assert( rc == 0 );
