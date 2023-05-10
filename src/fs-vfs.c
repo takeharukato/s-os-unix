@@ -158,22 +158,13 @@ create_file(sos_devltr ch, const struct _fs_ioctx *ioctx,
     const char *path, const struct _sword_header_packet *pkt,
     BYTE *resp){
 	int                        rc;
-	vfs_mnt_flags       mnt_flags;
 	struct _fs_vnode        *dirv;
-	struct _fs_vnode           *v;
 	char fname[SOS_UNIX_PATH_MAX];
 	vfs_vnid                 vnid;
 	BYTE                      res;
 
 	rc = storage_check_status(ch);
 	if ( rc == ENXIO ) {
-
-		rc = SOS_ERROR_OFFLINE;
-		goto error_out;
-	}
-
-	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
-	if ( rc != 0 ) {
 
 		rc = SOS_ERROR_OFFLINE;
 		goto error_out;
@@ -186,13 +177,13 @@ create_file(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		goto error_out;
 	}
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_creat) ) {
+	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_creat) ) {
 
 		rc = SOS_ERROR_INVAL;
 		goto put_dir_vnode_out;
 	}
 
-	rc = v->vn_mnt->m_fs->fsm_fops->fops_creat(ch, ioctx, dirv, fname, pkt,
+	rc = dirv->vn_mnt->m_fs->fsm_fops->fops_creat(ch, ioctx, dirv, fname, pkt,
 	    &vnid, &res);
 	if ( rc != 0 ) {
 
@@ -551,7 +542,7 @@ error_out:
 /** Open a file
     @param[in] ch        The drive letter
     @param[in] ioctx     The current I/O context
-    @param[in] path      The filepath to create
+    @param[in] path      The filepath to open
     @param[in] flags    The open flags
     FS_VFS_FD_FLAG_O_RDONLY  Read only open
     FS_VFS_FD_FLAG_O_WRONLY  Write only open
@@ -586,7 +577,8 @@ fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
 
 		/* Create a file */
 		rc = create_file(ch, ioctx, path, pkt, &res);
-		if ( rc != 0 ) {
+		if ( ( rc != 0 ) && ( ( rc != SOS_ERROR_EXIST ) ||
+			( flags & FS_VFS_FD_FLAG_O_EXCL ) ) ) {
 
 			rc = res;
 			goto error_out;

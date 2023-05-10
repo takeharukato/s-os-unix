@@ -28,6 +28,7 @@ static struct _fs_fops sword_fops={
 	.fops_lookup = fops_lookup_sword,
 	.fops_creat = fops_creat_sword,
 	.fops_open = fops_open_sword,
+	.fops_unlink = fops_unlink_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 

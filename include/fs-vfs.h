@@ -327,19 +327,21 @@ struct _fs_fops{
 	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    struct _fs_vnode *_dir_vn, const char *_name,
 	    const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
+	int (*fops_unlink)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    struct _fs_vnode *_dir_vn, const char *_path, BYTE *_resp);
 	int (*fops_open)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    struct _fs_vnode *_vn, const struct _sword_header_packet *_pkt,
 	    fs_fd_flags _flags, BYTE *_resp);
 	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
-	int (*fops_read)(struct _fs_file_descriptor *_fdp,
-	    void *_dest, size_t _count, size_t *_rdsizp, BYTE *_resp);
-	int (*fops_write)(struct _fs_file_descriptor *_fdp,
-	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_stat)(struct _fs_file_descriptor *_fdp,
 	    struct _fs_vnode *_vn, BYTE *_resp);
 	int (*fops_seek)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
+	int (*fops_read)(struct _fs_file_descriptor *_fdp,
+	    void *_dest, size_t _count, size_t *_rdsizp, BYTE *_resp);
+	int (*fops_write)(struct _fs_file_descriptor *_fdp,
+	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_truncate)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
 	int (*fops_opendir)(const char *_path, struct _fs_dir_stream *_dirp,
@@ -354,8 +356,6 @@ struct _fs_fops{
 	    const char *_newpath, BYTE *_resp);
 	int (*fops_chmod)(struct _fs_dir_stream *_dir, const char *_path,
 	    const fs_perm _perm, BYTE *_resp);
-	int (*fops_unlink)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    struct _fs_vnode *_dir_vn, const char *_path, BYTE *_resp);
 };
 
 /** File system manager
@@ -401,7 +401,8 @@ int fs_vfs_path_to_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fs_vfs_path_to_dir_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv, char *_fname, size_t _fnamelen);
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
-
+int fs_vfs_creat(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path,
+    const struct _sword_header_packet *_pkt, int *_fdnump, BYTE *_resp);
 int fs_vfs_unlink(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path, BYTE *_resp);
 int fs_vfs_open(sos_devltr _ch, struct _fs_ioctx *_ioctx,
     const char *_path, fs_open_flags _flags, const struct _sword_header_packet *_pkt,

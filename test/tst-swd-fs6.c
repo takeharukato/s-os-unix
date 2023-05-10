@@ -18,7 +18,7 @@ main(int argc, char *argv[]){
 	struct _sword_header_packet     *pkt, hdr_pkt;
 	struct _fs_dir_stream                     dir;
 	struct _fs_ioctx                        ioctx;
-	vfs_mnt_flags mnt_flags=FS_VFS_MNT_OPT_RDONLY;
+	vfs_mnt_flags                       mnt_flags;
 	struct _fs_vnode                           *v;
 	struct _fs_vnode                        *dirv;
 	char                                    *buf1;
@@ -46,6 +46,7 @@ main(int argc, char *argv[]){
 	rc = storage_mount_image('A', argv[1]);
 	sos_assert( rc == 0 );
 
+	mnt_flags=FS_VFS_MNT_OPT_RDONLY;
 	rc = fs_vfs_mnt_mount_filesystem('A', FS_SWD_FSNAME,
 	    (void *)(uintptr_t)mnt_flags, &ioctx);
 	sos_assert( rc == 0 );
@@ -95,6 +96,51 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
 	sos_assert( rc == 0 );
 
+	/*
+	 * Create/Kill
+	 */
+	mnt_flags=0;
+	rc = fs_vfs_mnt_mount_filesystem('A', FS_SWD_FSNAME,
+	    (void *)(uintptr_t)mnt_flags, &ioctx);
+	sos_assert( rc == 0 );
+
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_creat('A', &ioctx, "SAMPLE2.ASM", pkt, &fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_close(&ioctx, fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_creat('A', &ioctx, "SAMPLE2.ASM", pkt, &fd, &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_EXIST );
+
+	rc = fs_vfs_unlink('A', &ioctx, "SAMPLE2.ASM", &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_unlink('A', &ioctx, "SAMPLE2.ASM", &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_NOENT );
+
+	/*
+	 * Open with O_CREAT
+	 */
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', &ioctx, "SAMPLE2.ASM",
+	    FS_VFS_FD_FLAG_O_RDWR|FS_VFS_FD_FLAG_O_CREAT,
+	    pkt, &fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_close(&ioctx, fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
+	sos_assert( rc == 0 );
 
 	free(buf1);
 
