@@ -171,5 +171,12 @@ int fops_get_vnode_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_fs_super _super, vfs_vnid _vnid, struct _fs_vnode *_vnp);
 int fops_lookup_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, const char *_name, vfs_vnid *_vnidp);
+int fops_creat_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    struct _fs_vnode *_dir_vn, const char *_name,
+    const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
+int fops_open_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    struct _fs_vnode *_vn, const struct _sword_header_packet *_pkt,
+    fs_fd_flags _flags, BYTE *_resp);
+
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

@@ -197,6 +197,7 @@ fs_vfs_mnt_search_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	queue_add(&mnt->m_vnodes, &vn->vn_node);
 
 found:
+
 	if ( vnodep != NULL )
 		*vnodep = vn;
 
@@ -350,6 +351,31 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	clear_mount_point(mnt);
 
 	return 0;
+}
+
+/** Get mount flags
+    @param[in]   ch        The drive letter.
+    @param[out]  flagsp    The address of the variable to store mount flags.
+    @retval      0         Success
+    @retval      ENOENT    No file system is not mounted.
+ */
+int
+fs_vfs_get_mount_flags(sos_devltr ch, vfs_mnt_flags *flagsp){
+	int                       idx;
+	struct _fs_mount         *mnt;
+
+	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
+		return ENOENT;
+
+	idx = STORAGE_DEVLTR2IDX(ch);
+
+	mnt = &mount_tbl[idx];
+	if ( mnt->m_fs == NULL )
+		return ENOENT;
+
+	if ( flagsp != NULL )
+		*flagsp = mnt->m_mount_flags;
+	return 	0;
 }
 
 /** Initialize mount table

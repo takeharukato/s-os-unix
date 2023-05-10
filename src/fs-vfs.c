@@ -27,26 +27,20 @@ static struct _fs_filesystem_table fs_tbl = {__QUEUE_INITIALIZER(&fs_tbl.head)};
 static struct _fs_file_descriptor fd_tbl[FS_SYS_FDTBL_NR];
 
 /** Initialize the file descriptor
-    @param[in]  ch    The drive letter
     @param[in]  ioctx The current I/O context.
     @param[out] fdp   The address to the file descriptor (file handler) to initialize
  */
 static void
-init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp){
+init_fd(struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp){
 	struct _storage_fib      *fib;
 	struct _storage_disk_pos *pos;
-	struct _fs_vnode          *vn;
 
 	memset(fdp, 0x0, sizeof(struct _fs_file_descriptor));   /* just in case */
 
-	vfs_vnode_init_vnode(&fdp->fd_vnode);  /* Init v-node */
+	fdp->fd_vnode = NULL;  /* Init v-node */
 	storage_init_position(&fdp->fd_pos);  /* Initialize position */
 
-	vn = &fdp->fd_vnode;
 	pos = &fdp->fd_pos;
-
-	fib = &vn->vn_fib;
-	fib->fib_devltr = ch;  /* Drive letter */
 
 	fdp->fd_use_cnt = 0;  /* Use count */
 
@@ -66,9 +60,9 @@ init_fd(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp)
     @param[out] dir   The address to the directory stream to initialize
  */
 static void
-init_dir_stream(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_dir_stream *dir){
+init_dir_stream(struct _fs_ioctx *ioctx, struct _fs_dir_stream *dir){
 
-	init_fd(ch, ioctx, &dir->dir_fd);
+	init_fd(ioctx, &dir->dir_fd);
 	dir->dir_private = NULL;
 }
 
@@ -79,38 +73,49 @@ fs_vfs_init_fdtbl(void){
 	int i;
 
 	for(i = 0; FS_SYS_FDTBL_NR > i; ++i)
-		init_fd(0, NULL, &fd_tbl[i]);
+		init_fd(NULL, &fd_tbl[i]);
 }
 
 /** Allocate global file descriptor and increment use count
-    @param[out] fdp  The address of the pointer variable to point the file descriptor.
+    @param[in]  ioctx  The current I/O context.
+    @param[out] fdnump The address of the pointer variable of the file descriptor number.
     @retval    0     success
     @retval    ENOSPC No free file descriptor found.
     @remark    The responsible for incrementing the v-node usage count of
     the v-node in the fd is fs_vfs_open function's concern.
  */
 static int
-alloc_fd(struct _fs_file_descriptor **fdp){
-	int                          i;
+alloc_fd(struct _fs_ioctx *ioctx, int *fdnump){
+	int                     i, idx;
 	struct _fs_file_descriptor *fd;
 
+	for( idx = 0; FS_PROC_FDTBL_NR > idx; ++idx)
+		if ( ioctx->ioc_fds[idx] == NULL )
+			goto search_global_fd;
+	goto not_found;
+
+search_global_fd:
 	for(i = 0, fd = &fd_tbl[0]; FS_SYS_FDTBL_NR > i; ++i, fd = &fd_tbl[i])
 		if ( fd->fd_use_cnt == 0 )
 			goto found;
+
+not_found:
 	return ENOSPC;
 
 found:
-	if ( fdp != NULL ) {
+	if ( fdnump != NULL ) {
 
 		++fd->fd_use_cnt;
-		*fdp = fd;
+		ioctx->ioc_fds[idx] = fd;
+		*fdnump = idx;
 	}
 
 	return 0;
 }
 
 /** Free global file descriptor (decrement use count)
-    @param[out] fd    The file descriptor to operate.
+    @param[in] ioctx  The current I/O context.
+    @param[in] fdnum  The file descriptor number
     @retval    0      success
     @retval    EINVAL The file descriptor is not used.
     @retval    EBUSY  The file descriptor is still used.
@@ -118,8 +123,12 @@ found:
     the v-node in the fd is fs_vfs_close function's concern.
  */
 static int
-free_fd(struct _fs_file_descriptor *fd){
+free_fd(struct _fs_ioctx *ioctx, int fdnum){
+	struct _fs_file_descriptor *fd;
 
+	sos_assert( ( fdnum >= 0 ) && ( FS_PROC_FDTBL_NR > fdnum ) );
+
+	fd = ioctx->ioc_fds[fdnum];
 	if ( fd->fd_use_cnt == 0 )
 		return EINVAL;
 
@@ -128,7 +137,9 @@ free_fd(struct _fs_file_descriptor *fd){
 	if ( fd->fd_use_cnt > 0 )
 		return EBUSY;
 
-	init_fd(0, NULL, &fd); /* clear fd */
+	init_fd(NULL, fd); /* clear fd */
+
+	ioctx->ioc_fds[fdnum] = NULL;
 
 	return 0;
 }
@@ -274,6 +285,172 @@ fs_vfs_unregister_filesystem(const char *name){
 	}
 
 	return rc;
+}
+
+static int
+create_file(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *path, const struct _sword_header_packet *pkt,
+    BYTE *resp){
+	int                            rc;
+	int                         fdnum;
+	vfs_mnt_flags           mnt_flags;
+	struct _fs_vnode               *v;
+	BYTE                          res;
+
+
+}
+
+int
+fs_vfs_creat(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *path, const struct _sword_header_packet *pkt,
+    int *fdnump, BYTE *resp){
+	int                        rc;
+	vfs_mnt_flags       mnt_flags;
+	struct _fs_vnode        *dirv;
+	struct _fs_vnode           *v;
+	char fname[SOS_UNIX_PATH_MAX];
+	vfs_vnid                 vnid;
+	BYTE                      res;
+
+	rc = storage_check_status(ch);
+	if ( rc == ENXIO ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, path, &dirv, fname, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_creat) ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto put_dir_vnode_out;
+	}
+
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_creat(ch, ioctx, dirv, fname, pkt,
+	    &vnid, &res);
+	if ( rc != 0 ) {
+
+		rc = res;
+		goto put_dir_vnode_out;
+	}
+	rc = 0;
+
+put_dir_vnode_out:
+	vfs_put_vnode(dirv);
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+int
+fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
+    const char *path, fs_open_flags flags, const struct _sword_header_packet *pkt,
+    int *fdnump, BYTE *resp){
+	int                            rc;
+	int                         fdnum;
+	vfs_mnt_flags           mnt_flags;
+	struct _fs_vnode               *v;
+	BYTE                          res;
+
+	sos_assert( fdnump != NULL );
+
+	rc = storage_check_status(ch);
+	if ( rc == ENXIO ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
+	    && ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) ) {
+
+		rc = SOS_ERROR_RDONLY;  /* Read only mount */
+		goto error_out;
+	}
+
+	/* TODO: get directory v-node */
+	/*
+	 * Create a file
+	 */
+	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
+
+		if ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) {
+
+			rc = SOS_ERROR_RDONLY;  /* Read only mount */
+			goto error_out;
+		}
+		/* TODO: Call Create */
+	}
+
+	/*
+	 * Open file
+	 */
+	rc = fs_vfs_path_to_vnode(ch, ioctx, path, &v);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	rc = alloc_fd(ioctx, &fdnum);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOSPC;
+		goto put_vnode_out;
+	}
+
+	++v->vn_use_cnt;
+	ioctx->ioc_fds[fdnum]->fd_vnode = v;
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_open) ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto free_fd_out;
+	}
+
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ch, ioctx, v, pkt, flags, &res);
+	if ( rc == 0 ) {
+
+		*fdnump = fdnum;
+		goto put_vnode_out;
+	}
+
+	rc =  res;
+
+free_fd_out:
+	--v->vn_use_cnt;
+	free_fd(ioctx, fdnum);
+
+put_vnode_out:
+	vfs_put_vnode(v);
+
+/* TODO: put directory v-node */
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
 }
 
 /** Initialize virtual file system

@@ -26,6 +26,8 @@ static struct _fs_fops sword_fops={
 	.fops_unmount = fops_unmount_sword,
 	.fops_get_vnode = fops_get_vnode_sword,
 	.fops_lookup = fops_lookup_sword,
+	.fops_creat = fops_creat_sword,
+	.fops_open = fops_open_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -136,7 +138,6 @@ fops_mount_sword(sos_devltr ch, const void *args,
 	rc = vfs_vnode_get_free_vnode(&vn);
 	if ( rc != 0 )
 		goto error_out;
-
 
 	/*
 	 * Fill File Information Block
@@ -254,6 +255,111 @@ fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 
 error_out:
 	return rc;
+}
+
+/** Create a file
+    @param[in] ch       The drive letter
+    @param[in] ioctx    The current I/O context
+    @param[in] dir_vn   The directory v-node
+    @param[in] name     The file name to create
+    @param[in]  pkt     The S-OS packet.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval     0       Success
+    @retval    -1       Error
+    The responses from the function:
+    * SOS_ERROR_IO      I/O Error
+    * SOS_ERROR_EXIST   File Already Exists
+    * SOS_ERROR_NOSPC   Device Full (No free directory entry)
+ */
+int
+fops_creat_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    struct _fs_vnode *dir_vn, const char *name,
+    const struct _sword_header_packet *pkt, vfs_vnid *new_vnidp, BYTE *resp){
+	int                       rc;
+	BYTE swd_name[SOS_FNAME_LEN];
+	struct _storage_fib      fib;
+	vfs_vnid                vnid;
+
+	/* Convert file name */
+	rc = fs_unix2sword(name, &swd_name[0], SOS_FNAME_LEN);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Check whether the file name does not exist. */
+	rc = fs_swd_search_dent_by_name(ch, ioctx, dir_vn,
+	    &swd_name[0], &vnid);
+	if ( rc == 0 ) {
+
+		rc = SOS_ERROR_EXIST;
+		goto error_out;
+	}
+
+	/* Search a free directory entry */
+	rc = fs_swd_search_free_dent(ch, ioctx, dir_vn, &vnid);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Fill fib
+	 */
+	storage_init_fib(&fib);
+	fib.fib_devltr = ch;
+	fib.fib_attr = pkt->hdr_attr;
+	fib.fib_vnid = vnid;
+	memcpy(&fib.fib_sword_name[0], &swd_name[0], SOS_FNAME_LEN);
+
+	/*
+	 * Write the directory entry
+	 */
+	rc = fs_swd_write_dent(ch, ioctx, dir_vn, &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Open a file
+    @param[in] ch       The drive letter
+    @param[in] ioctx    The current I/O context
+    @param[in] path     The filename to open
+    @param[in] flags    The open flags
+    FS_VFS_FD_FLAG_O_RDONLY  Read only open
+    FS_VFS_FD_FLAG_O_WRONLY  Write only open
+    FS_VFS_FD_FLAG_O_RDWR    Read/Write open
+    FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
+    FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
+    FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] fd       The file descriptor
+    @param[out] privatep The pointer to the pointer variable to store
+    the private information
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO      I/O Error
+    * SOS_ERROR_OFFLINE Device offline
+    * SOS_ERROR_EXIST   File Already Exists
+    * SOS_ERROR_NOENT   File not found
+    * SOS_ERROR_NOSPC   Device Full (No free directory entry)
+    * SOS_ERROR_RDONLY  Write proteced file
+    * SOS_ERROR_SYNTAX  Invalid flags
+ */
+int
+fops_open_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+	    struct _fs_vnode *vn, const struct _sword_header_packet *pkt,
+	    fs_fd_flags flags, BYTE *resp){
+
+	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
+		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
+
+	return 0;
 }
 
 void

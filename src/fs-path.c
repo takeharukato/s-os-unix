@@ -29,29 +29,29 @@
    @retval   SOS_ERROR_NOSPC No more memory
  */
 static int
-path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
+path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
     struct _fs_vnode **outv){
-	int                         rc;
-	int                        idx;
-	char                        *p;
-	char                   *next_p;
-	char                 *copypath;
-	vfs_vnid                  vnid;
-	struct _fs_vnode       *curr_v;
-	struct _fs_vnode       *next_v;
-	struct _storage_fib   *cur_fib;
+	int                           rc;
+	int                          idx;
+	char                          *p;
+	char                     *next_p;
+	char copypath[SOS_UNIX_PATH_MAX];
+	vfs_vnid                    vnid;
+	struct _fs_vnode         *curr_v;
+	struct _fs_vnode         *next_v;
+	struct _storage_fib     *cur_fib;
+	size_t                   pathlen;
 
 	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
 		return SOS_ERROR_OFFLINE;
-
-	copypath = strdup(path);  /* Copy path to the file  */
-	if ( copypath == NULL ) {
-
-		rc = SOS_ERROR_NOSPC;  /* No more memory */
-		goto error_out;
-	}
-
 	idx = STORAGE_DEVLTR2IDX(ch);
+
+	/* Copy path of the file  */
+	pathlen = strlen(path);
+	strncpy(copypath, path, pathlen);
+	copypath[pathlen-1] = '\0';
+	copypath[SOS_UNIX_PATH_MAX - 1] = '\0';
+
 	p = copypath;
 
 	if ( *p == FS_VFS_PATH_DELIM ) { /* Absolute path  */
@@ -93,7 +93,7 @@ path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 		 */
 
 		if ( !FS_FSMGR_FOP_IS_DEFINED(curr_v->vn_mnt->m_fs, fops_lookup) )
-			goto copy_path_free_out;  /* No lookup operation */
+			goto error_out;  /* No lookup operation */
 
 		/*
 		 * Acquire v-node lock to prevent directory entries from
@@ -106,11 +106,11 @@ path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 		rc = curr_v->vn_mnt->m_fs->fsm_fops->fops_lookup(ch,
 		    ioctx, curr_v, p, &vnid);
 		if ( rc != 0 )
-			goto copy_path_free_out;  /* No lookup operation */
+			goto error_out;  /* No lookup operation */
 
 		rc = fs_vfs_get_vnode(ch, ioctx, vnid, &next_v);
 		if ( rc != 0 )
-			goto copy_path_free_out;  /* lookup operation failed */
+			goto error_out;  /* lookup operation failed */
 
 		/* Unlock v-node
 		 */
@@ -131,8 +131,51 @@ path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
 		*outv = curr_v;
 	}
 
-copy_path_free_out:
-	free(copypath);
+error_out:
+	return rc;
+}
+
+static int
+path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
+    struct _fs_vnode **outv, char *fname, size_t fnamelen){
+	int                            rc;
+	int                           idx;
+	char                           *p;
+	char  copypath[SOS_UNIX_PATH_MAX];
+	size_t                    pathlen;
+
+	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
+		return SOS_ERROR_OFFLINE;
+
+	idx = STORAGE_DEVLTR2IDX(ch);
+
+	/* Copy path of the file  */
+	pathlen = strlen(path);
+	strncpy(copypath, path, pathlen);
+	copypath[pathlen-1] = '\0';
+	copypath[SOS_UNIX_PATH_MAX - 1] = '\0';
+
+	p = strrchr(copypath, FS_VFS_PATH_DELIM);  /* Last delimiter */
+
+	if ( p == NULL ) {  /* Return current directory v-node */
+
+		if ( ( outv != NULL ) && ( fname != NULL ) ) {
+
+			*outv = ioctx->ioc_cwd[idx]; /*  current directory.  */
+			strncpy(fname, copypath, fnamelen);
+			fname[fnamelen - 1] = '\0';
+		}
+	} else { /* Return directory v-node */
+
+		*p = '\0';
+		rc = path_to_vnode(ch, ioctx, copypath, outv);
+		if ( rc != 0 )
+			goto error_out;
+		strncpy(fname, p + 1, fnamelen);
+		fname[fnamelen - 1] = '\0';
+	}
+
+	rc = 0;
 
 error_out:
 	return rc;
@@ -144,11 +187,27 @@ error_out:
    @param[in]  path      Path string
    @param[out] outv      The address of the pointer variable to point the found v-node.
    @retval   0               Success
-   @retval   SOS_ERROR_NOSPC No more memory
  */
 int
-fs_vfs_path_to_vnode(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
+fs_vfs_path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
     struct _fs_vnode **outv){
 
 	return path_to_vnode(ch, ioctx, path, outv);
+}
+
+
+/** Obtains a reference to the v-node of the specified path (internal function)
+   @param[in]  ch        Drive letter
+   @param[in]  ioctx     I/O context
+   @param[in]  path      Path string
+   @param[out] outv      The address of the pointer variable to point the found v-node.
+   @param[out] fname     The address to store the file name part.
+   @param[out] fnamelen  Length of the file name part.
+   @retval   0           Success
+ */
+int
+fs_vfs_path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
+    struct _fs_vnode **outv, char *fname, size_t fnamelen){
+
+	return path_to_dir_vnode(ch, ioctx, path, outv, fname, fnamelen);
 }

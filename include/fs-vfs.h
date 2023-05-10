@@ -214,6 +214,7 @@ struct _fs_mount;
 /** Type definitions
  */
 typedef uint16_t       fs_perm;  /**< permission bit map */
+typedef uint16_t fs_open_flags;  /**< open flags         */
 typedef uint16_t   fs_fd_flags;  /**< fd flags           */
 typedef uint32_t vfs_mnt_flags;  /**< mount flags        */
 typedef void     *vfs_fs_vnode;  /**< file system specific v-node */
@@ -279,7 +280,7 @@ struct _fs_file_descriptor{
 	fs_fd_flags            fd_flags;  /**< Open     flags */
 	fs_fd_flags         fd_sysflags;  /**< Internal flags */
 	int                  fd_use_cnt;  /**< Use count      */
-	struct _fs_vnode       fd_vnode;  /**< v-node for then opened file */
+	struct _fs_vnode      *fd_vnode;  /**< v-node for then opened file */
 	struct _storage_disk_pos fd_pos;  /**< Position Information */
 	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
 	void                *fd_private;  /**< Private Information */
@@ -322,13 +323,11 @@ struct _fs_fops{
 	    const struct _fs_vnode *_dir_vnode, const char *_name,
 	    vfs_vnid *_vnidp);
 	int (*fops_creat)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    const char *_filepath, fs_fd_flags _flags,
-	    const struct _sword_header_packet *_pkt,
-	    struct _fs_file_descriptor **_fdp, BYTE *_resp);
+	    struct _fs_vnode *_dir_vn, const char *_name,
+	    const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
 	int (*fops_open)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    const char *_fname, fs_fd_flags _flags,
-	    const struct _sword_header_packet *_pkt,
-	    struct _fs_file_descriptor **_fdp, void **_privatep, BYTE *_resp);
+	    struct _fs_vnode *_vn, const struct _sword_header_packet *_pkt,
+	    fs_fd_flags _flags, BYTE *_resp);
 	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
 	int (*fops_read)(struct _fs_file_descriptor *_fdp,
@@ -341,7 +340,8 @@ struct _fs_fops{
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
 	int (*fops_truncate)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
-	int (*fops_opendir)(struct _fs_dir_stream *_dirp, BYTE *_resp);
+	int (*fops_opendir)(const char *_path, struct _fs_dir_stream *_dirp,
+	    BYTE *_resp);
 	int (*fops_readdir)(struct _fs_dir_stream *_dir, struct _fs_vnode *_vn,
 	    BYTE *_resp);
 	int (*fops_seekdir)(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
@@ -391,11 +391,13 @@ int fs_vfs_mnt_search_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fs_vfs_mnt_mount_filesystem(sos_devltr _ch, const char *_fs_name,
     const void *_args, struct _fs_ioctx *_ioctx);
 int fs_vfs_mnt_unmount_filesystem(sos_devltr _ch, struct _fs_ioctx *_ioctx);
+int fs_vfs_get_mount_flags(sos_devltr _ch, vfs_mnt_flags *_flagsp);
 void fs_vfs_init_mount_tbl(void);
 
-int fs_vfs_path_to_vnode(sos_devltr _ch, struct _fs_ioctx *_ioctx,
+int fs_vfs_path_to_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv);
-
+int fs_vfs_path_to_dir_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    const char *_path, struct _fs_vnode **_outv, char *_fname, size_t _fnamelen);
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
 
 void fs_vfs_init_vfs(void);
