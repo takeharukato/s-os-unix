@@ -32,7 +32,7 @@
     @retval     SOS_ERROR_IO  I/O Error
  */
 static int
-rw_cluster_sword(sos_devltr ch, struct _fs_ioctx *ioctx, int mode, void *buf,
+rw_cluster_sword(sos_devltr ch, const struct _fs_ioctx *ioctx, int mode, void *buf,
     fs_blk_num blk){
 	int                        rc;
 	size_t                  rwcnt;
@@ -89,7 +89,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 static int
-rw_block_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+rw_block_sword(const struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
     int mode, void *buf, size_t bufsiz, size_t *rwsizp){
 	int                        rc;
 	fs_blk_num                blk;
@@ -195,7 +195,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_read_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+fs_swd_read_block(const struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
     BYTE *buf, size_t bufsiz, size_t *rwsizp){
 
 	return rw_block_sword(ioctx, fib, pos, FS_VFS_IO_DIR_RD,
@@ -217,7 +217,7 @@ fs_swd_read_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t po
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_write_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
+fs_swd_write_block(const struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t pos,
     const BYTE *buf, size_t bufsiz, size_t *rwsizp){
 
 	return rw_block_sword(ioctx, fib, pos, FS_VFS_IO_DIR_WR,

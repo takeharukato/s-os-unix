@@ -354,8 +354,8 @@ struct _fs_fops{
 	    const char *_newpath, BYTE *_resp);
 	int (*fops_chmod)(struct _fs_dir_stream *_dir, const char *_path,
 	    const fs_perm _perm, BYTE *_resp);
-	int (*fops_unlink)(struct _fs_dir_stream *_dir,
-	    const char *_path, BYTE *_resp);
+	int (*fops_unlink)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    struct _fs_vnode *_dir_vn, const char *_path, BYTE *_resp);
 };
 
 /** File system manager
@@ -402,6 +402,7 @@ int fs_vfs_path_to_dir_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv, char *_fname, size_t _fnamelen);
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
 
+int fs_vfs_unlink(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path, BYTE *_resp);
 int fs_vfs_open(sos_devltr _ch, struct _fs_ioctx *_ioctx,
     const char *_path, fs_open_flags _flags, const struct _sword_header_packet *_pkt,
     int *_fdnump, BYTE *_resp);

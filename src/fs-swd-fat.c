@@ -31,7 +31,7 @@
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-rw_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx,
+rw_fat_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
     struct _fs_sword_fat *fat, int mode){
 	int                 rc;
 	size_t           rwcnt;
@@ -69,7 +69,7 @@ error_out:
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-read_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat){
+read_fat_sword(sos_devltr ch, const struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat){
 
 	return rw_fat_sword(ch, ioctx, fat, FS_VFS_IO_DIR_RD);
 }
@@ -81,7 +81,8 @@ read_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat
     @retval    SOS_ERROR_IO     I/O Error
  */
 static int
-write_fat_sword(sos_devltr ch, struct _fs_ioctx *ioctx, const struct _fs_sword_fat *fat){
+write_fat_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const struct _fs_sword_fat *fat){
 
 	return rw_fat_sword(ch, ioctx, (struct _fs_sword_fat *)fat, FS_VFS_IO_DIR_WR);
 }
@@ -136,7 +137,8 @@ error_out:
     @retval    SOS_ERROR_IO     I/O Error
   */
 static int
-alloc_newblock_sword(struct _fs_ioctx *ioctx, struct _storage_fib *fib, struct _fs_sword_fat *fat, fs_blk_num *blkp){
+alloc_newblock_sword(const struct _fs_ioctx *ioctx, struct _storage_fib *fib,
+    struct _fs_sword_fat *fat, fs_blk_num *blkp){
 	int  i;
 	int rc;
 
@@ -166,7 +168,8 @@ found:
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static void
-handle_last_cluster(struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat, fs_off_t pos, fs_blk_num blk){
+handle_last_cluster(const struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat,
+    fs_off_t pos, fs_blk_num blk){
 	size_t       use_cls_siz;
 
 	/*
@@ -201,7 +204,8 @@ handle_last_cluster(struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat, fs_off_t
     @retval    SOS_ERROR_NOSPC  Device full
   */
 static int
-prepare_first_block_sword(struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat, int mode, struct _storage_fib *fib){
+prepare_first_block_sword(const struct _fs_ioctx *ioctx, struct _fs_sword_fat *fat,
+    int mode, struct _storage_fib *fib){
 	int              rc;
 	fs_blk_num  new_blk;
 
@@ -242,7 +246,8 @@ error_out:
     @param[out] free_blocks The address to store the number of the free blocks on the disk.
  */
 static int
-get_free_block_nr_sword(sos_devltr ch, struct _fs_ioctx *ioctx, size_t *free_blocks){
+get_free_block_nr_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    size_t *free_blocks){
 	int                    i;
 	int                   rc;
 	size_t          free_cnt;
@@ -284,8 +289,8 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_get_block_number(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t offset, int mode,
-    fs_blk_num *blkp){
+fs_swd_get_block_number(const struct _fs_ioctx *ioctx, struct _storage_fib *fib,
+    fs_off_t offset, int mode, fs_blk_num *blkp){
 	int                   rc;
 	fs_off_t             pos;
 	fs_blk_num           cur;
@@ -422,7 +427,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_release_blocks(struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
+fs_swd_release_blocks(const struct _fs_ioctx *ioctx, struct _storage_fib *fib, fs_off_t offset, fs_blk_num *relblkp){
 	int                   rc;
 	fs_off_t             pos;
 	fs_off_t         rel_pos;
@@ -534,7 +539,7 @@ error_out:
     @retval    SOS_ERROR_NOSPC  Device full
  */
 int
-fs_swd_get_used_size_in_block(struct _fs_ioctx *ioctx, struct _storage_fib *fib,
+fs_swd_get_used_size_in_block(const struct _fs_ioctx *ioctx, struct _storage_fib *fib,
     fs_off_t offset, size_t *usedsizp){
 	int                   rc;
 	fs_off_t             pos;

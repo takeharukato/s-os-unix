@@ -34,15 +34,14 @@ static struct _fs_fs_manager sword_fsm;
 /** Truncate a file to a specified length
     @param[in]  ioctx  The current I/O context
     @param[in]  fib    The file information block of the file.
-    @param[in]  pos    The file position information
     @param[in]  newpos The file position of the file to be truncated.
     @retval    0                Success
     @retval    SOS_ERROR_IO     I/O Error
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize_sword(struct _fs_ioctx *ioctx, const struct _fs_vnode *dir_vnode,
-    struct _storage_fib *fib, struct _storage_disk_pos *pos, fs_off_t newpos){
+change_filesize_sword(const struct _fs_ioctx *ioctx, const struct _fs_vnode *dir_vnode,
+    struct _storage_fib *fib, fs_off_t newpos){
 	int                        rc;
 	fs_off_t               newsiz;
 	fs_off_t              extends;
@@ -322,6 +321,67 @@ error_out:
 		*resp = SOS_ECODE_VAL(rc);  /* return code */
 
 	return (rc == 0) ? (0) : (-1);
+}
+
+/** Unlink a file
+    @param[in] ch       The drive letter
+    @param[in] ioctx    The current I/O context
+    @param[in] dir_vn   The directory v-node
+    @param[in] name     The file name to unlink
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval     0       Success
+    @retval    -1       Error
+    The responses from the function:
+    * SOS_ERROR_IO      I/O Error
+    * SOS_ERROR_NOENT   File not found
+ */
+int
+fops_unlink_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    struct _fs_vnode *dir_vn, const char *name, BYTE *resp){
+	int                             rc;
+	struct _storage_fib            fib;
+	struct _storage_fib       *dir_fib;
+	vfs_vnid                      vnid;
+	BYTE        swdname[SOS_FNAME_LEN];
+
+	/* Get the filename of path in SWORD representation. */
+	rc = fs_unix2sword(name, &swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Obtain a directory entry for the file to unlink. */
+	rc = fs_swd_search_dent_by_name(ch, ioctx, dir_vn, &swdname[0], &vnid);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Get the file information block */
+	rc = fs_swd_search_fib_by_vnid(ch, ioctx, vnid, &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Change the file attribute to free */
+	fib.fib_attr = SOS_FATTR_FREE;
+
+	/* Update the directory entry. */
+	rc = fs_swd_write_dent(ch, ioctx, dir_vn, &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Release blocks */
+	rc = change_filesize_sword(ioctx, dir_vn, &fib, 0);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = rc;
+
+	return rc;
 }
 
 /** Open a file

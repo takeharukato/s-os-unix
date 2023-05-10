@@ -281,6 +281,32 @@ error_out:
 	return rc;
 }
 
+/** Check a device
+    @param[in] ch        The drive letter
+    @param[in] flags     Open flags
+    @retval     0        Success
+    @retval    SOS_ERROR_OFFLINE Device offline
+    @retval    SOS_ERROR_RDONLY  Readonly mount
+ */
+static int
+check_device(sos_devltr ch, fs_open_flags flags){
+	int                        rc;
+	vfs_mnt_flags       mnt_flags;
+
+	rc = storage_check_status(ch);
+	if ( rc != 0 )
+		return SOS_ERROR_OFFLINE;
+
+	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
+	if ( rc != 0 )
+		return SOS_ERROR_OFFLINE;
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
+	    && ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) )
+		return  SOS_ERROR_RDONLY;  /* Read only mount */
+
+	return 0;
+}
+
 /** Initialize file manager
     @param[out] fsm file manager to init
  */
@@ -439,31 +465,14 @@ fs_vfs_creat(sos_devltr ch, struct _fs_ioctx *ioctx,
     const char *path, const struct _sword_header_packet *pkt,
     int *fdnump, BYTE *resp){
 	int                        rc;
-	vfs_mnt_flags       mnt_flags;
 	BYTE                      res;
 	int                     fdnum;
 	struct _fs_vnode           *v;
 	char fname[SOS_UNIX_PATH_MAX];
 
-	rc = storage_check_status(ch);
-	if ( rc == ENXIO ) {
-
-		rc = SOS_ERROR_OFFLINE;
+	rc = check_device(ch, FS_VFS_FD_FLAG_O_CREAT);
+	if ( rc != 0 )
 		goto error_out;
-	}
-
-	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
-	if ( rc != 0 ) {
-
-		rc = SOS_ERROR_OFFLINE;
-		goto error_out;
-	}
-
-	if ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) {
-
-		rc = SOS_ERROR_RDONLY;  /* Read only mount */
-		goto error_out;
-	}
 
 	/* Create a file */
 	rc = create_file(ch, ioctx, path, pkt, &res);
@@ -489,6 +498,56 @@ error_out:
 	return (rc == 0) ? (0) : (-1);
 }
 
+/** Unlink a file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to create
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+ */
+int
+fs_vfs_unlink(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path, BYTE *resp){
+	int                        rc;
+	BYTE                      res;
+	struct _fs_vnode        *dirv;
+	char fname[SOS_UNIX_PATH_MAX];
+
+	rc = check_device(ch, FS_VFS_FD_FLAG_O_CREAT);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, path, &dirv, fname, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_unlink) ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto put_dir_vnode_out;
+	}
+
+	rc = dirv->vn_mnt->m_fs->fsm_fops->fops_unlink(ch, ioctx, dirv, fname, &res);
+	if ( rc != 0 ) {
+
+		rc = res;
+		goto put_dir_vnode_out;
+	}
+
+	rc = 0;
+
+put_dir_vnode_out:
+	vfs_put_vnode(dirv);
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
 /** Open a file
     @param[in] ch        The drive letter
     @param[in] ioctx     The current I/O context
@@ -510,44 +569,20 @@ fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
     int *fdnump, BYTE *resp){
 	int                            rc;
 	int                         fdnum;
-	vfs_mnt_flags           mnt_flags;
 	struct _fs_vnode               *v;
 	char     fname[SOS_UNIX_PATH_MAX];
 	BYTE                          res;
 
 	sos_assert( fdnump != NULL );
 
-	rc = storage_check_status(ch);
-	if ( rc == ENXIO ) {
-
-		rc = SOS_ERROR_OFFLINE;
+	rc = check_device(ch, flags);
+	if ( rc != 0 )
 		goto error_out;
-	}
-
-	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
-	if ( rc != 0 ) {
-
-		rc = SOS_ERROR_OFFLINE;
-		goto error_out;
-	}
-
-	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
-	    && ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) ) {
-
-		rc = SOS_ERROR_RDONLY;  /* Read only mount */
-		goto error_out;
-	}
 
 	/*
 	 * Create a file
 	 */
 	if ( flags & FS_VFS_FD_FLAG_O_CREAT ) {
-
-		if ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) {
-
-			rc = SOS_ERROR_RDONLY;  /* Read only mount */
-			goto error_out;
-		}
 
 		/* Create a file */
 		rc = create_file(ch, ioctx, path, pkt, &res);
@@ -612,6 +647,7 @@ error_out:
 
 	return (rc == 0) ? (0) : (-1);
 }
+
 
 /** Initialize virtual file system
  */
