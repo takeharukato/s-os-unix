@@ -28,7 +28,9 @@ static struct _fs_fops sword_fops={
 	.fops_lookup = fops_lookup_sword,
 	.fops_creat = fops_creat_sword,
 	.fops_open = fops_open_sword,
+	.fops_close = fops_close_sword,
 	.fops_unlink = fops_unlink_sword,
+	.fops_read = fops_read_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -386,9 +388,7 @@ error_out:
 }
 
 /** Open a file
-    @param[in] ch       The drive letter
-    @param[in] ioctx    The current I/O context
-    @param[in] path     The filename to open
+    @param[in] fdp      The file descriptor
     @param[in] flags    The open flags
     FS_VFS_FD_FLAG_O_RDONLY  Read only open
     FS_VFS_FD_FLAG_O_WRONLY  Write only open
@@ -397,9 +397,7 @@ error_out:
     FS_VFS_FD_FLAG_O_ASC     Open/Create a ascii file
     FS_VFS_FD_FLAG_O_BIN     Open/Create a binary file
     @param[in]  pkt      The S-OS header operation packet.
-    @param[out] fd       The file descriptor
-    @param[out] privatep The pointer to the pointer variable to store
-    the private information
+    @param[in]  flags    The open flags
     @param[out] resp     The address to store the return code for S-OS.
     @retval     0               Success
     @retval    -1               Error
@@ -413,12 +411,14 @@ error_out:
     * SOS_ERROR_SYNTAX  Invalid flags
  */
 int
-fops_open_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
-	    struct _fs_vnode *vn, const struct _sword_header_packet *pkt,
-	    fs_fd_flags flags, BYTE *resp){
-	BYTE res;
+fops_open_sword(struct _fs_file_descriptor *fdp, const struct _sword_header_packet *pkt,
+    fs_fd_flags flags, BYTE *resp){
+	BYTE             res;
+	struct _fs_vnode *vn;
 
 	res = 0;
+
+	vn = fdp->fd_vnode;
 
 	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		res = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
@@ -434,6 +434,61 @@ fops_open_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		*resp = res;
 
 	return res;
+}
+
+/** Close a file
+    @param[in] fdp      The file descriptor
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+ */
+int
+fops_close_sword(struct _fs_file_descriptor *fdp, BYTE *resp){
+
+	return 0;
+}
+
+/** Read from a file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] dest   The buffer to store read data.
+    @param[in]  count  The counter how many bytes to read from the
+    file.
+    @param[out] rdsizp  The adress to store read bytes.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -1                Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fops_read_sword(struct _fs_file_descriptor *fdp,
+    void *dest, size_t count, size_t *rdsizp, BYTE *resp){
+	int                        rc;
+	size_t                  rwsiz;
+	struct _storage_disk_pos *pos;
+	struct _storage_fib      *fib;
+
+	sos_assert( fdp->fd_vnode != NULL );
+
+	pos = &fdp->fd_pos;
+	fib = &fdp->fd_vnode->vn_fib;
+
+	rc = fs_swd_read_block(fdp->fd_ioctx, fib, pos->dp_pos, dest, count, &rwsiz);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = 0;
+
+error_out:
+	if ( rdsizp != NULL )
+		*rdsizp = rwsiz;
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return ( rc == 0 ) ? (0) : (-1);
 }
 
 void

@@ -330,8 +330,7 @@ struct _fs_fops{
 	    const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
 	int (*fops_unlink)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    struct _fs_vnode *_dir_vn, const char *_path, BYTE *_resp);
-	int (*fops_open)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-	    struct _fs_vnode *_vn, const struct _sword_header_packet *_pkt,
+	int (*fops_open)(struct _fs_file_descriptor *_fdp, const struct _sword_header_packet *_pkt,
 	    fs_fd_flags _flags, BYTE *_resp);
 	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
@@ -412,6 +411,9 @@ int fs_vfs_open(sos_devltr _ch, struct _fs_ioctx *_ioctx,
     const char *_path, fs_open_flags _flags, const struct _sword_header_packet *_pkt,
     int *_fdnump, BYTE *_resp);
 int fs_vfs_close(struct _fs_ioctx *_ioctx, int _fdnum, BYTE *_resp);
+
+int fs_vfs_read(struct _fs_ioctx *_ioctx, int _fd, void *_buf, size_t _count,
+    size_t *_rwcntp, BYTE *_resp);
 
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

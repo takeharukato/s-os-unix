@@ -176,9 +176,10 @@ int fops_creat_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
 int fops_unlink_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     struct _fs_vnode *_dir_vn, const char *_name, BYTE *resp);
-int fops_open_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
-    struct _fs_vnode *_vn, const struct _sword_header_packet *_pkt,
-    fs_fd_flags _flags, BYTE *_resp);
-
+int fops_open_sword(struct _fs_file_descriptor *_fdp,
+    const struct _sword_header_packet *_pkt, fs_fd_flags _flags, BYTE *_resp);
+int fops_close_sword(struct _fs_file_descriptor *_fdp, BYTE *_resp);
+int fops_read_sword(struct _fs_file_descriptor *_fdp, void *_dest, size_t _count,
+    size_t *_rdsizp, BYTE *_resp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

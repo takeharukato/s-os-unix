@@ -107,6 +107,7 @@ found:
 
 		++fd->fd_use_cnt;
 		ioctx->ioc_fds[idx] = fd;
+		fd->fd_ioctx = ioctx;
 		*fdnump = idx;
 	}
 
@@ -137,6 +138,7 @@ free_fd(struct _fs_ioctx *ioctx, int fdnum){
 	if ( fd->fd_use_cnt > 0 )
 		return EBUSY;
 
+	fd->fd_sysflags &= ~FS_VFS_FD_FLAG_SYS_OPENED;
 	init_fd(NULL, fd); /* clear fd */
 
 	ioctx->ioc_fds[fdnum] = NULL;
@@ -252,9 +254,11 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 		goto free_fd_out;
 	}
 
-	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ch, ioctx, v, pkt, flags, &res);
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ioctx->ioc_fds[fdnum],
+	    pkt, flags, &res);
 	if ( rc == 0 ) {
 
+		ioctx->ioc_fds[fdnum]->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;
 		*fdnump = fdnum;
 		goto put_vnode_out;
 	}
@@ -291,6 +295,7 @@ check_device(sos_devltr ch, fs_open_flags flags){
 	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
 	if ( rc != 0 )
 		return SOS_ERROR_OFFLINE;
+
 	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE )
 	    && ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) )
 		return  SOS_ERROR_RDONLY;  /* Read only mount */
@@ -626,6 +631,17 @@ fs_vfs_close(struct _fs_ioctx *ioctx, int fdnum, BYTE *resp){
 		goto error_out;
 	}
 
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_close) )
+		goto close_fd;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_close(fdp, &res);
+	if ( rc != 0 ) {
+
+		rc = res;
+		goto error_out;
+	}
+
+close_fd:
 	sos_assert(fdp->fd_vnode->vn_use_cnt > 0 );
 	vfs_dec_cnt(fdp->fd_vnode);
 
@@ -640,6 +656,76 @@ error_out:
 	return (rc == 0) ? (0) : (-1);
 }
 
+/** Read from a file
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  fd     A file descriptor number in The I/O context.
+    @param[out] buf    The buffer to store read data.
+    @param[in]  count  The counter how many bytes to read from the
+    file.
+    @param[out] rdcntp  The adress to store read bytes.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -1                Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+    * SOS_ERROR_NOTOPEN The file is not opend
+ */
+int
+fs_vfs_read(struct _fs_ioctx *ioctx, int fd, void *buf, size_t count,
+    size_t *rwcntp, BYTE *resp){
+	int                          rc;
+	size_t                    rdsiz;
+	BYTE                        res;
+	struct _storage_disk_pos   *pos;
+	struct _fs_file_descriptor *fdp;
+
+	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	fdp = ioctx->ioc_fds[fd];
+	pos = &fdp->fd_pos;
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	rdsiz = 0;  /* Init read size */
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_read) )
+		goto update_pos;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_read(fdp, buf, count,
+	    &rdsiz, &res);
+	if ( rc != 0 ) {
+
+		pos->dp_pos += rdsiz;  /* update position */
+		goto error_out;
+	}
+
+update_pos:
+	pos->dp_pos += rdsiz;  /* update position */
+
+	res = 0;
+
+error_out:
+	if ( rwcntp != NULL )
+		*rwcntp = rdsiz;
+
+	if ( resp != NULL )
+		*resp = res;
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(res);  /* return code */
+
+	return (res == 0) ? (0) : (-1);
+}
 
 /** Initialize virtual file system
  */
