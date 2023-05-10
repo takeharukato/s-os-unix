@@ -999,7 +999,7 @@ fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath,
 	if ( !FS_FSMGR_FOP_IS_DEFINED(src_vn->vn_mnt->m_fs, fops_rename) )
 		goto put_src_vnode_out;
 
-	rc = src_vnode->vn_mnt->m_fs->fsm_fops->fops_rename(src_vn, src_name,
+	rc = src_vn->vn_mnt->m_fs->fsm_fops->fops_rename(src_vn, src_name,
 	    dest_vn, dest_name, &res);
 	if ( ( rc != 0 ) || ( res != 0 ) )
 		goto put_src_vnode_out;
