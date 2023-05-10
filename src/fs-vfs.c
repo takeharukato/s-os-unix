@@ -942,6 +942,82 @@ error_out:
 
 	return (res == 0) ? (0) : (-1);
 }
+
+int
+fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath, const char *newpath, BYTE *resp){
+	int                             rc;
+	BYTE                           res;
+	struct _fs_vnode           *src_vn;
+	struct _fs_vnode          *dest_vn;
+	vfs_vnid              old_dir_vnid;
+	char   src_name[SOS_UNIX_PATH_MAX];
+	char  dest_name[SOS_UNIX_PATH_MAX];
+
+	rc = check_device(ch, FS_VFS_FD_FLAG_O_CREAT);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Get the v-node of old path
+	 */
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, oldpath, &src_vn,
+	    src_name, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	old_dir_vnid = src_vn->vn_id;
+	vfs_put_vnode(src_vn);
+
+	/*
+	 * Get the v-node of new path
+	 */
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, newpath, &dest_vn,
+	    dest_name, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	if ( old_dir_vnid != dest_vn->vn_id ) {
+
+		/*
+		 * Get the v-node of old path
+		 */
+		rc = fs_vfs_path_to_dir_vnode(ch, ioctx, oldpath, &src_vn,
+		    src_name, SOS_UNIX_PATH_MAX);
+		if ( rc != 0 ) {
+
+			res = rc;
+			goto put_dest_vnode_out;
+		}
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(src_vn->vn_mnt->m_fs, fops_rename) )
+		goto put_src_vnode_out;
+
+	rc = src_vnode->vn_mnt->m_fs->fsm_fops->fops_rename(src_vn, src_name,
+	    dest_vn, dest_name, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto put_src_vnode_out;
+
+put_src_vnode_out:
+		vfs_put_vnode(src_vn);
+
+put_dest_vnode_out:
+		if ( old_dir_vnid != dest_vn->vn_id )
+			vfs_put_vnode(dest_vn);
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	return (res == 0) ? (0) : (-1);
+}
+
 /** Initialize virtual file system
  */
 void
