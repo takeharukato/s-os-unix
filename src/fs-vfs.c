@@ -144,6 +144,143 @@ free_fd(struct _fs_ioctx *ioctx, int fdnum){
 	return 0;
 }
 
+/** Create a file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to create
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+ */
+static int
+create_file(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *path, const struct _sword_header_packet *pkt,
+    BYTE *resp){
+	int                        rc;
+	vfs_mnt_flags       mnt_flags;
+	struct _fs_vnode        *dirv;
+	struct _fs_vnode           *v;
+	char fname[SOS_UNIX_PATH_MAX];
+	vfs_vnid                 vnid;
+	BYTE                      res;
+
+	rc = storage_check_status(ch);
+	if ( rc == ENXIO ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	rc = fs_vfs_get_mount_flags(ch, &mnt_flags);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_OFFLINE;
+		goto error_out;
+	}
+
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, path, &dirv, fname, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_creat) ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto put_dir_vnode_out;
+	}
+
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_creat(ch, ioctx, dirv, fname, pkt,
+	    &vnid, &res);
+	if ( rc != 0 ) {
+
+		rc = res;
+		goto put_dir_vnode_out;
+	}
+	rc = 0;
+
+put_dir_vnode_out:
+	vfs_put_vnode(dirv);
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Open a file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to create
+    @param[in] flags    The open flags
+    FS_VFS_FD_FLAG_O_RDONLY  Read only open
+    FS_VFS_FD_FLAG_O_WRONLY  Write only open
+    FS_VFS_FD_FLAG_O_RDWR    Read/Write open
+    FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] fdnump   The address to store a file descriptor number.
+    @retval     0        Success
+    @retval    -1        Error
+ */
+static int
+fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
+    const char *path, fs_open_flags flags, const struct _sword_header_packet *pkt,
+    int *fdnump){
+	int                            rc;
+	int                         fdnum;
+	struct _fs_vnode               *v;
+	BYTE                          res;
+
+	/*
+	 * Open file
+	 */
+	rc = fs_vfs_path_to_vnode(ch, ioctx, path, &v);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	rc = alloc_fd(ioctx, &fdnum);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOSPC;
+		goto put_vnode_out;
+	}
+
+	++v->vn_use_cnt;
+	ioctx->ioc_fds[fdnum]->fd_vnode = v;
+	ioctx->ioc_fds[fdnum]->fd_flags = flags;
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_open) ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto free_fd_out;
+	}
+
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ch, ioctx, v, pkt, flags, &res);
+	if ( rc == 0 ) {
+
+		*fdnump = fdnum;
+		goto put_vnode_out;
+	}
+
+	rc =  res;
+
+free_fd_out:
+	--v->vn_use_cnt;
+	free_fd(ioctx, fdnum);
+
+put_vnode_out:
+	vfs_put_vnode(v);
+
+error_out:
+	return rc;
+}
+
 /** Initialize file manager
     @param[out] fsm file manager to init
  */
@@ -287,30 +424,26 @@ fs_vfs_unregister_filesystem(const char *name){
 	return rc;
 }
 
-static int
-create_file(sos_devltr ch, const struct _fs_ioctx *ioctx,
-    const char *path, const struct _sword_header_packet *pkt,
-    BYTE *resp){
-	int                            rc;
-	int                         fdnum;
-	vfs_mnt_flags           mnt_flags;
-	struct _fs_vnode               *v;
-	BYTE                          res;
-
-
-}
-
+/** Create a file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to create
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] fdnump   The address to store a file descriptor number.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+ */
 int
-fs_vfs_creat(sos_devltr ch, const struct _fs_ioctx *ioctx,
+fs_vfs_creat(sos_devltr ch, struct _fs_ioctx *ioctx,
     const char *path, const struct _sword_header_packet *pkt,
     int *fdnump, BYTE *resp){
 	int                        rc;
 	vfs_mnt_flags       mnt_flags;
-	struct _fs_vnode        *dirv;
+	BYTE                      res;
+	int                     fdnum;
 	struct _fs_vnode           *v;
 	char fname[SOS_UNIX_PATH_MAX];
-	vfs_vnid                 vnid;
-	BYTE                      res;
 
 	rc = storage_check_status(ch);
 	if ( rc == ENXIO ) {
@@ -326,30 +459,28 @@ fs_vfs_creat(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		goto error_out;
 	}
 
-	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, path, &dirv, fname, SOS_UNIX_PATH_MAX);
-	if ( rc != 0 ) {
+	if ( mnt_flags & FS_VFS_MNT_OPT_RDONLY ) {
 
-		res = rc;
+		rc = SOS_ERROR_RDONLY;  /* Read only mount */
 		goto error_out;
 	}
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_creat) ) {
-
-		rc = SOS_ERROR_INVAL;
-		goto put_dir_vnode_out;
-	}
-
-	rc = v->vn_mnt->m_fs->fsm_fops->fops_creat(ch, ioctx, dirv, fname, pkt,
-	    &vnid, &res);
+	/* Create a file */
+	rc = create_file(ch, ioctx, path, pkt, &res);
 	if ( rc != 0 ) {
 
 		rc = res;
-		goto put_dir_vnode_out;
+		goto error_out;
 	}
-	rc = 0;
 
-put_dir_vnode_out:
-	vfs_put_vnode(dirv);
+	/* open the file */
+	rc = fd_open_file(ch, ioctx, path,
+	    FS_VFS_FD_FLAG_O_WRONLY|FS_VFS_FD_FLAG_O_CREAT, pkt, &fdnum);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( fdnump != NULL )
+		*fdnump = fdnum;
 
 error_out:
 	if ( resp != NULL )
@@ -357,6 +488,22 @@ error_out:
 
 	return (rc == 0) ? (0) : (-1);
 }
+
+/** Open a file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to create
+    @param[in] flags    The open flags
+    FS_VFS_FD_FLAG_O_RDONLY  Read only open
+    FS_VFS_FD_FLAG_O_WRONLY  Write only open
+    FS_VFS_FD_FLAG_O_RDWR    Read/Write open
+    FS_VFS_FD_FLAG_O_CREAT   Create a new file if the file does not exist.
+    @param[in]  pkt      The S-OS header operation packet.
+    @param[out] fdnump   The address to store a file descriptor number.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+ */
 int
 fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
     const char *path, fs_open_flags flags, const struct _sword_header_packet *pkt,
@@ -365,6 +512,7 @@ fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
 	int                         fdnum;
 	vfs_mnt_flags           mnt_flags;
 	struct _fs_vnode               *v;
+	char     fname[SOS_UNIX_PATH_MAX];
 	BYTE                          res;
 
 	sos_assert( fdnump != NULL );
@@ -390,7 +538,6 @@ fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
 		goto error_out;
 	}
 
-	/* TODO: get directory v-node */
 	/*
 	 * Create a file
 	 */
@@ -401,51 +548,64 @@ fs_vfs_open(sos_devltr ch, struct _fs_ioctx *ioctx,
 			rc = SOS_ERROR_RDONLY;  /* Read only mount */
 			goto error_out;
 		}
-		/* TODO: Call Create */
+
+		/* Create a file */
+		rc = create_file(ch, ioctx, path, pkt, &res);
+		if ( rc != 0 ) {
+
+			rc = res;
+			goto error_out;
+		}
 	}
 
 	/*
 	 * Open file
 	 */
-	rc = fs_vfs_path_to_vnode(ch, ioctx, path, &v);
-	if ( rc != 0 ) {
+	rc = fd_open_file(ch, ioctx, path, flags, pkt, &fdnum);
+	if ( rc != 0 )
+		goto error_out;
 
-		res = rc;
+	if ( fdnump != NULL )
+		*fdnump = fdnum;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Close a file
+    @param[in]  ioctx The current I/O context.
+    @param[in]  fdnum A file descriptor number in The I/O context.
+    @param[out] resp  The address to store the return code.
+ */
+int
+fs_vfs_close(struct _fs_ioctx *ioctx, int fdnum, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	struct _fs_file_descriptor *fdp;
+
+	if ( ( 0 > fdnum ) || ( fdnum >= FS_PROC_FDTBL_NR ) ) {
+
+		rc = SOS_ERROR_SYNTAX;
 		goto error_out;
 	}
 
-	rc = alloc_fd(ioctx, &fdnum);
-	if ( rc != 0 ) {
+	fdp = ioctx->ioc_fds[fdnum];
+	if ( fdp == NULL )  {
 
-		rc = SOS_ERROR_NOSPC;
-		goto put_vnode_out;
+		rc = SOS_ERROR_NOTOPEN;
+		goto error_out;
 	}
 
-	++v->vn_use_cnt;
-	ioctx->ioc_fds[fdnum]->fd_vnode = v;
-	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_open) ) {
+	sos_assert(fdp->fd_vnode->vn_use_cnt > 0 );
+	--fdp->fd_vnode->vn_use_cnt;
 
-		rc = SOS_ERROR_INVAL;
-		goto free_fd_out;
-	}
-
-	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ch, ioctx, v, pkt, flags, &res);
-	if ( rc == 0 ) {
-
-		*fdnump = fdnum;
-		goto put_vnode_out;
-	}
-
-	rc =  res;
-
-free_fd_out:
-	--v->vn_use_cnt;
 	free_fd(ioctx, fdnum);
 
-put_vnode_out:
-	vfs_put_vnode(v);
+	rc = 0;
 
-/* TODO: put directory v-node */
 error_out:
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(rc);  /* return code */

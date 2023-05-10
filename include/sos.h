@@ -83,10 +83,11 @@
     @return  TRUE  _attr is valid.
     @return  FALSE _attr is invalid.
  */
-#define SOS_FATTR_IS_VALID(_attr)			\
-	( ( ( (_attr) & ~SOS_FATTR_VALID_FLAGS ) == 0 )	\
-	    && ( SOS_FATTR_GET_FTYPE( (_attr) ) != SOS_FATTR_VALID_TYPES ) )
-
+#define SOS_FATTR_IS_VALID(_attr)					\
+	( ( ( (_attr) & ~SOS_FATTR_VALID_FLAGS ) == 0 )			\
+	&& ( ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_BIN ) ) ||	\
+	    ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_ASC ) ) ||	\
+	    ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_DIR ) ) ) )
 /*
    S-OS IOCS call in Z80 memory
 */

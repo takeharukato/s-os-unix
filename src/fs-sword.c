@@ -355,11 +355,24 @@ int
 fops_open_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	    struct _fs_vnode *vn, const struct _sword_header_packet *pkt,
 	    fs_fd_flags flags, BYTE *resp){
+	BYTE res;
+
+	res = 0;
 
 	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
-		return SOS_ERROR_SYNTAX;  /*  Invalid flags  */
+		res = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
-	return 0;
+	if ( !SOS_FATTR_IS_VALID(pkt->hdr_attr) )
+		res = SOS_ERROR_SYNTAX;  /*  Invalid Attribute  */
+
+	if ( SOS_FATTR_GET_FTYPE(pkt->hdr_attr)
+	    != SOS_FATTR_GET_FTYPE(vn->vn_fib.fib_attr) )
+		res = SOS_ERROR_SYNTAX;  /*  Attribute not match */
+
+	if ( resp != NULL )
+		*resp = res;
+
+	return res;
 }
 
 void

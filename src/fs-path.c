@@ -49,7 +49,7 @@ path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
 	/* Copy path of the file  */
 	pathlen = strlen(path);
 	strncpy(copypath, path, pathlen);
-	copypath[pathlen-1] = '\0';
+	copypath[pathlen] = '\0';
 	copypath[SOS_UNIX_PATH_MAX - 1] = '\0';
 
 	p = copypath;
@@ -152,7 +152,7 @@ path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path
 	/* Copy path of the file  */
 	pathlen = strlen(path);
 	strncpy(copypath, path, pathlen);
-	copypath[pathlen-1] = '\0';
+	copypath[pathlen] = '\0';
 	copypath[SOS_UNIX_PATH_MAX - 1] = '\0';
 
 	p = strrchr(copypath, FS_VFS_PATH_DELIM);  /* Last delimiter */
@@ -161,6 +161,7 @@ path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path
 
 		if ( ( outv != NULL ) && ( fname != NULL ) ) {
 
+			FS_VFS_LOCK_VNODE(ioctx->ioc_cwd[idx]);
 			*outv = ioctx->ioc_cwd[idx]; /*  current directory.  */
 			strncpy(fname, copypath, fnamelen);
 			fname[fnamelen - 1] = '\0';

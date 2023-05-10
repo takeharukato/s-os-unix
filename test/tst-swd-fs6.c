@@ -15,7 +15,6 @@ int
 main(int argc, char *argv[]){
 	int            rc;
 	int                                         i;
-	struct _fs_file_descriptor                 fd;
 	struct _sword_header_packet     *pkt, hdr_pkt;
 	struct _fs_dir_stream                     dir;
 	struct _fs_ioctx                        ioctx;
@@ -23,6 +22,7 @@ main(int argc, char *argv[]){
 	struct _fs_vnode                           *v;
 	struct _fs_vnode                        *dirv;
 	char                                    *buf1;
+	int                                        fd;
 	BYTE                                      res;
 
 	storage_init();
@@ -63,6 +63,34 @@ main(int argc, char *argv[]){
 
 	rc = vfs_put_vnode(dirv);
 	sos_assert( rc == 0 );
+
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_WRONLY,
+	    pkt, &fd, &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_RDONLY );
+
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_RDWR,
+	    pkt, &fd, &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_RDONLY );
+
+	pkt->hdr_attr = SOS_FATTR_BIN;
+	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_RDONLY,
+	    pkt, &fd, &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_SYNTAX );
+
+	pkt->hdr_attr = SOS_FATTR_ASC;
+	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_RDONLY,
+	    pkt, &fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_close(&ioctx, fd, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
 
 	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
 	sos_assert( rc == 0 );

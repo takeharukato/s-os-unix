@@ -199,7 +199,9 @@
     @retval    False   The v-node is not free.
  */
 #define FS_VFS_IS_VNODE_FREE(_v) \
-	( !FS_VFS_IS_VNODE_BUSY( (_v) ) && ( (_v)->vn_mnt == NULL )  )
+	( !FS_VFS_IS_VNODE_BUSY( (_v) ) \
+	    && ( (_v)->vn_mnt == NULL ) \
+	    && ( ( (_v)->vn_use_cnt ) == 0 ) )
 
 /** The number of vnode caches
     ( root vnode + current dir vnode ) * devices + 8 free entry
@@ -399,6 +401,11 @@ int fs_vfs_path_to_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fs_vfs_path_to_dir_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv, char *_fname, size_t _fnamelen);
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
+
+int fs_vfs_open(sos_devltr _ch, struct _fs_ioctx *_ioctx,
+    const char *_path, fs_open_flags _flags, const struct _sword_header_packet *_pkt,
+    int *_fdnump, BYTE *_resp);
+int fs_vfs_close(struct _fs_ioctx *_ioctx, int _fdnum, BYTE *_resp);
 
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */
