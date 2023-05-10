@@ -223,6 +223,7 @@ typedef void     *vfs_fs_vnode;  /**< file system specific v-node */
 typedef void     *vfs_fs_super;  /**< file system specific super block */
 typedef uint32_t      vfs_vnid;  /**< v-node ID */
 typedef int       vfs_vn_state;  /**< v-node status */
+typedef int        vfs_use_cnt;  /**< use count */
 
 /** File Information Block of the file
  */
@@ -258,7 +259,7 @@ struct _fs_vnode{
 	struct _list                 vn_node;  /**< list node                         */
 	vfs_vnid                       vn_id;  /**< v-node ID                         */
 	vfs_vn_state               vn_status;  /**< v-node status                     */
-	int                       vn_use_cnt;  /**< Use count                         */
+	vfs_use_cnt               vn_use_cnt;  /**< Use count                         */
 	struct _fs_mount             *vn_mnt;  /**< Mount point                       */
 	struct _storage_fib           vn_fib;  /**< File Information Block            */
 	vfs_fs_vnode                vn_vnode;  /**< File system specific v-node       */
@@ -281,7 +282,7 @@ struct _fs_mount{
 struct _fs_file_descriptor{
 	fs_fd_flags            fd_flags;  /**< Open     flags */
 	fs_fd_flags         fd_sysflags;  /**< Internal flags */
-	int                  fd_use_cnt;  /**< Use count      */
+	vfs_use_cnt          fd_use_cnt;  /**< Use count      */
 	struct _fs_vnode      *fd_vnode;  /**< v-node for then opened file */
 	struct _storage_disk_pos fd_pos;  /**< Position Information */
 	struct _fs_ioctx      *fd_ioctx;  /**< I/O context */
@@ -362,7 +363,7 @@ struct _fs_fops{
  */
 struct _fs_fs_manager{
 	struct _list             fsm_node;   /**< List node                    */
-	int                   fsm_use_cnt;   /**< Use count                    */
+	vfs_use_cnt           fsm_use_cnt;   /**< Use count                    */
 	const char              *fsm_name;   /**< File system name             */
 	struct _fs_fops         *fsm_fops;   /**< Pointer to file operations   */
 	void                 *fsm_private;   /**< Private information          */
@@ -382,6 +383,8 @@ int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm);
 int fs_vfs_unregister_filesystem(const char *_name);
 void fs_vfs_init_file_manager(struct _fs_fs_manager *_fsm);
 
+vfs_use_cnt vfs_inc_cnt(struct _fs_vnode *_vn);
+vfs_use_cnt vfs_dec_cnt(struct _fs_vnode *_vn);
 int fs_vfs_get_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_vnid _vnid, struct _fs_vnode **_vnodep);
 int vfs_put_vnode(struct _fs_vnode *_vn);
@@ -401,6 +404,7 @@ int fs_vfs_path_to_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fs_vfs_path_to_dir_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, struct _fs_vnode **_outv, char *_fname, size_t _fnamelen);
 void fs_vfs_init_ioctx(struct _fs_ioctx *_ioctx);
+
 int fs_vfs_creat(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path,
     const struct _sword_header_packet *_pkt, int *_fdnump, BYTE *_resp);
 int fs_vfs_unlink(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path, BYTE *_resp);

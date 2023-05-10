@@ -242,7 +242,7 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 		goto put_vnode_out;
 	}
 
-	++v->vn_use_cnt;
+	vfs_inc_cnt(v);
 	ioctx->ioc_fds[fdnum]->fd_vnode = v;
 	ioctx->ioc_fds[fdnum]->fd_flags = flags;
 
@@ -262,7 +262,7 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 	rc =  res;
 
 free_fd_out:
-	--v->vn_use_cnt;
+	vfs_dec_cnt(v);
 	free_fd(ioctx, fdnum);
 
 put_vnode_out:
@@ -627,7 +627,7 @@ fs_vfs_close(struct _fs_ioctx *ioctx, int fdnum, BYTE *resp){
 	}
 
 	sos_assert(fdp->fd_vnode->vn_use_cnt > 0 );
-	--fdp->fd_vnode->vn_use_cnt;
+	vfs_dec_cnt(fdp->fd_vnode);
 
 	free_fd(ioctx, fdnum);
 

@@ -139,6 +139,10 @@ main(int argc, char *argv[]){
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
 
+	rc = fs_vfs_unlink('A', &ioctx, "SAMPLE2.ASM", &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
 	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
 	sos_assert( rc == 0 );
 

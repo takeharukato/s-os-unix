@@ -69,6 +69,35 @@ vfs_vnode_init_vnode(struct _fs_vnode *vn){
 	clear_vnode(vn);
 }
 
+/** Increment v-node use count
+    @param[out] vn v-node to operate
+    @retval old v-node use count
+ */
+vfs_use_cnt
+vfs_inc_cnt(struct _fs_vnode *vn){
+	int rv;
+
+	rv = vn->vn_use_cnt;
+	++vn->vn_use_cnt;
+
+	return rv;
+}
+
+/** Decrement v-node use count
+    @param[out] vn v-node to operate
+    @retval old v-node use count
+ */
+vfs_use_cnt
+vfs_dec_cnt(struct _fs_vnode *vn){
+	int rv;
+
+	rv = vn->vn_use_cnt;
+	if ( vn->vn_use_cnt > 0 )
+		--vn->vn_use_cnt;
+
+	return rv;
+}
+
 /** Allocate new v-node
     @param[out] vnodep The address of the pointer variable to point v-node.
     @retval     0       Success
@@ -116,16 +145,27 @@ found:
 	return 0;
 }
 
+/** Put v-node
+    @param[out] vn v-node to operate
+    @retval 0 Success
+ */
 int
 vfs_put_vnode(struct _fs_vnode *vn){
 
 	sos_assert( FS_VFS_IS_VNODE_BUSY(vn) );
 
-	FS_VFS_UNLOCK_VNODE(vn);
+	if ( vn->vn_use_cnt == 0 )
+		vfs_invalidate_vnode(vn);
+	else
+		FS_VFS_UNLOCK_VNODE(vn);
 
 	return 0;
 }
 
+/** Release v-node
+    @param[out] vn v-node to operate
+    @retval 0 Success
+ */
 int
 vfs_invalidate_vnode(struct _fs_vnode *vn){
 
