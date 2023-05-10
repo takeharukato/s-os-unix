@@ -31,6 +31,7 @@ static struct _fs_fops sword_fops={
 	.fops_close = fops_close_sword,
 	.fops_unlink = fops_unlink_sword,
 	.fops_read = fops_read_sword,
+	.fops_write = fops_write_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -484,6 +485,72 @@ fops_read_sword(struct _fs_file_descriptor *fdp,
 error_out:
 	if ( rdsizp != NULL )
 		*rdsizp = rwsiz;
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return ( rc == 0 ) ? (0) : (-1);
+}
+
+/** Write to a file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] src    The buffer to store read data.
+    @param[in]  count  The counter how many bytes to read from the file.
+    @param[out] wrsizp The adress to store written bytes.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0      Success
+    @retval    -1      Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+    * SOS_ERROR_NOSPC  Device full
+ */
+int
+fops_write_sword(struct _fs_file_descriptor *fdp, const void *src,
+    size_t count, size_t *wrsizp, BYTE *resp){
+	int                        rc;
+	size_t                  rwsiz;
+	size_t                  fixed;
+	struct _storage_disk_pos *pos;
+	struct _storage_fib      *fib;
+
+	sos_assert( fdp->fd_vnode != NULL );
+
+	pos = &fdp->fd_pos;
+	fib = &fdp->fd_vnode->vn_fib;
+
+	if ( ( pos->dp_pos == SOS_MAX_FILE_SIZE ) || ( count == 0 ) ){
+
+		rc = 0;  /* Nothing to be done.  */
+		goto error_out;
+	}
+
+	fixed = ( count > SOS_MAX_FILE_SIZE ) ? ( SOS_MAX_FILE_SIZE ) : ( count );
+	rc = fs_swd_write_block(fdp->fd_ioctx, fib, pos->dp_pos, src, fixed, &rwsiz);
+	if ( rc != 0 )
+		goto error_out;
+	/*
+	 * Update file information block
+	 */
+	sos_assert( SOS_MAX_FILE_SIZE >= ( pos->dp_pos + rwsiz ) );
+
+	fib->fib_size = STORAGE_FIB_FIX_SIZE( pos->dp_pos + rwsiz );
+
+	if ( rc == 0 ) {
+
+		/* Update the directory entry. */
+		rc = fs_swd_write_dent(fib->fib_devltr, fdp->fd_ioctx,
+		    fdp->fd_vnode, fib);
+		if ( rc != 0 )
+			goto error_out;
+	}
+
+	rc = 0;
+
+error_out:
+	if ( wrsizp != NULL )
+		*wrsizp = rwsiz;
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(rc);  /* return code */

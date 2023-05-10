@@ -662,7 +662,7 @@ error_out:
     @param[out] buf    The buffer to store read data.
     @param[in]  count  The counter how many bytes to read from the
     file.
-    @param[out] rdcntp  The adress to store read bytes.
+    @param[out] rwcntp  The adress to store read bytes.
     @param[out] resp    The address to store the return code for S-OS.
     @retval     0                Success
     @retval    -1                Error
@@ -723,6 +723,79 @@ error_out:
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(res);  /* return code */
+
+	return (res == 0) ? (0) : (-1);
+}
+
+/** Write to a file
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  fd     A file descriptor number in The I/O context.
+    @param[in]  buf    The buffer to write from
+    @param[in]  count  The counter how many bytes to read from the
+    file.
+    @param[out] rwcntp  The adress to store written bytes.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -1                Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_NOENT  Block not found
+    * SOS_ERROR_BADFAT Invalid cluster chain
+    * SOS_ERROR_NOTOPEN The file is not opend
+ */
+int
+fs_vfs_write(struct _fs_ioctx *ioctx, int fd, const void *buf, size_t count,
+    size_t *rwcntp, BYTE *resp){
+	int                        rc;
+	size_t                  wrsiz;
+	BYTE                      res;
+	struct _storage_disk_pos *pos;
+	struct _fs_file_descriptor *fdp;
+
+	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	fdp = ioctx->ioc_fds[fd];
+	pos = &fdp->fd_pos;
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	if ( !( fdp->fd_flags & FS_VFS_FD_FLAG_MAY_WRITE ) ) {
+
+		res = SOS_ERROR_NOTOPEN;  /* The file is not opend to write. */
+		goto error_out;
+	}
+
+	wrsiz = 0;  /* Init written size */
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_write) )
+		goto update_pos;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_write(fdp, buf, count,
+	    &wrsiz, &res);
+	if ( rc != 0 ) {
+
+		pos->dp_pos += wrsiz;  /* update position */
+		goto error_out;
+	}
+
+update_pos:
+	pos->dp_pos += wrsiz;  /* update position */
+
+	res = 0;
+
+error_out:
+	if ( rwcntp != NULL )
+		*rwcntp = wrsiz;
+
+	if ( resp != NULL )
+		*resp = res;
 
 	return (res == 0) ? (0) : (-1);
 }

@@ -181,5 +181,7 @@ int fops_open_sword(struct _fs_file_descriptor *_fdp,
 int fops_close_sword(struct _fs_file_descriptor *_fdp, BYTE *_resp);
 int fops_read_sword(struct _fs_file_descriptor *_fdp, void *_dest, size_t _count,
     size_t *_rdsizp, BYTE *_resp);
+int fops_write_sword(struct _fs_file_descriptor *_fdp, const void *_src,
+    size_t _count, size_t *_wrsizp, BYTE *_resp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

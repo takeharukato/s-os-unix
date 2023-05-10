@@ -414,6 +414,8 @@ int fs_vfs_close(struct _fs_ioctx *_ioctx, int _fdnum, BYTE *_resp);
 
 int fs_vfs_read(struct _fs_ioctx *_ioctx, int _fd, void *_buf, size_t _count,
     size_t *_rwcntp, BYTE *_resp);
+int fs_vfs_write(struct _fs_ioctx *_ioctx, int _fd, const void *_buf, size_t _count,
+    size_t *_rwcntp, BYTE *_resp);
 
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

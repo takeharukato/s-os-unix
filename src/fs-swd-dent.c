@@ -65,16 +65,18 @@
  */
 static fs_rec
 calc_directory_entry_record(const struct _fs_ioctx *ioctx,
-    const struct _fs_vnode *dir_vnode){
+    const struct _fs_vnode *vn){
 	fs_rec                 rec;
+	fs_cls                 cls;
 
 	/*
 	 * Calculate record number
 	 */
-	if ( dir_vnode->vn_id == FS_SWD_ROOT_VNID )
+	cls = FS_SWD_GET_VNID2DIRCLS(vn->vn_id); /* Directory cluster */
+	if ( SOS_RESERVED_FAT_NR > cls )
 		rec = ioctx->ioc_dirps;
 	else
-		rec = SOS_CLS2REC( FS_SWD_GET_VNID2DIRCLS(dir_vnode->vn_id) );
+		rec = SOS_CLS2REC( cls );
 
 	return SOS_DIRPS_VAL( rec );
 }
@@ -423,7 +425,7 @@ error_out:
 /** Write the directory entry to the disk.
     @param[in] ch         The drive letter
     @param[in] ioctx      The current I/O context.
-    @param[in] dir_vnode  The v-node of the directory
+    @param[in] vn         The v-node of the file
     @param[in] fib        The address of the file information block
     @retval    0               Success
     @retval    SOS_ERROR_IO    I/O Error
@@ -431,7 +433,7 @@ error_out:
  */
 int
 fs_swd_write_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
-    const struct _fs_vnode *dir_vnode,  struct _storage_fib *fib){
+    const struct _fs_vnode *vn,  struct _storage_fib *fib){
 	int                      rc;
 	fs_rec                  rec;
 	fs_dirno       dirno_offset;
@@ -440,7 +442,7 @@ fs_swd_write_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	BYTE   buf[SOS_RECORD_SIZE];
 
 	/* Calculate the first directory entry record */
-	rec = calc_directory_entry_record(ioctx, dir_vnode);
+	rec = calc_directory_entry_record(ioctx, vn);
 
 	/* Add the offset of the record address to the directory entry  */
 	rec += SOS_DIRNO_VAL( FS_SWD_GET_VNID2IDX(fib->fib_vnid) )
