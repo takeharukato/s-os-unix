@@ -183,5 +183,12 @@ int fops_read_sword(struct _fs_file_descriptor *_fdp, void *_dest, size_t _count
     size_t *_rdsizp, BYTE *_resp);
 int fops_write_sword(struct _fs_file_descriptor *_fdp, const void *_src,
     size_t _count, size_t *_wrsizp, BYTE *_resp);
+
+int fops_truncate_sword(struct _fs_file_descriptor *_fdp, fs_off_t _offset,
+    BYTE *_resp);
+int fops_stat_sword(struct _fs_file_descriptor *_fdp, struct _storage_fib *_fib,
+    BYTE *_resp);
+int fops_seek_sword(struct _fs_file_descriptor *_fdp,
+    fs_off_t _offset, int _whence, fs_off_t *_new_posp, BYTE *_resp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

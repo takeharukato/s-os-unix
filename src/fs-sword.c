@@ -32,11 +32,14 @@ static struct _fs_fops sword_fops={
 	.fops_unlink = fops_unlink_sword,
 	.fops_read = fops_read_sword,
 	.fops_write = fops_write_sword,
+	.fops_truncate = fops_truncate_sword,
+	.fops_stat = fops_stat_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
 /** Truncate a file to a specified length
     @param[in]  ioctx  The current I/O context
+    @param[in]  vn     The vnode of the file
     @param[in]  fib    The file information block of the file.
     @param[in]  newpos The file position of the file to be truncated.
     @retval    0                Success
@@ -44,7 +47,7 @@ static struct _fs_fs_manager sword_fsm;
     @retval    SOS_ERROR_BADFAT Invalid cluster chain
  */
 static int
-change_filesize_sword(const struct _fs_ioctx *ioctx, const struct _fs_vnode *dir_vnode,
+change_filesize_sword(const struct _fs_ioctx *ioctx, const struct _fs_vnode *vn,
     struct _storage_fib *fib, fs_off_t newpos){
 	int                        rc;
 	fs_off_t               newsiz;
@@ -102,7 +105,7 @@ change_filesize_sword(const struct _fs_ioctx *ioctx, const struct _fs_vnode *dir
 	 */
 	fib->fib_size = STORAGE_FIB_FIX_SIZE( newsiz );  /* update size */
 
-	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, dir_vnode, fib); /* write back */
+	rc = fs_swd_write_dent(fib->fib_devltr, ioctx, vn, fib); /* write back */
 	if ( rc != 0 )
 		goto error_out;
 
@@ -556,6 +559,132 @@ error_out:
 		*resp = SOS_ECODE_VAL(rc);  /* return code */
 
 	return ( rc == 0 ) ? (0) : (-1);
+}
+
+/** Truncate a file to a specified length
+    @param[in]  fdp    The file descriptor to the file.
+    @param[in]  offset The file length of the file to be truncated.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fops_truncate_sword(struct _fs_file_descriptor *fdp,
+    fs_off_t offset, BYTE *resp){
+	int                        rc;
+	fs_off_t               newpos;
+	struct _storage_fib      *fib;
+	struct _storage_disk_pos *pos;
+
+	pos = &fdp->fd_pos;  /* position information for dirps/fatpos  */
+	fib = &fdp->fd_vnode->vn_fib; /* file information block */
+	offset=SOS_MIN( offset, SOS_MAX_FILE_SIZE -1);
+
+	newpos = 0;
+	if ( offset > 0 )
+		newpos = offset;
+
+	rc = change_filesize_sword(fdp->fd_ioctx, fdp->fd_vnode, fib, newpos);
+	if ( rc != 0 )
+		goto error_out;
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
+}
+
+/** Stat a file
+    @param[in]  fdp    The file descriptor to the file.
+    @param[out] fib    The address to store the file information block.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+ */
+int
+fops_stat_sword(struct _fs_file_descriptor *fdp,
+    struct _storage_fib *fib, BYTE *resp){
+
+	return 0;
+}
+
+/** Reposition read/write file offset
+    @param[in]  fdp     The file descriptor to the file.
+    @param[in]  offset  The offset to reposition according to WHENCE.
+    @param[in]  whence  The directive to reposition:
+     FS_VFS_SEEK_SET The file offset is set to offset bytes.
+     FS_VFS_SEEK_CUR The file offset is set to its current location plus offset bytes.
+     FS_VFS_SEEK_END The file offset is set to the size of the file plus offset bytes.
+    @param[out] new_posp The address to store the new position.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -EINVAL           Invalid whence
+ */
+int
+fops_seek_sword(struct _fs_file_descriptor *fdp,
+    fs_off_t offset, int whence, fs_off_t *new_posp, BYTE *resp){
+	fs_off_t                  new;
+	fs_off_t                  cur;
+	fs_off_t                  off;
+	struct _storage_disk_pos *pos;
+	struct _storage_fib      *fib;
+
+	pos = &fdp->fd_pos;            /* Position information */
+	fib = &fdp->fd_vnode->vn_fib;  /* File information block */
+
+	/* Adjust offset according to the max file size */
+	if ( offset > 0 )
+		off = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+	else if ( 0 > offset )
+		off = SOS_MAX(offset, (fs_off_t)-1 * SOS_MAX_FILE_SIZE);
+
+	/*
+	 * Calculate the start position
+	 */
+	switch( whence ) {
+
+	case FS_VFS_SEEK_SET:
+		cur = 0;
+		break;
+
+	case FS_VFS_SEEK_CUR:
+		cur = SOS_MIN(pos->dp_pos, SOS_MAX_FILE_SIZE);
+		break;
+
+	case FS_VFS_SEEK_END:
+
+		cur = SOS_MIN(fib->fib_size, SOS_MAX_FILE_SIZE);
+		break;
+
+	default:
+
+		if ( resp != NULL )
+			*resp = SOS_ERROR_SYNTAX;  /* return code */
+		return -EINVAL;
+	}
+
+	if ( 0 > ( cur + off ) )
+		new = 0;
+	else if ( off > ( SOS_MAX_FILE_SIZE - cur ) )
+		new = SOS_MAX_FILE_SIZE;
+	else
+		new = cur + off;
+
+	if ( new_posp != NULL )
+		*new_posp = new;  /* return the new position */
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
 }
 
 void

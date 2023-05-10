@@ -299,9 +299,9 @@ struct _fs_dir_stream{
 /** I/O Context
  */
 struct _fs_ioctx{
-	/** The FIB of the root directory for each drive.   */
+	/** The v-node of the root directory for each drive.   */
 	struct _fs_vnode                  *ioc_root[STORAGE_NR];
-	/** The FIB of the current directory for each drive. */
+	/** The v-node of the current directory for each drive. */
 	struct _fs_vnode                   *ioc_cwd[STORAGE_NR];
 	/** The file descriptor table */
 	struct _fs_file_descriptor   *ioc_fds[FS_PROC_FDTBL_NR];
@@ -330,32 +330,30 @@ struct _fs_fops{
 	    const struct _sword_header_packet *_pkt, vfs_vnid *_new_vnidp, BYTE *_resp);
 	int (*fops_unlink)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    struct _fs_vnode *_dir_vn, const char *_path, BYTE *_resp);
-	int (*fops_open)(struct _fs_file_descriptor *_fdp, const struct _sword_header_packet *_pkt,
+	int (*fops_open)(struct _fs_file_descriptor *_fdp,
+	    const struct _sword_header_packet *_pkt,
 	    fs_fd_flags _flags, BYTE *_resp);
 	int (*fops_close)(struct _fs_file_descriptor *_fdp,
 	    BYTE *_resp);
-	int (*fops_stat)(struct _fs_file_descriptor *_fdp,
-	    struct _fs_vnode *_vn, BYTE *_resp);
-	int (*fops_seek)(struct _fs_file_descriptor *_fdp,
-	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
 	int (*fops_read)(struct _fs_file_descriptor *_fdp,
 	    void *_dest, size_t _count, size_t *_rdsizp, BYTE *_resp);
 	int (*fops_write)(struct _fs_file_descriptor *_fdp,
 	    const void *_src, size_t _count, size_t *_wrsizp, BYTE *_resp);
 	int (*fops_truncate)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, BYTE *_resp);
-	int (*fops_opendir)(const char *_path, struct _fs_dir_stream *_dirp,
-	    BYTE *_resp);
-	int (*fops_readdir)(struct _fs_dir_stream *_dir, struct _fs_vnode *_vn,
-	    BYTE *_resp);
+	int (*fops_stat)(struct _fs_file_descriptor *_fdp,
+	    struct _storage_fib *_fib, BYTE *_resp);
+	int (*fops_seek)(struct _fs_file_descriptor *_fdp,
+	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
+	int (*fops_rename)(struct _fs_vnode *_src_vn, const char *_oldname,
+	    struct _fs_vnode *_dest_vn, const char *_newname, BYTE *_resp);
+	int (*fops_chmod)(struct _fs_vnode *_vn, const fs_perm _perm, BYTE *_resp);
+	int (*fops_opendir)(struct _fs_vnode *_dir_vn, BYTE *_resp);
+	int (*fops_readdir)(const struct _fs_dir_stream *_dir, BYTE *_resp);
 	int (*fops_seekdir)(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
 	int (*fops_telldir)(const struct _fs_dir_stream *_dir, fs_dirno *_dirnop,
 	    BYTE *_resp);
 	int (*fops_closedir)(struct _fs_dir_stream *_dir, BYTE *_resp);
-	int (*fops_rename)(struct _fs_dir_stream *_dir, const char *_oldpath,
-	    const char *_newpath, BYTE *_resp);
-	int (*fops_chmod)(struct _fs_dir_stream *_dir, const char *_path,
-	    const fs_perm _perm, BYTE *_resp);
 };
 
 /** File system manager
@@ -416,6 +414,9 @@ int fs_vfs_read(struct _fs_ioctx *_ioctx, int _fd, void *_buf, size_t _count,
     size_t *_rwcntp, BYTE *_resp);
 int fs_vfs_write(struct _fs_ioctx *_ioctx, int _fd, const void *_buf, size_t _count,
     size_t *_rwcntp, BYTE *_resp);
+int fs_vfs_truncate(struct _fs_ioctx *_ioctx, int _fd, fs_off_t _offset, BYTE *_resp);
+int fs_vfs_stat(struct _fs_ioctx *_ioctx, int _fd, struct _storage_fib *_fib,
+    BYTE *_resp);
 
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

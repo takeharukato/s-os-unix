@@ -152,10 +152,8 @@ struct _storage_fib;
 struct _storage_disk_pos{
 	BYTE                   dp_dirno;   /**< Current #DIRNO                    */
 	BYTE                  dp_retpoi;   /**< Current RETPOI                    */
-	fs_off_t                 dp_pos;   /**< File or device position
-					    * including S-OS header.
-					    */
-	void                *dp_private;   /**< Private information  */
+	fs_off_t                 dp_pos;   /**< File or device position           */
+	void                *dp_private;   /**< Private information               */
 };
 
 /** Storage manager

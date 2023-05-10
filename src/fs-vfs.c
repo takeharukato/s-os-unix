@@ -800,6 +800,148 @@ error_out:
 	return (res == 0) ? (0) : (-1);
 }
 
+/** Truncate a file to a specified length
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  fd     A file descriptor number in The I/O context.
+    @param[in]  offset The file length of the file to be truncated.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fs_vfs_truncate(struct _fs_ioctx *ioctx, int fd, fs_off_t offset, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	struct _fs_file_descriptor *fdp;
+
+	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	fdp = ioctx->ioc_fds[fd];
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_truncate) )
+		goto error_out;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_truncate(fdp, offset, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	return (res == 0) ? (0) : (-1);
+}
+/** Stat a file
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  fd     A file descriptor number in The I/O context.
+    @param[out] fib    The address to store the file information block.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0               Success
+    @retval    -1               Error
+    The responses from the function:
+    * SOS_ERROR_IO     I/O Error
+    * SOS_ERROR_BADFAT Invalid cluster chain
+ */
+int
+fs_vfs_stat(struct _fs_ioctx *ioctx, int fd,
+    struct _storage_fib *fib, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	struct _fs_file_descriptor *fdp;
+
+	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	fdp = ioctx->ioc_fds[fd];
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	memcpy(fib, &fdp->fd_vnode->vn_fib, sizeof(struct _storage_fib));
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	return (res == 0) ? (0) : (-1);
+}
+
+/** Seek a file
+    @param[in]  ioctx  The current I/O context.
+    @param[in]  fd     A file descriptor number in The I/O context.
+    @param[in]  offset  The offset to reposition according to WHENCE
+    excluding the size of the S-OS header.
+    @param[in]  whence  The directive to reposition:
+     FS_VFS_SEEK_SET The file offset is set to offset bytes.
+     FS_VFS_SEEK_CUR The file offset is set to its current location plus offset bytes.
+     FS_VFS_SEEK_END The file offset is set to the size of the file plus offset bytes.
+    @param[out] new_posp The address to store the new position.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0                Success
+    @retval    -EINVAL           Invalid whence
+ */
+int
+fs_vfs_seek(struct _fs_ioctx *ioctx, int fd, fs_off_t offset,
+    int whence, fs_off_t *new_posp, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	fs_off_t                    new;
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+
+	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	fdp = ioctx->ioc_fds[fd];
+	pos = &fdp->fd_pos;       /* Position information */
+
+	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
+
+		res = SOS_ERROR_NOTOPEN;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_seek) )
+		goto error_out;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_seek(fdp, offset,
+	    whence, &new, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+
+	pos->dp_pos = new;  /* Update position */
+
+error_out:
+	if ( resp != NULL )
+		*resp = res;
+
+	if ( new_posp != NULL )
+		*new_posp = new;
+
+	return (res == 0) ? (0) : (-1);
+}
 /** Initialize virtual file system
  */
 void
