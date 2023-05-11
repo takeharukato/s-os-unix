@@ -37,6 +37,11 @@ static struct _fs_fops sword_fops={
 	.fops_rename = fops_rename_sword,
 	.fops_set_attr = fops_set_attr_sword,
 	.fops_get_attr = fops_get_attr_sword,
+	.fops_opendir = fops_opendir_sword,
+	.fops_readdir = fops_readdir_sword,
+	.fops_seekdir = fops_seekdir_sword,
+	.fops_telldir = fops_telldir_sword,
+	.fops_closedir = fops_closedir_sword
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -821,6 +826,200 @@ fops_get_attr_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	*attrp = fib->fib_attr;  /* Get attribute */
 
 error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+}
+
+/** Open directory
+    @param[out] dir     The pointer to the directory stream.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -1      Error
+    @retval     EINVAL  Invalid whence
+    @retval     ENXIO   The new position exceeded the file size
+ */
+int
+fops_opendir_sword(struct _fs_dir_stream *dir, BYTE *resp){
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+
+	pos->dp_private = NULL; /* Init private information */
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+}
+
+/** close the directory
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0      Success
+ */
+int
+fops_closedir_sword(struct _fs_dir_stream *dir, BYTE *resp){
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+	pos->dp_private = NULL; /* Clear private information */
+
+	return 0;
+}
+
+/** Read the directory
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] fibp   The address to store the file information block
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0      Success
+    @retval    -1      Error
+    @retval     SOS_ERROR_IO    I/O Error
+    @retval     SOS_ERROR_NOENT File not found (the end of the directory entry table )
+    @remark     This function is responsible for setting the dir_pos member of
+    the dir_pos structured variable in DIR and filling the FIB.
+    Other members in the dir_pos should be set by the caller.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+    The function returns the file information block at the current position
+    indicated by the dir_pos member of the dir_pos structured variable in DIR.
+ */
+int
+fops_readdir_sword(struct _fs_dir_stream *dir, struct _storage_fib *fibp,
+    BYTE *resp){
+	int                          rc;
+	struct _storage_fib    *dir_fib;
+	struct _storage_fib         fib;
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+	fs_dirno                  dirno;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+	dir_fib = &fdp->fd_vnode->vn_fib; /* File Information Block of the directory */
+
+	/*
+	 * read current entry
+	 */
+	dirno = FS_SWD_OFF2DIRNO(pos->dp_pos); /* Get #DIRNO */
+	if ( dirno >= SOS_DENTRY_NR ) {
+
+		rc = SOS_ERROR_NOENT;  /* Reaches max DIRNO */
+		goto error_out;
+	}
+
+	if ( fibp == NULL )
+		goto update_pos;
+
+	/*
+	 * Fill the file information block
+	 */
+	rc = fs_swd_search_dent_by_dirno(dir_fib->fib_devltr, fdp->fd_ioctx,
+	    fdp->fd_vnode, SOS_DIRNO_VAL(dirno), &fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	memcpy(fibp, &fib, sizeof(struct _storage_fib));
+
+update_pos:
+	/*
+	 * Update positions
+	 *
+	 * @remark This function regards a directory as a binary file containing
+	 * an array of directory entries, it sets dir_pos only.
+	 */
+	pos->dp_pos = FS_SWD_DIRNO2OFF(dirno + 1);  /* file position */
+	if ( FS_SWD_OFF2DIRNO(pos->dp_pos) == SOS_DENTRY_NR ) {
+
+		pos->dp_pos = 0;       /* Reset the position in fd. */
+		rc = SOS_ERROR_NOENT;  /* Reaches max DIRNO         */
+		goto error_out;
+	}
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return -1;
+}
+
+/** Set the position of the next fs_readdir() call in the directory stream.
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[in]  dirno  The position of the next fs_readdir() call
+    It should be a value returned by a previous call to fs_telldir.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -EINVAL Invalid dirno
+    @retval     -ENXIO  The new position exceeded the SOS_DENTRY_NR.
+    @remark     This function is responsible for setting the dir_pos member of
+    the dir_pos structured variable in DIR and filling the FIB.
+    Other members in the dir_pos should be set by the caller.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fops_seekdir_sword(struct _fs_dir_stream *dir, fs_dirno dirno, BYTE *resp){
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+
+	if ( 0 > dirno )
+		return -EINVAL;  /* Invalid #DIRNO */
+
+	if ( dirno > SOS_DENTRY_NR )
+		return -ENXIO;   /* #DIRNO is out of range. */
+
+	pos->dp_pos = FS_SWD_DIRNO2OFF(dirno);  /* set seek position */
+
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
+}
+
+/** Return current location in directory stream
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] dirnop The address to store current location in directory stream.
+    It should be a value returned by a previous call to fs_telldir.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0      Success
+    @retval    -1      Error
+    The responses from the function:
+    * SOS_ERROR_INVAL  The current position does not point the position in the file.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fops_telldir_sword(const struct _fs_dir_stream *dir, fs_dirno *dirnop,
+    BYTE *resp){
+	const struct _fs_file_descriptor *fdp;
+	const struct _storage_disk_pos   *pos;
+	fs_dirno                        dirno;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+
+	if ( dirnop == NULL ) {  /* No need to return dirno */
+
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+		return 0;
+	}
+
+	*dirnop = FS_SWD_OFF2DIRNO(pos->dp_pos);  /* current position */
+	sos_assert( SOS_DENTRY_NR > *dirnop );
+
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(0);  /* return code */
 

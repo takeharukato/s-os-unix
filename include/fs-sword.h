@@ -199,5 +199,12 @@ int fops_set_attr_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fops_get_attr_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     struct _fs_vnode *_vn, fs_attr *_attrp, BYTE *_resp);
 
+int fops_opendir_sword(struct _fs_dir_stream *_dir, BYTE *_resp);
+int fops_readdir_sword(struct _fs_dir_stream *_dir, struct _storage_fib *_fibp,
+    BYTE *_resp);
+int fops_seekdir_sword(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
+int fops_telldir_sword(const struct _fs_dir_stream *_dir, fs_dirno *_dirnop,
+    BYTE *_resp);
+int fops_closedir_sword(struct _fs_dir_stream *_dir, BYTE *_resp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

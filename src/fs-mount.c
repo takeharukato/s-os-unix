@@ -332,7 +332,7 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	vn = ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(ch)];
 	sos_assert( ( ( vn == ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)] )
 		&& ( vn->vn_use_cnt == 2 ) ) || ( vn->vn_use_cnt == 1 ) );
-	vfs_dec_cnt(vn);
+	vfs_dec_vnode_cnt(vn);
 	ioctx->ioc_cwd[STORAGE_DEVLTR2IDX(ch)] = NULL;
 
 	/*
@@ -341,7 +341,7 @@ fs_vfs_mnt_unmount_filesystem(sos_devltr ch, struct _fs_ioctx *ioctx){
 	vn = ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)];
 	sos_assert( vn->vn_use_cnt == 1 );
 
-	vfs_dec_cnt(vn);
+	vfs_dec_vnode_cnt(vn);
 	ioctx->ioc_root[STORAGE_DEVLTR2IDX(ch)] = NULL;
 
 	/* Release v-nodes */

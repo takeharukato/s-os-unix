@@ -81,7 +81,7 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_RDONLY,
 	    pkt, &fd, &res);
 	sos_assert( rc == -1 );
-	sos_assert( res == SOS_ERROR_SYNTAX );
+	sos_assert( res == SOS_ERROR_FMODE );
 
 	pkt->hdr_attr = SOS_FATTR_ASC;
 	rc = fs_vfs_open('A', &ioctx, "SAMPLE1.ASM", FS_VFS_FD_FLAG_O_RDONLY,

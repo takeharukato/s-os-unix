@@ -74,7 +74,7 @@ vfs_vnode_init_vnode(struct _fs_vnode *vn){
     @retval old v-node use count
  */
 vfs_use_cnt
-vfs_inc_cnt(struct _fs_vnode *vn){
+vfs_inc_vnode_cnt(struct _fs_vnode *vn){
 	int rv;
 
 	rv = vn->vn_use_cnt;
@@ -88,12 +88,18 @@ vfs_inc_cnt(struct _fs_vnode *vn){
     @retval old v-node use count
  */
 vfs_use_cnt
-vfs_dec_cnt(struct _fs_vnode *vn){
+vfs_dec_vnode_cnt(struct _fs_vnode *vn){
 	int rv;
 
 	rv = vn->vn_use_cnt;
 	if ( vn->vn_use_cnt > 0 )
 		--vn->vn_use_cnt;
+
+	if ( ( vn->vn_use_cnt == 0 ) && ( !FS_VFS_IS_VNODE_BUSY(vn) ) ) {
+
+		FS_VFS_LOCK_VNODE(vn); /* Mark busy */
+		vfs_invalidate_vnode(vn);
+	}
 
 	return rv;
 }
@@ -114,25 +120,8 @@ vfs_vnode_get_free_vnode(struct _fs_vnode **vnodep){
 
 		vn = &vnode_tbl[i];
 		if ( FS_VFS_IS_VNODE_FREE(vn) )
-			goto found;
-		if ( ( vn_candidate == NULL )
-		    && ( vn->vn_use_cnt == 0 )
-		    && FS_VFS_IS_VNODE_BUSY( vn ) )
-			vn_candidate = vn;
+			break;
 	}
-
-	if ( vn_candidate == NULL )
-		return ENOSPC;
-
-	/*
-	 * Invalidate v-node to obtain a free entry
-	 */
-	rc = vfs_invalidate_vnode(vn_candidate);
-	if ( rc != 0 )
-		return ENOSPC;
-
-	vn = vn_candidate;
-
 
 found:
 	clear_vnode(vn);  /* Clear v-node member */

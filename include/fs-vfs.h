@@ -44,7 +44,7 @@
 #define FS_VFS_FD_FLAG_O_RDWR     (0x2)     /**< Read/Write */
 #define FS_VFS_FD_FLAG_O_CREAT    (0x4)     /**< Create     */
 #define FS_VFS_FD_FLAG_O_EXCL     (0x8)     /**< Exclusive  */
-#define FS_VFS_FD_FLAG_SYS_OPENED  (1)  /**< The file is opened */
+#define FS_VFS_FD_FLAG_SYS_OPENED   (1)     /**< The file is opened */
 
 /** Write flags
  */
@@ -132,7 +132,7 @@
 /** File Descriptor
  */
 #define FS_SYS_FDTBL_NR     (8)  /**< File Descriptor table */
-#define FS_PROC_FDTBL_NR    (1)  /**< Max file decriptors for a process */
+#define FS_PROC_FDTBL_NR    (2)  /**< Max file decriptors for a process */
 
 /** Determine whether the file system manager is valid
     @param[in] _fs_mgr The pointer to the file system manager
@@ -292,7 +292,7 @@ struct _fs_file_descriptor{
 /** Directory stream
  */
 struct _fs_dir_stream{
-	struct _fs_file_descriptor    dir_fd;  /**< File descriptor  */
+	struct _fs_file_descriptor   *dir_fd;  /**< File descriptor  */
 	void                    *dir_private;  /**< Private Information  */
 };
 
@@ -353,12 +353,13 @@ struct _fs_fops{
 	    struct _fs_vnode *_vn, const fs_attr _attr, BYTE *_resp);
 	int (*fops_get_attr)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 	    struct _fs_vnode *_vn, fs_attr *_attr, BYTE *_resp);
-	int (*fops_opendir)(struct _fs_vnode *_dir_vn, BYTE *_resp);
-	int (*fops_readdir)(const struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_opendir)(struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_closedir)(struct _fs_dir_stream *_dir, BYTE *_resp);
+	int (*fops_readdir)(struct _fs_dir_stream *_dir,
+	    struct _storage_fib *_fibp, BYTE *_resp);
 	int (*fops_seekdir)(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
 	int (*fops_telldir)(const struct _fs_dir_stream *_dir, fs_dirno *_dirnop,
 	    BYTE *_resp);
-	int (*fops_closedir)(struct _fs_dir_stream *_dir, BYTE *_resp);
 };
 
 /** File system manager
@@ -385,8 +386,8 @@ int fs_vfs_register_filesystem(struct _fs_fs_manager *_fsm);
 int fs_vfs_unregister_filesystem(const char *_name);
 void fs_vfs_init_file_manager(struct _fs_fs_manager *_fsm);
 
-vfs_use_cnt vfs_inc_cnt(struct _fs_vnode *_vn);
-vfs_use_cnt vfs_dec_cnt(struct _fs_vnode *_vn);
+vfs_use_cnt vfs_inc_vnode_cnt(struct _fs_vnode *_vn);
+vfs_use_cnt vfs_dec_vnode_cnt(struct _fs_vnode *_vn);
 int fs_vfs_get_vnode(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     vfs_vnid _vnid, struct _fs_vnode **_vnodep);
 int vfs_put_vnode(struct _fs_vnode *_vn);
@@ -424,10 +425,14 @@ int fs_vfs_stat(struct _fs_ioctx *_ioctx, int _fd, struct _storage_fib *_fib,
     BYTE *_resp);
 int fs_vfs_rename(sos_devltr _ch, const struct _fs_ioctx *_ioctx, const char *_oldpath,
     const char *_newpath, BYTE *_resp);
+
 int fs_vfs_set_attr(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, const fs_attr _attr, BYTE *_resp);
 int fs_vfs_get_attr(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, fs_attr *_attrp, BYTE *resp);
 
+int fs_vfs_opendir(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path,
+    struct _fs_dir_stream *_dirp, BYTE *_resp);
+int fs_vfs_closedir(struct _fs_dir_stream *_dir, BYTE *_resp);
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

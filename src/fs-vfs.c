@@ -54,18 +54,6 @@ init_fd(struct _fs_ioctx *ioctx, struct _fs_file_descriptor *fdp){
 	fdp->fd_private=NULL;  /* Initialize private information */
 }
 
-/** Initialize the directory stream
-    @param[in]  ch    The drive letter
-    @param[in]  ioctx The current I/O context.
-    @param[out] dir   The address to the directory stream to initialize
- */
-static void
-init_dir_stream(struct _fs_ioctx *ioctx, struct _fs_dir_stream *dir){
-
-	init_fd(ioctx, &dir->dir_fd);
-	dir->dir_private = NULL;
-}
-
 /** Initialize file descriptor table
  */
 static void
@@ -100,7 +88,7 @@ search_global_fd:
 			goto found;
 
 not_found:
-	return ENOSPC;
+	return SOS_ERROR_NOSPC;
 
 found:
 	if ( fdnump != NULL ) {
@@ -144,6 +132,31 @@ free_fd(struct _fs_ioctx *ioctx, int fdnum){
 	ioctx->ioc_fds[fdnum] = NULL;
 
 	return 0;
+}
+
+/** Initialize the directory stream
+    @param[in]  ch    The drive letter
+    @param[in]  ioctx The current I/O context.
+    @param[out] dir   The address to the directory stream to initialize
+    @retval    0     success
+    @retval    ENOSPC No free file descriptor found.
+ */
+static int
+init_dir_stream(struct _fs_ioctx *ioctx, struct _fs_dir_stream *dir){
+	int rc;
+	int fd;
+
+	dir->dir_fd = NULL;
+	dir->dir_private = NULL;
+
+	rc = alloc_fd(ioctx, &fd);
+	if ( rc != 0 )
+		goto error_out;
+
+	dir->dir_fd = ioctx->ioc_fds[fd];
+
+error_out:
+	return rc;
 }
 
 /** Create a file
@@ -264,7 +277,7 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 		goto put_vnode_out;
 	}
 
-	vfs_inc_cnt(v);
+	vfs_inc_vnode_cnt(v);
 	ioctx->ioc_fds[fdnum]->fd_vnode = v;
 	ioctx->ioc_fds[fdnum]->fd_flags = flags;
 
@@ -284,7 +297,7 @@ success:
 
 
 free_fd_out:
-	vfs_dec_cnt(v);
+	vfs_dec_vnode_cnt(v);
 	free_fd(ioctx, fdnum);
 
 put_vnode_out:
@@ -662,7 +675,7 @@ fs_vfs_close(struct _fs_ioctx *ioctx, int fdnum, BYTE *resp){
 close_fd:
 	rc = 0;
 	sos_assert(fdp->fd_vnode->vn_use_cnt > 0 );
-	vfs_dec_cnt(fdp->fd_vnode);
+	vfs_dec_vnode_cnt(fdp->fd_vnode);
 
 	free_fd(ioctx, fdnum);
 
@@ -1206,6 +1219,105 @@ fs_vfs_get_attr(sos_devltr ch, const struct _fs_ioctx *ioctx,
 skip_fop:
 	if ( attrp != NULL )
 		*attrp = attr;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Open a directory
+    @param[in] ch       The drive letter.
+    @param[in] ioctx    The current I/O context.
+    @param[in] path     Directory path.
+    @param[out] dir     The pointer to the directory stream.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -1      Error
+    @retval     EINVAL  Invalid whence
+    @retval     ENXIO   The new position exceeded the file size
+ */
+int
+fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
+    struct _fs_dir_stream *dirp, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	struct _fs_dir_stream       dir;
+	struct _fs_vnode          *dirv;
+	char    name[SOS_UNIX_PATH_MAX];
+
+	/*
+	 * Get directory v-node
+	 */
+	rc = fs_vfs_path_to_dir_vnode(ch, ioctx, path, &dirv,
+	    name, SOS_UNIX_PATH_MAX);
+	if ( rc != 0 )
+		goto error_out;
+
+	rc = init_dir_stream(ioctx, &dir);
+	if ( rc != 0 )
+		goto put_vnode_out;
+
+	vfs_inc_vnode_cnt(dirv);  /* increment use count */
+
+	/*
+	 * Set the file descriptor up
+	 */
+	dir.dir_fd->fd_vnode = dirv;
+	dir.dir_fd->fd_flags = FS_VFS_FD_FLAG_O_RDONLY;
+	dir.dir_fd->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_opendir) )
+		goto put_vnode_out;
+
+	/* File system specific opendir */
+	rc = dirv->vn_mnt->m_fs->fsm_fops->fops_opendir(&dir, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto put_vnode_out;
+
+	if ( dirp != NULL )
+		memcpy(dirp, &dir, sizeof(struct _fs_dir_stream));
+
+put_vnode_out:
+	vfs_put_vnode(dirv);
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** close a directory
+    @param[out] dir     The pointer to the directory stream.
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -1      Error
+    @retval     EINVAL  Invalid whence
+    @retval     ENXIO   The new position exceeded the file size
+ */
+int
+fs_vfs_closedir(struct _fs_dir_stream *dir, BYTE *resp){
+	int                 rc;
+	int                 fd;
+	BYTE               res;
+	struct _fs_vnode *dirv;
+
+	dirv = dir->dir_fd->fd_vnode;
+	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_closedir) )
+		goto success;
+
+	/* File system specific closedir */
+	rc = dirv->vn_mnt->m_fs->fsm_fops->fops_closedir(dir, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+success:
+	rc = 0;
+	sos_assert(dirv->vn_use_cnt > 0 );
+	vfs_dec_vnode_cnt(dirv);
+	fd = dir->dir_fd - dir->dir_fd->fd_ioctx->ioc_fds[0];
+	free_fd(dir->dir_fd->fd_ioctx, fd);
 
 error_out:
 	if ( resp != NULL )
