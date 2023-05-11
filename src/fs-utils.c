@@ -20,6 +20,54 @@
 #include "storage.h"
 #include "fs-sword.h"
 
+/** File type name index
+ */
+#define SOS_DIR_FSTRIDX_UNKNOWN (0)  /**< Unknown */
+#define SOS_DIR_FSTRIDX_ASC     (1)  /**< Ascii */
+#define SOS_DIR_FSTRIDX_BIN     (2)  /**< Binary */
+#define SOS_DIR_FSTRIDX_BAS     (3)  /**< Basic */
+#define SOS_DIR_FSTRIDX_DIR     (4)  /**< Directory */
+
+#define SOS_FSUTILS_DIR_FMT  "%.3s%c %c:%.13s.%.3s:%04X:%04X:%04X\n"
+
+/** File type names
+ */
+static const char *ftype_name_tbl[]={
+	"???",
+	"Asc",
+	"Bin",
+	"Bas",
+	"Dir"
+};
+
+/** Get file type
+    @param[in] attr File attribute
+    @return File type string.
+ */
+static const char *
+get_ftype(fs_attr attr){
+
+	switch( SOS_FATTR_GET_ALL_FTYPE(attr) ){
+
+	case SOS_FATTR_BIN:
+		return ftype_name_tbl[SOS_DIR_FSTRIDX_BIN];
+
+	case SOS_FATTR_ASC:
+		return ftype_name_tbl[SOS_DIR_FSTRIDX_ASC];
+
+	case SOS_FATTR_BAS:
+		return ftype_name_tbl[SOS_DIR_FSTRIDX_BAS];
+
+	case SOS_FATTR_DIR:
+		return ftype_name_tbl[SOS_DIR_FSTRIDX_DIR];
+
+	default:
+		break;
+	}
+
+	return ftype_name_tbl[SOS_DIR_FSTRIDX_UNKNOWN];
+}
+
 /** convert from a SWORD file name to the UNIX file name
     @param[in]  swordname The file name on SWORD
     @param[in]  destp     The address of the pointer to point UNIX file name.
@@ -178,6 +226,7 @@ fs_compare_unix_and_sword(const char *unixname, const BYTE *sword, size_t len){
 
 	return memcmp(&conv_name[0], sword, cmp_len);
 }
+
 /** Get S-OS header excluding NULL terminate.
     @param[in]  fib    The file information block of the file
     @param[out] dest   The address of the buffer to store S-OS header
@@ -196,4 +245,58 @@ fs_get_sos_header(const struct _storage_fib *fib, void *dest,
 	    SOS_Z80MEM_VAL(fib->fib_dtadr),
 	    SOS_Z80MEM_VAL(fib->fib_exadr) );
 	memcpy(dest, &header[0], cpysiz);
+}
+
+/** Show a directory
+    @param[in] ch     The drive letter
+    @param[in] ioctx  The current I/O context
+    @param[in] path   The address of the buffer to store S-OS header
+    @retval    0      Success
+    @retval   SOS_ERROR_OFFLINE Device offline
+    @retval   SOS_ERROR_IO      I/O Error
+    @retval   SOS_ERROR_NOENT   Directory not found
+ */
+int
+fs_show_dir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path){
+	int                            rc;
+	char fname[SOS_FNAME_NAME_BUFSIZ];
+	char    ext[SOS_FNAME_EXT_BUFSIZ];
+	struct _storage_fib           fib;
+	struct _fs_dir_stream         dir;
+	BYTE                          res;
+
+	rc = fs_vfs_opendir(ch, ioctx, path, &dir, &res);
+	if ( rc != 0 )
+		return rc;
+
+	for( ; ; ) {
+
+		rc = fs_vfs_readdir(&dir, &fib, &res);
+		if ( rc != 0 )
+			break;
+
+		memcpy(&fname[0], &fib.fib_sword_name[0], SOS_FNAME_NAMELEN);
+		memcpy(&ext[0], &fib.fib_sword_name[SOS_FNAME_NAMELEN],
+		    SOS_FNAME_EXTLEN);
+		fname[SOS_FNAME_NAMELEN] = '\0';
+		ext[SOS_FNAME_EXTLEN] = '\0';
+		printf(SOS_FSUTILS_DIR_FMT,
+		    get_ftype(fib.fib_attr),
+		    (fib.fib_attr & SOS_FATTR_RDONLY)? ('*') : (' '),
+		    fib.fib_devltr,
+		    &fname[0],
+		    &ext[0],
+		    SOS_Z80MEM_VAL(fib.fib_dtadr),
+		    SOS_Z80MEM_VAL(fib.fib_dtadr + fib.fib_size - 1),
+		    SOS_Z80MEM_VAL(fib.fib_exadr));
+	}
+
+	rc = 0;
+
+	if ( res != SOS_ERROR_NOENT )
+		rc = res;
+
+	fs_vfs_closedir(&dir, &res);  /* close dir */
+
+	return rc;
 }

@@ -414,14 +414,14 @@ show_dir(sos_devltr ch){
 		fname[SOS_FNAME_NAMELEN] = '\0';
 		ext[SOS_FNAME_EXTLEN] = '\0';
 		idx = get_ftype_idx(fib.fib_attr);
-			printf("%.3s %c:%.13s.%.3s:%04X:%04X:%04X\n",
-			    ftype_name_tbl[idx],
-			    fib.fib_devltr,
-			    &fname[0],
-			    &ext[0],
-			    SOS_Z80MEM_VAL(fib.fib_dtadr),
-			    SOS_Z80MEM_VAL(fib.fib_dtadr + fib.fib_size - 1),
-			    SOS_Z80MEM_VAL(fib.fib_exadr));
+		printf("%.3s %c:%.13s.%.3s:%04X:%04X:%04X\n",
+		    ftype_name_tbl[idx],
+		    fib.fib_devltr,
+		    &fname[0],
+		    &ext[0],
+		    SOS_Z80MEM_VAL(fib.fib_dtadr),
+		    SOS_Z80MEM_VAL(fib.fib_dtadr + fib.fib_size - 1),
+		    SOS_Z80MEM_VAL(fib.fib_exadr));
 	}while( rc == 0 );
 	if ( res != SOS_ERROR_NOENT ) {
 

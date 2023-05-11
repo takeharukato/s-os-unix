@@ -243,6 +243,8 @@ error_out:
     @param[in] name       The file name
     @param[out] vnidp     The address to store v-node ID.
     @retval    0          Success
+    @retval   SOS_ERROR_IO      I/O Error
+    @retval   SOS_ERROR_NOENT   File not found
  */
 int
 fops_lookup_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
@@ -779,6 +781,8 @@ error_out:
 	return ( rc == 0 ) ? (0) : (-1);
 }
 /** Change file attribute
+    @param[in]  ch    The drive letter
+    @param[in]  ioctx The current I/O context
     @param[in]  vn    The v-node of the file.
     @param[in]  attr  The new file attribute.
     @param[out] resp  The address to store the return code for S-OS.
@@ -809,6 +813,8 @@ error_out:
 }
 
 /** Get file attribute
+    @param[in]  ch    The drive letter
+    @param[in]  ioctx The current I/O context
     @param[in]  vn    The v-node of the file.
     @param[out] attrp The address to store the file attribute.
     @param[out] resp  The address to store the return code for S-OS.
@@ -870,6 +876,9 @@ fops_closedir_sword(struct _fs_dir_stream *dir, BYTE *resp){
 	pos = &fdp->fd_pos;  /* Position information */
 	pos->dp_private = NULL; /* Clear private information */
 
+	if ( resp != NULL )
+		*resp = 0;
+
 	return 0;
 }
 
@@ -881,9 +890,6 @@ fops_closedir_sword(struct _fs_dir_stream *dir, BYTE *resp){
     @retval    -1      Error
     @retval     SOS_ERROR_IO    I/O Error
     @retval     SOS_ERROR_NOENT File not found (the end of the directory entry table )
-    @remark     This function is responsible for setting the dir_pos member of
-    the dir_pos structured variable in DIR and filling the FIB.
-    Other members in the dir_pos should be set by the caller.
     @details    This function regards a directory as a binary file containing
     an array of directory entries.
     The function returns the file information block at the current position
@@ -969,22 +975,32 @@ error_out:
  */
 int
 fops_seekdir_sword(struct _fs_dir_stream *dir, fs_dirno dirno, BYTE *resp){
+	int                          rc;
 	struct _fs_file_descriptor *fdp;
 	struct _storage_disk_pos   *pos;
 
 	fdp = dir->dir_fd;  /* File descriptor */
 	pos = &fdp->fd_pos;  /* Position information */
 
-	if ( 0 > dirno )
-		return -EINVAL;  /* Invalid #DIRNO */
+	if ( 0 > dirno ) {
 
-	if ( dirno > SOS_DENTRY_NR )
-		return -ENXIO;   /* #DIRNO is out of range. */
+		rc = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	if ( dirno > SOS_DENTRY_NR ) {
+
+		rc = SOS_ERROR_NOENT; /* #DIRNO is out of range. */
+		goto error_out;
+	}
 
 	pos->dp_pos = FS_SWD_DIRNO2OFF(dirno);  /* set seek position */
 
+	rc = 0;
+
+error_out:
 	if ( resp != NULL )
-		*resp = SOS_ECODE_VAL(0);  /* return code */
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
 
 	return 0;
 }

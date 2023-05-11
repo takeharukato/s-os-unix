@@ -434,5 +434,8 @@ int fs_vfs_get_attr(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
 int fs_vfs_opendir(sos_devltr _ch, struct _fs_ioctx *_ioctx, const char *_path,
     struct _fs_dir_stream *_dirp, BYTE *_resp);
 int fs_vfs_closedir(struct _fs_dir_stream *_dir, BYTE *_resp);
+int fs_vfs_readdir(struct _fs_dir_stream *_dir, struct _storage_fib *_fibp, BYTE *_resp);
+int fs_vfs_seekdir(struct _fs_dir_stream *_dir, fs_dirno _dirno, BYTE *_resp);
+int fs_vfs_telldir(struct _fs_dir_stream *_dir, fs_dirno *_dirno, BYTE *_resp);
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

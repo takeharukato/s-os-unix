@@ -11,7 +11,6 @@
 #include "storage.h"
 #include "fs-sword.h"
 
-
 int
 main(int argc, char *argv[]){
 	int                                        rc;
@@ -22,6 +21,7 @@ main(int argc, char *argv[]){
 	vfs_mnt_flags                       mnt_flags;
 	char                                    *buf1;
 	struct _fs_dir_stream                     dir;
+	struct _storage_fib                       fib;
 	BYTE                                      res;
 
 	storage_init();
@@ -60,6 +60,11 @@ main(int argc, char *argv[]){
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
 
+	rc = fs_vfs_readdir(&dir, &fib, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+
 	rc = fs_vfs_closedir(&dir, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
@@ -67,6 +72,8 @@ main(int argc, char *argv[]){
 	rc = fs_vfs_close(&ioctx, fd, &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
+
+	fs_show_dir('A', &ioctx, "/");
 
 	rc = fs_vfs_mnt_unmount_filesystem('A', &ioctx);
 	sos_assert( rc == 0 );

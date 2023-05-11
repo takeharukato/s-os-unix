@@ -1235,8 +1235,6 @@ error_out:
     @param[out] resp    The address to store the return code for S-OS.
     @retval      0      Success
     @retval     -1      Error
-    @retval     EINVAL  Invalid whence
-    @retval     ENXIO   The new position exceeded the file size
  */
 int
 fs_vfs_opendir(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path,
@@ -1318,6 +1316,162 @@ success:
 	vfs_dec_vnode_cnt(dirv);
 	fd = dir->dir_fd - dir->dir_fd->fd_ioctx->ioc_fds[0];
 	free_fd(dir->dir_fd->fd_ioctx, fd);
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** read a directory
+    @param[in]  dir     The pointer to the directory stream.
+    @param[out] fibp   The address to store the file information block
+    @param[out] resp    The address to store the return code for S-OS.
+    @retval      0      Success
+    @retval     -1      Error
+    @retval     EINVAL  Invalid whence
+    @retval     ENXIO   The new position exceeded the file size
+ */
+int
+fs_vfs_readdir(struct _fs_dir_stream *dir, struct _storage_fib *fibp, BYTE *resp){
+	int                  rc;
+	BYTE                res;
+	struct _storage_fib fib;
+	struct _fs_vnode  *dirv;
+
+	dirv = dir->dir_fd->fd_vnode;
+	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_readdir) ) {
+
+		rc = SOS_ERROR_SYNTAX;
+		goto error_out;
+	}
+
+	if ( fibp == NULL ) {
+
+		rc = SOS_ERROR_NOENT;  /* Reaches max DIRNO */
+		goto error_out;
+	}
+
+	/* read a directory entry */
+	rc = dirv->vn_mnt->m_fs->fsm_fops->fops_readdir(dir, &fib, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+
+	memcpy(fibp, &fib, sizeof(struct _storage_fib));
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Set the position of the next fs_readdir() call in the directory stream.
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[in]  dirno  The position of the next fs_readdir() call
+    It should be a value returned by a previous call to fs_telldir.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval      0               Success
+    @retval      SOS_ERROR_INVAL Invalid dirno
+    @retval      SOS_ERROR_NOENT The new position exceeded the SOS_DENTRY_NR.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fs_vfs_seekdir(struct _fs_dir_stream *dir, fs_dirno dirno, BYTE *resp){
+	int                          rc;
+	BYTE                        res;
+	struct _fs_file_descriptor *fdp;
+	struct _storage_disk_pos   *pos;
+	fs_off_t                 oldpos;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+
+	if ( 0 > dirno ) {
+
+		rc = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+	if ( dirno > SOS_DENTRY_NR ) {
+
+		rc = SOS_ERROR_NOENT; /* #DIRNO is out of range. */
+		goto error_out;
+	}
+
+	oldpos = pos->dp_pos;
+
+	pos->dp_pos = dirno;  /* set seek position */
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_seekdir) )
+		goto skip_fs_seekdir;
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_seekdir(dir, dirno, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) ) {
+
+		pos->dp_pos = oldpos;
+		goto error_out;
+	}
+
+skip_fs_seekdir:
+	rc = 0;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Return current location in directory stream
+    @param[in]  dir    The pointer to the DIR structure (directory stream).
+    @param[out] dirnop The address to store current location in directory stream.
+    It should be a value returned by a previous call to fs_telldir.
+    @param[out] resp   The address to store the return code for S-OS.
+    @retval     0      Success
+    @retval    -1      Error
+    The responses from the function:
+    * SOS_ERROR_INVAL  The current position does not point the position in the file.
+    @details    This function regards a directory as a binary file containing
+    an array of directory entries.
+ */
+int
+fs_vfs_telldir(struct _fs_dir_stream *dir, fs_dirno *dirnop, BYTE *resp){
+	int                                rc;
+	BYTE                              res;
+	const struct _fs_file_descriptor *fdp;
+	const struct _storage_disk_pos   *pos;
+	fs_dirno                        dirno;
+
+	fdp = dir->dir_fd;  /* File descriptor */
+	pos = &fdp->fd_pos;  /* Position information */
+
+	if ( dirnop == NULL ) {  /* No need to return dirno */
+
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+		return 0;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_telldir) ) {
+
+		dirno = ( SOS_DENTRY_NR > pos->dp_pos ) ? (SOS_DENTRY_NR - 1)
+		: (pos->dp_pos);  /* current position */
+		goto skip_fs_telldir;
+	}
+
+	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_telldir(dir, &dirno, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) ) {
+
+		rc = res;
+		goto error_out;
+	}
+
+skip_fs_telldir:
+	rc = 0;
+	if ( dirnop != NULL )
+		*dirnop = dirno;
 
 error_out:
 	if ( resp != NULL )

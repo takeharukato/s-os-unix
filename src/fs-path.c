@@ -26,7 +26,9 @@
    @param[in]  path      Path string
    @param[out] outv      The address of the pointer variable to point the found v-node.
    @retval   0               Success
-   @retval   SOS_ERROR_NOSPC No more memory
+   @retval   SOS_ERROR_OFFLINE Device offline
+   @retval   SOS_ERROR_IO      I/O Error
+   @retval   SOS_ERROR_NOENT   File not found
  */
 static int
 path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
@@ -44,6 +46,7 @@ path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
 
 	if ( !STORAGE_DEVLTR_IS_DISK(ch) )
 		return SOS_ERROR_OFFLINE;
+
 	idx = STORAGE_DEVLTR2IDX(ch);
 
 	/* Copy path of the file  */
@@ -135,6 +138,18 @@ error_out:
 	return rc;
 }
 
+/** Obtains a reference to the directory v-node of the specified path (internal function)
+   @param[in]  ch        Drive letter
+   @param[in]  ioctx     I/O context
+   @param[in]  path      Path string
+   @param[out] outv      The address of the pointer variable to point the found v-node.
+   @param[out] fname     The address to store file name part.
+   @param[in]  fnamelen  The length of the buffer to store file name part.
+   @retval   0                 Success
+   @retval   SOS_ERROR_OFFLINE Device offline
+   @retval   SOS_ERROR_IO      I/O Error
+   @retval   SOS_ERROR_NOENT   File not found
+ */
 static int
 path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
     struct _fs_vnode **outv, char *fname, size_t fnamelen){
@@ -187,7 +202,10 @@ error_out:
    @param[in]  ioctx     I/O context
    @param[in]  path      Path string
    @param[out] outv      The address of the pointer variable to point the found v-node.
-   @retval   0               Success
+   @retval   0                 Success
+   @retval   SOS_ERROR_OFFLINE Device offline
+   @retval   SOS_ERROR_IO      I/O Error
+   @retval   SOS_ERROR_NOENT   File not found
  */
 int
 fs_vfs_path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
@@ -204,7 +222,10 @@ fs_vfs_path_to_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *p
    @param[out] outv      The address of the pointer variable to point the found v-node.
    @param[out] fname     The address to store the file name part.
    @param[out] fnamelen  Length of the file name part.
-   @retval   0           Success
+   @retval   0                 Success
+   @retval   SOS_ERROR_OFFLINE Device offline
+   @retval   SOS_ERROR_IO      I/O Error
+   @retval   SOS_ERROR_NOENT   File not found
  */
 int
 fs_vfs_path_to_dir_vnode(sos_devltr ch, const struct _fs_ioctx *ioctx, const char *path,
