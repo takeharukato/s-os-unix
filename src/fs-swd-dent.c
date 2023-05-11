@@ -487,3 +487,16 @@ fs_swd_write_dent(sos_devltr ch, const struct _fs_ioctx *ioctx,
 error_out:
 	return rc;
 }
+
+/** Compare directory of the v-nodes
+    @param[in] dir1 v-node1
+    @param[in] dir2 v-node2
+    @retval  TRUE  Both of v-nodes are placed in a same directory.
+    @retval  FALSE Both of v-nodes are not placed in a same directory.
+ */
+int
+fs_swd_cmp_directory(const struct _fs_vnode *v1, const struct _fs_vnode *v2){
+
+	return ( FS_SWD_GET_VNID2DIRCLS(v1->vn_id)
+	    == FS_SWD_GET_VNID2DIRCLS(v2->vn_id) );
+}

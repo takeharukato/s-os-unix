@@ -943,8 +943,18 @@ error_out:
 	return (res == 0) ? (0) : (-1);
 }
 
+/** Rename the file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] oldpath   The filepath to rename
+    @param[in] newpath   The new filepath
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+*/
 int
-fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath, const char *newpath, BYTE *resp){
+fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *oldpath, const char *newpath, BYTE *resp){
 	int                             rc;
 	BYTE                           res;
 	struct _fs_vnode           *src_vn;
@@ -969,7 +979,7 @@ fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath,
 	}
 
 	old_dir_vnid = src_vn->vn_id;
-	vfs_put_vnode(src_vn);
+	vfs_put_vnode(src_vn);  /* Put v-node at once to avoid self dead lock */
 
 	/*
 	 * Get the v-node of new path
@@ -982,7 +992,7 @@ fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath,
 		goto error_out;
 	}
 
-	if ( old_dir_vnid != dest_vn->vn_id ) {
+	if ( old_dir_vnid != dest_vn->vn_id ) {  /* Different directory case */
 
 		/*
 		 * Get the v-node of old path
@@ -999,7 +1009,8 @@ fs_vfs_rename(const struct _fs_ioctx *ioctx, sos_devltr ch, const char *oldpath,
 	if ( !FS_FSMGR_FOP_IS_DEFINED(src_vn->vn_mnt->m_fs, fops_rename) )
 		goto put_src_vnode_out;
 
-	rc = src_vn->vn_mnt->m_fs->fsm_fops->fops_rename(src_vn, src_name,
+	/* Rename */
+	rc = src_vn->vn_mnt->m_fs->fsm_fops->fops_rename(ch, ioctx, src_vn, src_name,
 	    dest_vn, dest_name, &res);
 	if ( ( rc != 0 ) || ( res != 0 ) )
 		goto put_src_vnode_out;

@@ -152,6 +152,7 @@ int fs_swd_search_free_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, vfs_vnid *_vnidp);
 int fs_swd_write_dent(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_dir_vnode, struct _storage_fib *_fib);
+int fs_swd_cmp_directory(const struct _fs_vnode *_v1, const struct _fs_vnode *_v2);
 
 int fs_swd_read_block(const struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);
 int fs_swd_write_block(const struct _fs_ioctx *ioctx, struct _storage_fib *_fib, fs_off_t _pos, const BYTE *_buf, size_t _bufsiz, size_t *_rwsizp);
@@ -160,7 +161,6 @@ int fs_sword2unix(const BYTE *_swordname, char **_destp);
 int fs_unix2sword(const char *_unixname, BYTE *_dest, size_t _size);
 int fs_compare_unix_and_sword(const char *_unixname, const BYTE *_sword, size_t _len);
 void fs_get_sos_header(const struct _storage_fib *_fib, void *_dest, size_t _bufsiz);
-
 
 int fops_mount_sword(sos_devltr _ch, const void *_args,
     struct _fs_ioctx *_ioctx, vfs_fs_super *_superp,
@@ -190,5 +190,8 @@ int fops_stat_sword(struct _fs_file_descriptor *_fdp, struct _storage_fib *_fib,
     BYTE *_resp);
 int fops_seek_sword(struct _fs_file_descriptor *_fdp,
     fs_off_t _offset, int _whence, fs_off_t *_new_posp, BYTE *_resp);
+int fops_rename_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    const struct _fs_vnode *_src_vn, const char *_oldname,
+    const struct _fs_vnode *_dest_vn, const char *_newname, BYTE *_resp);
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

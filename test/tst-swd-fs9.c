@@ -98,7 +98,14 @@ main(int argc, char *argv[]){
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
 
-	rc = fs_vfs_unlink('A', &ioctx, "MAX-SIZ.TXT", &res);
+	/*
+	 * Rename
+	 */
+	rc = fs_vfs_rename('A', &ioctx, "MAX-SIZ.TXT", "MAX-SIZ2.TXT", &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_unlink('A', &ioctx, "MAX-SIZ2.TXT", &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );
 

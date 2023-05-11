@@ -34,6 +34,7 @@ static struct _fs_fops sword_fops={
 	.fops_write = fops_write_sword,
 	.fops_truncate = fops_truncate_sword,
 	.fops_stat = fops_stat_sword,
+	.fops_rename = fops_rename_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -685,6 +686,113 @@ fops_seek_sword(struct _fs_file_descriptor *fdp,
 		*resp = SOS_ECODE_VAL(0);  /* return code */
 
 	return 0;
+}
+
+/** Rename the file
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] src_vn    The directory v-node of the old name file.
+    @param[in] oldname   The old file name
+    @param[in] dest_vn   The directory v-node of the new name file.
+    @param[in] newname   The new file name
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+*/
+int
+fops_rename_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const struct _fs_vnode *src_vn, const char *oldname,
+    const struct _fs_vnode *dest_vn, const char *newname, BYTE *resp){
+	int                             rc;
+	struct _storage_fib        src_fib;
+	struct _storage_fib       dest_fib;
+	vfs_vnid                  old_vnid;
+	vfs_vnid                  new_vnid;
+	BYTE    old_swdname[SOS_FNAME_LEN];
+	BYTE    new_swdname[SOS_FNAME_LEN];
+
+	/* Get the filename of old name in SWORD representation. */
+	rc = fs_unix2sword(oldname, &old_swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Get the filename of new name in SWORD representation. */
+	rc = fs_unix2sword(newname, &new_swdname[0], SOS_FNAME_LEN);
+	if ( rc != 0 ) {
+
+		rc = SOS_ERROR_NOENT;
+		goto error_out;
+	}
+
+	/* Obtain a vnid for the file to be renamed. */
+	rc = fs_swd_search_dent_by_name(ch, ioctx,
+	    src_vn, &old_swdname[0], &old_vnid);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Obtain the fib for the file to be renamed. */
+	rc = fs_swd_search_fib_by_vnid(ch, ioctx, old_vnid, &src_fib);
+	if ( rc != 0 )
+		goto error_out;
+
+	/* Set the new file information block up */
+	memcpy(&dest_fib, &src_fib, sizeof(struct _storage_fib));
+	memcpy(&dest_fib.fib_sword_name[0],&new_swdname[0],SOS_FNAME_LEN);
+
+	/* Check that the new name is not used. */
+	rc = fs_swd_search_dent_by_name(ch, ioctx, dest_vn, &new_swdname[0], &new_vnid);
+	if ( rc == 0 ) {
+
+		rc = SOS_ERROR_EXIST;
+		goto error_out;
+	}
+
+	if ( fs_swd_cmp_directory(src_vn, dest_vn) ) {
+
+		/*
+		 * If both of files are placed on the same directory,
+		 * just write new entry.
+		 */
+		rc = fs_swd_write_dent(ch, ioctx, dest_vn, &dest_fib);
+		if ( rc != 0 )
+			goto error_out;
+	} else {
+
+		/*
+		 * If both of files are placed on the different directories,
+		 * write a new entry and then, remove the old entry.
+		 */
+
+		/* Search a free directory entry */
+		rc = fs_swd_search_free_dent(ch, ioctx, dest_vn, &new_vnid);
+		if ( rc != 0 )
+			goto error_out;
+
+		dest_fib.fib_vnid = new_vnid;  /* Update vnid */
+
+		/* Write new entry */
+		rc = fs_swd_write_dent(ch, ioctx, dest_vn, &dest_fib);
+		if ( rc != 0 )
+			goto error_out;
+
+		/* free old entry */
+		src_fib.fib_attr = SOS_FATTR_FREE;
+		rc = fs_swd_write_dent(ch, ioctx, src_vn, &src_fib);
+		if ( rc != 0 ) {
+
+			dest_fib.fib_attr = SOS_FATTR_FREE;
+			/* remove new entry */
+			fs_swd_write_dent(ch, ioctx, dest_vn, &dest_fib);
+		}
+	}
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return ( rc == 0 ) ? (0) : (-1);
 }
 
 void

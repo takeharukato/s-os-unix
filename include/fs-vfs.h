@@ -345,8 +345,10 @@ struct _fs_fops{
 	    struct _storage_fib *_fib, BYTE *_resp);
 	int (*fops_seek)(struct _fs_file_descriptor *_fdp,
 	    fs_off_t _offset, int _whence, fs_off_t *_newposp, BYTE *_resp);
-	int (*fops_rename)(struct _fs_vnode *_src_vn, const char *_oldname,
-	    struct _fs_vnode *_dest_vn, const char *_newname, BYTE *_resp);
+	int (*fops_rename)(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+	    const struct _fs_vnode *_src_vn, const char *_oldname,
+	    const struct _fs_vnode *_dest_vn, const char *_newname,
+	    BYTE *_resp);
 	int (*fops_chmod)(struct _fs_vnode *_vn, const fs_perm _perm, BYTE *_resp);
 	int (*fops_opendir)(struct _fs_vnode *_dir_vn, BYTE *_resp);
 	int (*fops_readdir)(const struct _fs_dir_stream *_dir, BYTE *_resp);
@@ -417,6 +419,8 @@ int fs_vfs_write(struct _fs_ioctx *_ioctx, int _fd, const void *_buf, size_t _co
 int fs_vfs_truncate(struct _fs_ioctx *_ioctx, int _fd, fs_off_t _offset, BYTE *_resp);
 int fs_vfs_stat(struct _fs_ioctx *_ioctx, int _fd, struct _storage_fib *_fib,
     BYTE *_resp);
+int fs_vfs_rename(sos_devltr _ch, const struct _fs_ioctx *_ioctx, const char *_oldpath,
+    const char *_newpath, BYTE *_resp);
 
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */
