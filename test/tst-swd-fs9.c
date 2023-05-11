@@ -20,6 +20,8 @@ main(int argc, char *argv[]){
 	struct _fs_ioctx                        ioctx;
 	vfs_mnt_flags                       mnt_flags;
 	size_t                                    cnt;
+	fs_attr                                  attr;
+	fs_attr                              new_attr;
 	char                                    *buf1;
 	int                                        fd;
 	BYTE                                      res;
@@ -99,8 +101,40 @@ main(int argc, char *argv[]){
 	sos_assert( res == 0 );
 
 	/*
+	 * stat
+	 */
+	rc = fs_vfs_get_attr('A', &ioctx, "MAX-SIZ.TXT", &attr, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+	sos_assert( SOS_FATTR_ASC & attr );
+
+	rc = fs_vfs_set_attr('A', &ioctx, "MAX-SIZ.TXT", SOS_FATTR_RDONLY, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_get_attr('A', &ioctx, "MAX-SIZ.TXT", &new_attr, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+	sos_assert( SOS_FATTR_ASC & new_attr );
+	sos_assert( SOS_FATTR_RDONLY & new_attr );
+
+	/*
 	 * Rename
 	 */
+	rc = fs_vfs_rename('A', &ioctx, "MAX-SIZ.TXT", "MAX-SIZ2.TXT", &res);
+	sos_assert( rc == -1 );
+	sos_assert( res == SOS_ERROR_RDONLY );
+
+	rc = fs_vfs_set_attr('A', &ioctx, "MAX-SIZ.TXT", 0, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+
+	rc = fs_vfs_get_attr('A', &ioctx, "MAX-SIZ.TXT", &new_attr, &res);
+	sos_assert( rc == 0 );
+	sos_assert( res == 0 );
+	sos_assert( SOS_FATTR_ASC & new_attr );
+	sos_assert( !(SOS_FATTR_RDONLY & new_attr ) );
+
 	rc = fs_vfs_rename('A', &ioctx, "MAX-SIZ.TXT", "MAX-SIZ2.TXT", &res);
 	sos_assert( rc == 0 );
 	sos_assert( res == 0 );

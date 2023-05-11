@@ -428,5 +428,6 @@ int fs_vfs_set_attr(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, const fs_attr _attr, BYTE *_resp);
 int fs_vfs_get_attr(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const char *_path, fs_attr *_attrp, BYTE *resp);
+
 void fs_vfs_init_vfs(void);
 #endif  /*  _FS_VFS_H  */

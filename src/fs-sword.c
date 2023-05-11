@@ -378,7 +378,7 @@ fops_unlink_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		goto error_out;
 	}
 
-	if ( SOS_FATTR_IS_REGULAR_FILE(fib.fib_attr) ) {
+	if ( !SOS_FATTR_IS_REGULAR_FILE(fib.fib_attr) ) {
 
 		rc = SOS_ERROR_FMODE;  /* Bad file mode */
 		goto error_out;
@@ -787,12 +787,10 @@ fops_set_attr_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	int                   rc;
 	struct _storage_fib *fib;
 
-	if ( !SOS_FATTR_IS_VALID(attr) )
-		return SOS_ERROR_INVAL;  /* Invalid attribute */
-
 	fib = &vn->vn_fib;
 
-	fib->fib_attr = attr;  /* Set attribute */
+	fib->fib_attr = SOS_FATTR_GET_ALL_FTYPE(fib->fib_attr) | \
+		SOS_FATTR_MASK_SOS_ATTR(attr);  /* Update attribute only */
 
 	rc = fs_swd_write_dent(ch, ioctx, vn, fib); /* Update attribute */
 	if ( rc != 0 )

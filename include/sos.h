@@ -54,14 +54,18 @@
 #define SOS_FATTR_DIR     (0x80)  /* Sub directory */
 #define SOS_FATTR_EODENT  (0xFF)  /* End of directory entry */
 
+/** S-OS file type mask defined in S-OS sword file system */
+#define SOS_FATTR_VALID_FTYPE_MASK \
+	(SOS_FATTR_BIN|SOS_FATTR_BAS|SOS_FATTR_ASC|SOS_FATTR_DIR)
+
 /** S-OS supports Binary and Ascii file */
 #define SOS_FATTR_VALID_TYPES (SOS_FATTR_BIN|SOS_FATTR_ASC)
 
 /** S-OS supports the read only attribute only  */
-#define SOS_FATTR_VALID_PERMS (SOS_FATTR_RDONLY)
+#define SOS_FATTR_VALID_ATTRS (SOS_FATTR_RDONLY)
 
-/** S-OS can make a file readonly */
-#define SOS_FATTR_VALID_FLAGS (SOS_FATTR_VALID_TYPES|SOS_FATTR_VALID_PERMS)
+/** S-OS can handle ascii and binary file only */
+#define SOS_FATTR_VALID_FLAGS (SOS_FATTR_VALID_TYPES|SOS_FATTR_VALID_ATTRS)
 
 /** Get S-OS file attribute
     @param[in] _attr The file attribute in the file information block or
@@ -70,12 +74,27 @@
  */
 #define SOS_FATTR_GET_FTYPE(_attr) ( (_attr) & (SOS_FATTR_VALID_TYPES) )
 
-/** Get S-OS file permission
+/** Get all file attributes in file system
     @param[in] _attr The file attribute in the file information block or
     the directory entry.
-    @return  S-OS file permission
+    @return  S-OS file type.
  */
-#define SOS_FATTR_GET_PERM(_attr) ( (_attr) & (SOS_FATTR_VALID_PERMS) )
+#define SOS_FATTR_GET_ALL_FTYPE(_attr) ( (_attr) & (SOS_FATTR_VALID_FTYPE_MASK) )
+
+/** Get the S-OS file attribute for attribute checking like the S-OS sword on MZ/X1 does.
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  S-OS file attribute
+ */
+#define SOS_FATTR_MASK_SOS_ATTR(_attr) ( (_attr) & (SOS_FATTR_VALID_ATTRS) )
+
+/** Get the all valid attributes including file types and attributes.
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  S-OS file attribute
+ */
+#define SOS_FATTR_MASK_SOS(_attr) \
+	( (_attr) & (SOS_FATTR_VALID_FTYPE_MASK|SOS_FATTR_VALID_ATTRS) )
 
 /** Determine whether S-OS file attribute is valid
     @param[in] _attr The file attribute in the file information block or

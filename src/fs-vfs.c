@@ -241,7 +241,7 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 	 * Check write protect bit
 	 */
 	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE)
-	    && (v->vn_fib.fib_attr & SOS_FATTR_RDONLY) ) {
+	    && ( SOS_FATTR_MASK_SOS_ATTR(v->vn_fib.fib_attr) & SOS_FATTR_RDONLY) ) {
 
 		res = SOS_ERROR_RDONLY;
 		goto error_out;
@@ -1028,6 +1028,7 @@ fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
     const char *oldpath, const char *newpath, BYTE *resp){
 	int                             rc;
 	BYTE                           res;
+	struct _fs_vnode                *v;
 	struct _fs_vnode           *src_vn;
 	struct _fs_vnode          *dest_vn;
 	vfs_vnid              old_dir_vnid;
@@ -1038,6 +1039,20 @@ fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( rc != 0 )
 		goto error_out;
 
+	/* Check old path is writable */
+	rc = fs_vfs_path_to_vnode(ch, ioctx, oldpath, &v);
+	if ( rc != 0 )
+		goto error_out;
+
+	/*
+	 * Check write protect bit
+	 */
+	if ( SOS_FATTR_MASK_SOS_ATTR(v->vn_fib.fib_attr) & SOS_FATTR_RDONLY) {
+
+		res = SOS_ERROR_RDONLY;
+		goto put_file_vnode_out;
+	}
+
 	/*
 	 * Get the v-node of old path
 	 */
@@ -1046,7 +1061,7 @@ fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( rc != 0 ) {
 
 		res = rc;
-		goto error_out;
+		goto put_file_vnode_out;
 	}
 
 	old_dir_vnid = src_vn->vn_id;
@@ -1060,7 +1075,7 @@ fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( rc != 0 ) {
 
 		res = rc;
-		goto error_out;
+		goto put_file_vnode_out;
 	}
 
 	if ( old_dir_vnid != dest_vn->vn_id ) {  /* Different directory case */
@@ -1096,6 +1111,9 @@ put_src_vnode_out:
 put_dest_vnode_out:
 		if ( old_dir_vnid != dest_vn->vn_id )
 			vfs_put_vnode(dest_vn);
+
+put_file_vnode_out:
+		vfs_put_vnode(v);
 
 error_out:
 	if ( resp != NULL )
