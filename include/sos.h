@@ -85,9 +85,19 @@
  */
 #define SOS_FATTR_IS_VALID(_attr)					\
 	( ( ( (_attr) & ~SOS_FATTR_VALID_FLAGS ) == 0 )			\
-	&& ( ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_BIN ) ) ||	\
-	    ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_ASC ) ) ||	\
-	    ( SOS_FATTR_GET_FTYPE( (_attr) == SOS_FATTR_DIR ) ) ) )
+	    && ( ( SOS_FATTR_GET_FTYPE( (_attr) ) == SOS_FATTR_BIN ) || \
+		( SOS_FATTR_GET_FTYPE( (_attr) ) == SOS_FATTR_ASC ) ||	\
+		( SOS_FATTR_GET_FTYPE( (_attr) ) == SOS_FATTR_DIR ) ) )
+
+/** Determine whether S-OS file attribute means regular files.
+    @param[in] _attr The file attribute in the file information block or
+    the directory entry.
+    @return  TRUE  _attr is a regular file
+    @return  FALSE _attr is not a regular file
+ */
+#define SOS_FATTR_IS_REGULAR_FILE(_attr)				\
+	( SOS_FATTR_IS_VALID( (_attr) )	&& ( (_attr) & SOS_FATTR_VALID_TYPES ) )
+
 /*
    S-OS IOCS call in Z80 memory
 */

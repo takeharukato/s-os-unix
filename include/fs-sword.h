@@ -193,5 +193,11 @@ int fops_seek_sword(struct _fs_file_descriptor *_fdp,
 int fops_rename_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
     const struct _fs_vnode *_src_vn, const char *_oldname,
     const struct _fs_vnode *_dest_vn, const char *_newname, BYTE *_resp);
+
+int fops_set_attr_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    struct _fs_vnode *_vn, const fs_attr _attr, BYTE *_resp);
+int fops_get_attr_sword(sos_devltr _ch, const struct _fs_ioctx *_ioctx,
+    struct _fs_vnode *_vn, fs_attr *_attrp, BYTE *_resp);
+
 void init_sword_filesystem(void);
 #endif  /*  _FS_SWORD_H  */

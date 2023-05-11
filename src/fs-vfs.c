@@ -237,6 +237,26 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 		goto error_out;
 	}
 
+	/*
+	 * Check write protect bit
+	 */
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE)
+	    && (v->vn_fib.fib_attr & SOS_FATTR_RDONLY) ) {
+
+		res = SOS_ERROR_RDONLY;
+		goto error_out;
+	}
+
+	/*
+	 * The file system does not support the write operation.
+	 */
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE)
+	    && ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_write) ) ){
+
+		res = SOS_ERROR_RDONLY;
+		goto error_out;
+	}
+
 	rc = alloc_fd(ioctx, &fdnum);
 	if ( rc != 0 ) {
 
@@ -248,22 +268,20 @@ fd_open_file(sos_devltr ch, struct _fs_ioctx *ioctx,
 	ioctx->ioc_fds[fdnum]->fd_vnode = v;
 	ioctx->ioc_fds[fdnum]->fd_flags = flags;
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_open) ) {
-
-		rc = SOS_ERROR_INVAL;
-		goto free_fd_out;
-	}
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_open) )
+		goto success;
 
 	rc = v->vn_mnt->m_fs->fsm_fops->fops_open(ioctx->ioc_fds[fdnum],
 	    pkt, flags, &res);
-	if ( rc == 0 ) {
-
-		ioctx->ioc_fds[fdnum]->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;
-		*fdnump = fdnum;
-		goto put_vnode_out;
-	}
-
+	if ( rc != 0 )
+		goto free_fd_out;
+success:
 	rc =  res;
+	ioctx->ioc_fds[fdnum]->fd_sysflags |= FS_VFS_FD_FLAG_SYS_OPENED;
+	*fdnump = fdnum;
+
+	goto put_vnode_out;
+
 
 free_fd_out:
 	vfs_dec_cnt(v);
@@ -522,7 +540,7 @@ fs_vfs_unlink(sos_devltr ch, struct _fs_ioctx *ioctx, const char *path, BYTE *re
 
 	if ( !FS_FSMGR_FOP_IS_DEFINED(dirv->vn_mnt->m_fs, fops_unlink) ) {
 
-		rc = SOS_ERROR_INVAL;
+		res = SOS_ERROR_INVAL;
 		goto put_dir_vnode_out;
 	}
 
@@ -642,12 +660,11 @@ fs_vfs_close(struct _fs_ioctx *ioctx, int fdnum, BYTE *resp){
 	}
 
 close_fd:
+	rc = 0;
 	sos_assert(fdp->fd_vnode->vn_use_cnt > 0 );
 	vfs_dec_cnt(fdp->fd_vnode);
 
 	free_fd(ioctx, fdnum);
-
-	rc = 0;
 
 error_out:
 	if ( resp != NULL )
@@ -698,8 +715,11 @@ fs_vfs_read(struct _fs_ioctx *ioctx, int fd, void *buf, size_t count,
 
 	rdsiz = 0;  /* Init read size */
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_read) )
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_read) ){
+
+		res = 0; /* End of file */
 		goto update_pos;
+	}
 
 	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_read(fdp, buf, count,
 	    &rdsiz, &res);
@@ -774,8 +794,9 @@ fs_vfs_write(struct _fs_ioctx *ioctx, int fd, const void *buf, size_t count,
 	}
 
 	wrsiz = 0;  /* Init written size */
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_write) )
-		goto update_pos;
+
+	/* The fs_vfs_open function has maked sure the write operation handler exists. */
+	sos_assert( FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_write) );
 
 	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_write(fdp, buf, count,
 	    &wrsiz, &res);
@@ -831,8 +852,12 @@ fs_vfs_truncate(struct _fs_ioctx *ioctx, int fd, fs_off_t offset, BYTE *resp){
 		goto error_out;
 	}
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_truncate) )
+	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_truncate) ){
+
+		res = SOS_ERROR_INVAL;
 		goto error_out;
+	}
+
 
 	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_truncate(fdp, offset, &res);
 	if ( ( rc != 0 ) || ( res != 0 ) )
@@ -904,9 +929,12 @@ fs_vfs_seek(struct _fs_ioctx *ioctx, int fd, fs_off_t offset,
     int whence, fs_off_t *new_posp, BYTE *resp){
 	int                          rc;
 	BYTE                        res;
-	fs_off_t                    new;
 	struct _fs_file_descriptor *fdp;
 	struct _storage_disk_pos   *pos;
+	struct _storage_fib        *fib;
+	fs_off_t                    new;
+	fs_off_t                    cur;
+	fs_off_t                    off;
 
 	if ( ( 0 > fd ) || ( fd >= FS_PROC_FDTBL_NR ) ) {
 
@@ -915,7 +943,8 @@ fs_vfs_seek(struct _fs_ioctx *ioctx, int fd, fs_off_t offset,
 	}
 
 	fdp = ioctx->ioc_fds[fd];
-	pos = &fdp->fd_pos;       /* Position information */
+	pos = &fdp->fd_pos;            /* Position information */
+	fib = &fdp->fd_vnode->vn_fib;  /* File information block */
 
 	if ( !( fdp->fd_sysflags & FS_VFS_FD_FLAG_SYS_OPENED ) ) {
 
@@ -923,14 +952,56 @@ fs_vfs_seek(struct _fs_ioctx *ioctx, int fd, fs_off_t offset,
 		goto error_out;
 	}
 
+	/* Adjust offset according to the max file size */
+	if ( offset > 0 )
+		off = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
+	else if ( 0 > offset )
+		off = SOS_MAX(offset, (fs_off_t)-1 * SOS_MAX_FILE_SIZE);
+
+	/*
+	 * Calculate the start position
+	 */
+	switch( whence ) {
+
+	case FS_VFS_SEEK_SET:
+		cur = 0;
+		break;
+
+	case FS_VFS_SEEK_CUR:
+		cur = SOS_MIN(pos->dp_pos, SOS_MAX_FILE_SIZE);
+		break;
+
+	case FS_VFS_SEEK_END:
+
+		cur = SOS_MIN(fib->fib_size, SOS_MAX_FILE_SIZE);
+		break;
+
+	default:
+
+		if ( resp != NULL )
+			*resp = SOS_ERROR_SYNTAX;  /* return code */
+		return -1;
+	}
+
+	if ( 0 > ( cur + off ) )
+		new = 0;
+	else if ( off > ( SOS_MAX_FILE_SIZE - cur ) )
+		new = SOS_MAX_FILE_SIZE;
+	else
+		new = cur + off;
+
+	/*
+	 * File system specific seek
+	 */
 	if ( !FS_FSMGR_FOP_IS_DEFINED(fdp->fd_vnode->vn_mnt->m_fs, fops_seek) )
-		goto error_out;
+		goto success;
 
 	rc = fdp->fd_vnode->vn_mnt->m_fs->fsm_fops->fops_seek(fdp, offset,
 	    whence, &new, &res);
 	if ( ( rc != 0 ) || ( res != 0 ) )
 		goto error_out;
 
+success:
 	pos->dp_pos = new;  /* Update position */
 
 error_out:
@@ -1006,8 +1077,12 @@ fs_vfs_rename(sos_devltr ch, const struct _fs_ioctx *ioctx,
 		}
 	}
 
-	if ( !FS_FSMGR_FOP_IS_DEFINED(src_vn->vn_mnt->m_fs, fops_rename) )
-		goto put_src_vnode_out;
+	if ( !FS_FSMGR_FOP_IS_DEFINED(src_vn->vn_mnt->m_fs, fops_rename) ){
+
+		res = SOS_ERROR_INVAL;
+		goto put_dest_vnode_out;
+	}
+
 
 	/* Rename */
 	rc = src_vn->vn_mnt->m_fs->fsm_fops->fops_rename(ch, ioctx, src_vn, src_name,
@@ -1027,6 +1102,98 @@ error_out:
 		*resp = res;
 
 	return (res == 0) ? (0) : (-1);
+}
+
+/** Set the file attribute
+    @param[in] ch        The drive letter
+    @param[in] ioctx     The current I/O context
+    @param[in] path      The filepath to change attribute
+    @param[in] attr      The new attribute.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+*/
+int
+fs_vfs_set_attr(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *path, const fs_attr attr, BYTE *resp){
+	int              rc;
+	BYTE            res;
+	struct _fs_vnode *v;
+
+	/*
+	 * Get file v-node
+	 */
+	rc = fs_vfs_path_to_vnode(ch, ioctx, path, &v);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_set_attr) ){
+
+		res = SOS_ERROR_INVAL;
+		goto error_out;
+	}
+
+
+	/* Set attribute */
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_set_attr(ch, ioctx, v, attr, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
+}
+
+/** Get the file attribute
+    @param[in] ch        The drive letter.
+    @param[in] ioctx     The current I/O context.
+    @param[in] path      The filepath to change attribute.
+    @param[out] attrp    The address to store the attribute.
+    @param[out] resp     The address to store the return code for S-OS.
+    @retval     0        Success
+    @retval    -1        Error
+*/
+int
+fs_vfs_get_attr(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    const char *path, fs_attr *attrp, BYTE *resp){
+	int              rc;
+	BYTE            res;
+	fs_attr        attr;
+	struct _fs_vnode *v;
+
+	/*
+	 * Get file v-node
+	 */
+	rc = fs_vfs_path_to_vnode(ch, ioctx, path, &v);
+	if ( rc != 0 ) {
+
+		res = rc;
+		goto error_out;
+	}
+
+	attr = v->vn_fib.fib_attr;  /* Get attribute in v-node */
+
+	if ( !FS_FSMGR_FOP_IS_DEFINED(v->vn_mnt->m_fs, fops_get_attr) )
+		goto skip_fop;
+
+	/* Get attribute */
+	rc = v->vn_mnt->m_fs->fsm_fops->fops_get_attr(ch, ioctx, v, &attr, &res);
+	if ( ( rc != 0 ) || ( res != 0 ) )
+		goto error_out;
+skip_fop:
+	if ( attrp != NULL )
+		*attrp = attr;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return (rc == 0) ? (0) : (-1);
 }
 
 /** Initialize virtual file system

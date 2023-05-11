@@ -35,6 +35,8 @@ static struct _fs_fops sword_fops={
 	.fops_truncate = fops_truncate_sword,
 	.fops_stat = fops_stat_sword,
 	.fops_rename = fops_rename_sword,
+	.fops_set_attr = fops_set_attr_sword,
+	.fops_get_attr = fops_get_attr_sword,
 };
 static struct _fs_fs_manager sword_fsm;
 
@@ -370,6 +372,18 @@ fops_unlink_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
 	if ( rc != 0 )
 		goto error_out;
 
+	if ( fib.fib_attr & SOS_FATTR_RDONLY ) {
+
+		rc = SOS_ERROR_RDONLY;  /* Write protected file */
+		goto error_out;
+	}
+
+	if ( SOS_FATTR_IS_REGULAR_FILE(fib.fib_attr) ) {
+
+		rc = SOS_ERROR_FMODE;  /* Bad file mode */
+		goto error_out;
+	}
+
 	/* Change the file attribute to free */
 	fib.fib_attr = SOS_FATTR_FREE;
 
@@ -425,15 +439,29 @@ fops_open_sword(struct _fs_file_descriptor *fdp, const struct _sword_header_pack
 
 	vn = fdp->fd_vnode;
 
+	/*
+	 * Check arguments
+	 */
 	if ( FS_SWD_IS_OPEN_FLAGS_INVALID(pkt->hdr_attr, flags) )
 		res = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
-	if ( !SOS_FATTR_IS_VALID(pkt->hdr_attr) )
-		res = SOS_ERROR_SYNTAX;  /*  Invalid Attribute  */
+	if ( !SOS_FATTR_IS_VALID(pkt->hdr_attr) ) /*  Invalid Attribute  */
+		res = SOS_ERROR_SYNTAX;  /*  Invalid flags  */
 
+	/*
+	 * Check file attribute
+	 */
 	if ( SOS_FATTR_GET_FTYPE(pkt->hdr_attr)
-	    != SOS_FATTR_GET_FTYPE(vn->vn_fib.fib_attr) )
-		res = SOS_ERROR_SYNTAX;  /*  Attribute not match */
+	    != SOS_FATTR_GET_FTYPE(vn->vn_fib.fib_attr) ) /*  Attribute not match */
+		res = SOS_ERROR_FMODE;  /* Bad file mode */
+
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE)
+	    && ( vn->vn_fib.fib_attr & SOS_FATTR_RDONLY ) )
+		res = SOS_ERROR_RDONLY;   /* write protected file. */
+
+	if ( ( flags & FS_VFS_FD_FLAG_MAY_WRITE)
+	    && ( vn->vn_fib.fib_attr & SOS_FATTR_DIR ) )
+		res = SOS_ERROR_RDONLY;   /* Directory can not be opened to write. */
 
 	if ( resp != NULL )
 		*resp = res;
@@ -632,55 +660,6 @@ fops_stat_sword(struct _fs_file_descriptor *fdp,
 int
 fops_seek_sword(struct _fs_file_descriptor *fdp,
     fs_off_t offset, int whence, fs_off_t *new_posp, BYTE *resp){
-	fs_off_t                  new;
-	fs_off_t                  cur;
-	fs_off_t                  off;
-	struct _storage_disk_pos *pos;
-	struct _storage_fib      *fib;
-
-	pos = &fdp->fd_pos;            /* Position information */
-	fib = &fdp->fd_vnode->vn_fib;  /* File information block */
-
-	/* Adjust offset according to the max file size */
-	if ( offset > 0 )
-		off = SOS_MIN(offset, SOS_MAX_FILE_SIZE);
-	else if ( 0 > offset )
-		off = SOS_MAX(offset, (fs_off_t)-1 * SOS_MAX_FILE_SIZE);
-
-	/*
-	 * Calculate the start position
-	 */
-	switch( whence ) {
-
-	case FS_VFS_SEEK_SET:
-		cur = 0;
-		break;
-
-	case FS_VFS_SEEK_CUR:
-		cur = SOS_MIN(pos->dp_pos, SOS_MAX_FILE_SIZE);
-		break;
-
-	case FS_VFS_SEEK_END:
-
-		cur = SOS_MIN(fib->fib_size, SOS_MAX_FILE_SIZE);
-		break;
-
-	default:
-
-		if ( resp != NULL )
-			*resp = SOS_ERROR_SYNTAX;  /* return code */
-		return -EINVAL;
-	}
-
-	if ( 0 > ( cur + off ) )
-		new = 0;
-	else if ( off > ( SOS_MAX_FILE_SIZE - cur ) )
-		new = SOS_MAX_FILE_SIZE;
-	else
-		new = cur + off;
-
-	if ( new_posp != NULL )
-		*new_posp = new;  /* return the new position */
 
 	if ( resp != NULL )
 		*resp = SOS_ECODE_VAL(0);  /* return code */
@@ -793,6 +772,61 @@ error_out:
 		*resp = SOS_ECODE_VAL(rc);  /* return code */
 
 	return ( rc == 0 ) ? (0) : (-1);
+}
+/** Change file attribute
+    @param[in]  vn    The v-node of the file.
+    @param[in]  attr  The new file attribute.
+    @param[out] resp  The address to store the return code for S-OS.
+    @retval     0     Success
+    @retval    -1     Error
+
+ */
+int
+fops_set_attr_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    struct _fs_vnode *vn, const fs_attr attr, BYTE *resp){
+	int                   rc;
+	struct _storage_fib *fib;
+
+	if ( !SOS_FATTR_IS_VALID(attr) )
+		return SOS_ERROR_INVAL;  /* Invalid attribute */
+
+	fib = &vn->vn_fib;
+
+	fib->fib_attr = attr;  /* Set attribute */
+
+	rc = fs_swd_write_dent(ch, ioctx, vn, fib); /* Update attribute */
+	if ( rc != 0 )
+		goto error_out;
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(rc);  /* return code */
+
+	return ( rc == 0 ) ? (0) : (-1);
+}
+
+/** Get file attribute
+    @param[in]  vn    The v-node of the file.
+    @param[out] attrp The address to store the file attribute.
+    @param[out] resp  The address to store the return code for S-OS.
+    @retval     0     Success
+    @retval    -1     Error
+ */
+int
+fops_get_attr_sword(sos_devltr ch, const struct _fs_ioctx *ioctx,
+    struct _fs_vnode *vn, fs_attr *attrp, BYTE *resp){
+	int                   rc;
+	struct _storage_fib *fib;
+
+	fib = &vn->vn_fib;
+
+	*attrp = fib->fib_attr;  /* Get attribute */
+
+error_out:
+	if ( resp != NULL )
+		*resp = SOS_ECODE_VAL(0);  /* return code */
+
+	return 0;
 }
 
 void
