@@ -133,32 +133,5 @@ main(int argc, char *argv[]){
 	print_sword_filename(&swdname[0]);
 	print_unix_filename(&swdname[0]);
 
-#if 0
-	rc = read_fat_sword('A', SOS_FATPOS_DEFAULT, &rec[0]);
-	sos_assert( rc == 0 );
-
-	rc = write_fat_sword('A', SOS_FATPOS_DEFAULT, &rec[0]);
-	sos_assert( rc == 0 );
-
-	rc = read_fat_sword('A', SOS_FATPOS_DEFAULT, &rec2[0]);
-	sos_assert( rc == 0 );
-
-	rc = memcmp(rec,rec2,SOS_RECORD_SIZE);
-	sos_assert( rc == 0 );
-#endif
-
-	rc = storage_record_read('A', &rec[0], SOS_DIRPS_DEFAULT, 1, &len);
-	sos_assert( rc == 0 );
-	sos_assert( len == 1 );
-
-#if 0
-	rc = search_dent_sword('A', SOS_DIRPS_DEFAULT, "inside-r.obj", &fib);
-	sos_assert( rc == SOS_ERROR_NOENT );
-	rc = fs_unix2sword("cs84x1.bin", &swdname[0], SOS_FNAME_BUFSIZ);
-	sos_assert( rc == 0 );
-
-	rc = search_dent_sword('A', SOS_DIRPS_DEFAULT, &swdname[0], &fib);
-	sos_assert( rc == 0 );
-#endif
 	return 0;
 }
